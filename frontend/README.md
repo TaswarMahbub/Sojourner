@@ -13,8 +13,6 @@ Planned responsibilities:
 
 The simulator is a view of the command stream. It does not publish a second command format and it does not bypass a stop.
 
-No React application is included in this revision.
-
 ## Commands
 
 Run these from `frontend/`. Node.js 20.19+ or 22.12+ is required (the Vite requirement).
