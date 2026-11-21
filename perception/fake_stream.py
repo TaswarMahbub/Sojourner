@@ -31,7 +31,16 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tests.contract_schema import BLENDSHAPES, SCHEMA  # noqa: E402
+# column_norms and extract_angles are re-exported here so existing callers of
+# fake_stream keep working; their single definition is in frame_builder.
+from perception.frame_builder import (  # noqa: E402,F401
+    DECIMALS,
+    build_matrix,
+    column_norms,
+    extract_angles,
+    make_feature_message,
+)
+from tests.contract_schema import BLENDSHAPES  # noqa: E402
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures"
 
@@ -39,10 +48,6 @@ FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures"
 # It is the timestamp used in the contract's encoding illustration, so the
 # fixtures regenerate byte for byte.
 FIXTURE_START_MS = 1795276800000
-
-# Column norms of the upper-left 3x3 must agree within this fraction of
-# their mean, per the contract's Angles subsection.
-SCALE_TOLERANCE = 0.01
 
 # Resting blendshape score and gaussian noise standard deviation, both in
 # score units on [0, 1].
@@ -62,113 +67,6 @@ PULSE_CHANNELS = {
 CYCLE_S = 15.0
 LOST_START_S, LOST_END_S = 10.0, 11.0
 PARTIAL_START_S, PARTIAL_END_S = 12.0, 12.5
-
-# Values written to JSON are rounded to this many decimal places.
-DECIMALS = 6
-
-
-# --- Rotation and matrix -------------------------------------------------
-
-
-def rot_y(yaw_rad: float) -> list[list[float]]:
-    """Ry(y) exactly as written in the contract. Angle in radians."""
-    c, s = math.cos(yaw_rad), math.sin(yaw_rad)
-    return [
-        [c, 0.0, s],
-        [0.0, 1.0, 0.0],
-        [-s, 0.0, c],
-    ]
-
-
-def rot_x_neg_pitch(pitch_rad: float) -> list[list[float]]:
-    """Rx(-p) exactly as written in the contract. Pitch p in radians."""
-    c, s = math.cos(pitch_rad), math.sin(pitch_rad)
-    return [
-        [1.0, 0.0, 0.0],
-        [0.0, c, s],
-        [0.0, -s, c],
-    ]
-
-
-def rot_z(roll_rad: float) -> list[list[float]]:
-    """Rz(r) exactly as written in the contract. Angle in radians."""
-    c, s = math.cos(roll_rad), math.sin(roll_rad)
-    return [
-        [c, -s, 0.0],
-        [s, c, 0.0],
-        [0.0, 0.0, 1.0],
-    ]
-
-
-def matmul3(a: list[list[float]], b: list[list[float]]) -> list[list[float]]:
-    """Product a @ b of two 3x3 matrices given as lists of rows."""
-    return [
-        [sum(a[i][k] * b[k][j] for k in range(3)) for j in range(3)]
-        for i in range(3)
-    ]
-
-
-def build_matrix(
-    yaw_deg: float,
-    pitch_deg: float,
-    roll_deg: float,
-    scale: float,
-    tx_cm: float,
-    ty_cm: float,
-    tz_cm: float,
-) -> list[list[float]]:
-    """Facial transformation matrix as four rows, matrix[row][col].
-
-    yaw_deg, pitch_deg and roll_deg are degrees. The rotation is
-    R = Ry(yaw) @ Rx(-pitch) @ Rz(roll), the contract's composition, which
-    its extraction inverts for pitch inside (-90, 90). scale is a positive,
-    unitless uniform scale applied to all three columns of R. tx_cm, ty_cm
-    and tz_cm are the translation in centimeters, placed in the last column.
-    The last row is exactly [0, 0, 0, 1].
-    """
-    rotation = matmul3(
-        matmul3(rot_y(math.radians(yaw_deg)), rot_x_neg_pitch(math.radians(pitch_deg))),
-        rot_z(math.radians(roll_deg)),
-    )
-    translation = (tx_cm, ty_cm, tz_cm)
-    rows = [
-        [scale * rotation[r][c] for c in range(3)] + [translation[r]]
-        for r in range(3)
-    ]
-    rows.append([0.0, 0.0, 0.0, 1.0])
-    return rows
-
-
-def column_norms(matrix: list[list[float]]) -> tuple[float, float, float]:
-    """L2 norms of the three columns of the upper-left 3x3. Unitless."""
-    n0, n1, n2 = (
-        math.sqrt(sum(matrix[r][c] ** 2 for r in range(3))) for c in range(3)
-    )
-    return n0, n1, n2
-
-
-def extract_angles(matrix: list[list[float]]) -> tuple[float, float, float]:
-    """Return (yaw_deg, pitch_deg, roll_deg) from a 4x4 row-layout matrix.
-
-    Implements the contract's Angles subsection: s is the mean of the three
-    column norms of the upper-left 3x3 A, every norm must lie within 1
-    percent of s, and R = A / s. Raises ValueError when the scale is not
-    positive and finite or the norms disagree, because such a matrix cannot
-    be published as a tracking pose. Results are degrees: yaw and roll in
-    (-180, 180], pitch in [-90, 90].
-    """
-    norms = column_norms(matrix)
-    s = sum(norms) / 3.0
-    if not math.isfinite(s) or s <= 0.0:
-        raise ValueError(f"matrix scale {s} is not positive and finite")
-    spread = max(abs(n - s) for n in norms) / s
-    if spread > SCALE_TOLERANCE:
-        raise ValueError(f"column norms disagree by {spread:.4f} of their mean")
-    r = [[matrix[i][j] / s for j in range(3)] for i in range(3)]
-    yaw_deg = math.degrees(math.atan2(r[0][2], r[2][2]))
-    pitch_deg = math.degrees(math.asin(max(-1.0, min(1.0, r[1][2]))))
-    roll_deg = math.degrees(math.atan2(r[1][0], r[1][1]))
-    return yaw_deg, pitch_deg, roll_deg
 
 
 # --- Motion ----------------------------------------------------------------
@@ -211,15 +109,16 @@ def blendshape_scores(elapsed_s: float, rng: random.Random) -> dict[str, float]:
     return scores
 
 
-def head_pose(elapsed_s: float) -> dict:
-    """A tracking head_pose object for elapsed_s seconds into the run.
+def head_matrix(elapsed_s: float) -> list[list[float]]:
+    """A tracking facial transformation matrix for elapsed_s seconds in.
 
     Orientation: yaw within +-25 deg (valid [-90, 90]), pitch within +-15 deg
     (valid [-60, 60]), roll within +-10 deg (valid [-45, 45]). Translation:
     x within +-3 cm and y within +-2 cm (valid [-100, 100]), z in
     [-50, -40] cm (valid [-200, -5]). Scale is uniform, 1.0 +- 0.02.
-    The published angles are extracted from the rounded matrix, so they
-    match the contract's extraction exactly.
+    Elements are rounded to DECIMALS places. frame_builder extracts the
+    published angles from this rounded matrix, so they match the contract's
+    extraction exactly.
     """
     matrix = build_matrix(
         yaw_deg=sine(elapsed_s, 25.0, 11.0),
@@ -230,14 +129,7 @@ def head_pose(elapsed_s: float) -> dict:
         ty_cm=sine(elapsed_s, 2.0, 23.0, 0.5),
         tz_cm=-45.0 + sine(elapsed_s, 5.0, 17.0),
     )
-    matrix = [[round(value, DECIMALS) for value in row] for row in matrix]
-    yaw_deg, pitch_deg, roll_deg = extract_angles(matrix)
-    return {
-        "matrix": matrix,
-        "yaw_deg": round(yaw_deg, DECIMALS),
-        "pitch_deg": round(pitch_deg, DECIMALS),
-        "roll_deg": round(roll_deg, DECIMALS),
-    }
+    return [[round(value, DECIMALS) for value in row] for row in matrix]
 
 
 def partial_scores(elapsed_s: float, rng: random.Random) -> dict[str, float]:
@@ -275,26 +167,27 @@ def make_frame(t_ms: int, state: str, rng: random.Random, elapsed_ms: int = 0) -
     milliseconds since the run started. It drives the motion, so a seeded
     run produces the same values whatever wall-clock time it starts at.
     state is "tracking", "partial" or "lost", and the frame follows the
-    contract's tracking-state table for it. confidence is always None:
-    the stock Face Landmarker result carries no per-frame score.
+    contract's tracking-state table for it. The message is assembled by
+    frame_builder.make_feature_message from the same plain inputs the
+    camera source uses, and RuntimeError is raised if it classifies them
+    differently from state. confidence is always None: the stock Face
+    Landmarker result carries no per-frame score.
     """
     elapsed_s = elapsed_ms / 1000.0
     if state == "tracking":
-        features, pose = blendshape_scores(elapsed_s, rng), head_pose(elapsed_s)
+        face_count, scores, matrix = 1, blendshape_scores(elapsed_s, rng), head_matrix(elapsed_s)
     elif state == "partial":
-        features, pose = partial_scores(elapsed_s, rng), None
+        face_count, scores, matrix = 1, partial_scores(elapsed_s, rng), None
     elif state == "lost":
-        features, pose = {}, None
+        face_count, scores, matrix = 0, None, None
     else:
         raise ValueError(f"unknown tracking state {state!r}")
-    return {
-        "schema_version": SCHEMA,
-        "timestamp_ms": int(t_ms),
-        "tracking_state": state,
-        "features": features,
-        "head_pose": pose,
-        "confidence": None,
-    }
+    frame = make_feature_message(t_ms, face_count, scores, matrix)
+    if frame["tracking_state"] != state:
+        raise RuntimeError(
+            f"generated inputs for {state!r} were classified {frame['tracking_state']!r}"
+        )
+    return frame
 
 
 def generate_frames(rate_hz: float, seed: int, start_ms: int):
