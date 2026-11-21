@@ -5,6 +5,10 @@ MAC matches the provisioned controller, it echoes the challenge the sender
 just issued, its sequence is newer for that boot, and the sender's monotonic
 receipt is inside 250 ms of that challenge. Cached, spoofed, reordered,
 wrong-boot, and stale status do not authorize motion.
+
+Challenge ids are strictly increasing for the life of the sender, across
+restarts. An id at or below the high-water mark is retired and never becomes
+fresh again, so A -> B -> A cannot reset A's issuance time.
 """
 
 from __future__ import annotations
@@ -25,16 +29,39 @@ class StatusGate:
         self.received_mono = None
         self.challenge = None
         self.challenge_mono = None
+        self.challenge_high_water = 0
 
-    def expect(self, challenge: int, sent_mono: int) -> None:
+    def issue_challenge(self, sent_mono: int) -> int:
+        """Allocate the next unused challenge id and make it outstanding."""
+        challenge = self.challenge_high_water + 1
+        self.expect(challenge, sent_mono)
+        return challenge
+
+    def expect(self, challenge: int, sent_mono: int) -> bool:
         """Record the challenge the sender has outstanding.
 
-        Repeating the same challenge does not move its issuance time forward.
-        A different challenge invalidates authorization from the previous status.
+        Repeating the outstanding challenge does not move its issuance time
+        forward. A different challenge must be greater than every id used
+        before. It invalidates authorization from the previous status. A
+        retired id is refused, and the gate then has no outstanding challenge,
+        so nothing is authorized until a new id is issued.
         """
-        if challenge != self.challenge:
-            self.challenge = challenge
-            self.challenge_mono = sent_mono
+        if challenge == self.challenge and challenge is not None:
+            return True
+        self.latest = None
+        self.received_mono = None
+        if (
+            isinstance(challenge, bool)
+            or not isinstance(challenge, int)
+            or challenge <= self.challenge_high_water
+        ):
+            self.challenge = None
+            self.challenge_mono = None
+            return False
+        self.challenge = challenge
+        self.challenge_mono = sent_mono
+        self.challenge_high_water = challenge
+        return True
 
     def export_state(self) -> dict:
         return {
@@ -42,6 +69,7 @@ class StatusGate:
             "boot_nonce": self.boot_nonce,
             "challenge": self.challenge,
             "challenge_mono": self.challenge_mono,
+            "challenge_high_water": self.challenge_high_water,
         }
 
     def restore_state(self, state: dict) -> None:
@@ -49,6 +77,7 @@ class StatusGate:
         self.boot_nonce = state["boot_nonce"]
         self.challenge = state["challenge"]
         self.challenge_mono = state["challenge_mono"]
+        self.challenge_high_water = state["challenge_high_water"]
         self.latest = None
         self.received_mono = None
 

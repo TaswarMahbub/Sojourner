@@ -336,6 +336,10 @@ def test_physical_estop_is_not_cleared_by_idle_or_rearm():
     assert released["physical_estop"] is False
     assert released["armed"] is False
     assert released["linear_mps"] == 0
+    assert released["cutoff_open"] is True
+    assert released["cutoff_hold"] is True
+    assert receiver.acknowledge_cutoff() is True
+    assert receiver.snapshot()["armed"] is False
     rearm(receiver, sequence=6, at=T0 + 50)
     assert receiver.snapshot()["armed"] is True
     assert motion(receiver, sequence=7, at=T0 + 60, linear=0.1) == "accepted_motion"

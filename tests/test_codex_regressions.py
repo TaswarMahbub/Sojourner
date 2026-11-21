@@ -283,6 +283,10 @@ def test_rejected_rearm_cannot_replay_after_physical_release():
     assert released["sensor_state"] == "released"
     assert released["armed"] is False
     assert released["linear_mps"] == 0
+    assert released["cutoff_open"] is True
+    assert released["cutoff_hold"] is True
+    assert receiver.acknowledge_cutoff() is True
+    assert receiver.snapshot()["armed"] is False
     for replay in (before, during_rearm, during_motion):
         receiver.handle(replay)
         assert receiver.snapshot()["armed"] is False
@@ -654,12 +658,13 @@ def test_status_gate_rejects_cached_stale_reordered_and_wrong_boot_status():
     gate.expect(404, receiver.monotonic_ms)
     assert gate.observe(disarmed, receiver.monotonic_ms) == "accepted"
     assert gate.motion_authorized(receiver.monotonic_ms, 10, 5, disarmed["freshness_id"]) is False
-    gate.expect(403, receiver.monotonic_ms)
-    assert gate.observe(cached, receiver.monotonic_ms) == "stale_or_reordered"
+    saved = gate.export_state()
+    assert gate.expect(403, receiver.monotonic_ms) is False
+    assert gate.observe(cached, receiver.monotonic_ms) == "stale_challenge"
     assert gate.motion_authorized(receiver.monotonic_ms, 10, 5, cached["freshness_id"]) is False
 
     restarted = StatusGate(TEST_KEY, receiver.controller_id)
-    restarted.restore_state(gate.export_state())
+    restarted.restore_state(saved)
     restarted.expect(404, receiver.monotonic_ms)
     assert restarted.observe(disarmed, receiver.monotonic_ms) == "stale_or_reordered"
     assert restarted.motion_authorized(receiver.monotonic_ms, 10, 5, disarmed["freshness_id"]) is False
@@ -691,8 +696,8 @@ def test_status_gate_rejects_cached_stale_reordered_and_wrong_boot_status():
     gate.expect(601, receiver.monotonic_ms)
     assert gate.observe(quiet_status, receiver.monotonic_ms) == "accepted"
     assert gate.motion_authorized(receiver.monotonic_ms, 10, 4, quiet_status["freshness_id"]) is False
-    gate.expect(cached["status_challenge"], receiver.monotonic_ms)
-    assert gate.observe(cached, receiver.monotonic_ms) in {"wrong_boot", "stale_or_reordered"}
+    assert gate.expect(cached["status_challenge"], receiver.monotonic_ms) is False
+    assert gate.observe(cached, receiver.monotonic_ms) == "stale_challenge"
     assert gate.motion_authorized(receiver.monotonic_ms, 10, 4, cached["freshness_id"]) is False
 
     first, second = receiver.status(), receiver.status()

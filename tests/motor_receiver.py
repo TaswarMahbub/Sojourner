@@ -55,6 +55,7 @@ class MotorReceiver:
         self.cutoff_hold = False
         self.driver_enabled = False
         self.firmware_frozen = False
+        self.resume_pending = False
         self.linear_mps = 0.0
         self.angular_rad_s = 0.0
 
@@ -90,6 +91,8 @@ class MotorReceiver:
             return
         self.sensor_state = state
         self.physical_estop = state != "released"
+        if self.physical_estop:
+            self.cutoff_hold = True
         self.armed = False
         self._stop_output()
         self._bump_generation()
@@ -142,6 +145,7 @@ class MotorReceiver:
             return False
         if self.sensor_state != "released" or self.physical_estop:
             return False
+        self._enforce_timeouts()
         self._stop_output()
         self.cutoff_hold = False
         self._pet()
@@ -156,9 +160,14 @@ class MotorReceiver:
 
     def freeze_firmware(self) -> None:
         self.firmware_frozen = True
+        self.resume_pending = True
 
     def unfreeze_firmware(self) -> None:
-        """Firmware begins to run again. This does not pet, arm, or restore PWM."""
+        """Firmware may run again. This does not execute, pet, arm, or restore PWM.
+
+        The first firmware execution after this compares the pet age with the
+        last pet from before the freeze, before it is allowed to pet again.
+        """
         self.firmware_frozen = False
 
     def poll(self) -> None:
@@ -411,7 +420,7 @@ class MotorReceiver:
     def _unix_expired(self, message) -> bool:
         if not self.clock_synchronized or self.unix_ms is None:
             return False
-        return message["expires_at_ms"] < self.unix_ms
+        return message["expires_at_ms"] <= self.unix_ms
 
     def _unix_too_far(self, message) -> bool:
         if not self.clock_synchronized or self.unix_ms is None:
@@ -499,6 +508,14 @@ class MotorReceiver:
             self._stop_output()
 
     def _enforce_timeouts(self) -> None:
+        # Advancing time while the firmware runs models a loop that petted
+        # throughout. A freeze is the gap the hardware timer has to catch, so
+        # the first execution after it is judged against the pre-freeze pet
+        # before it may pet. A late pet latches the hold and does not clear it.
+        if self.resume_pending:
+            self.resume_pending = False
+            if self.monotonic_ms - self.last_pet_mono > WATCHDOG_MS:
+                self.cutoff_hold = True
         self._pet()
         self._refresh_cutoff()
         if (
