@@ -1,13 +1,14 @@
 """Schema checks for mocked messages. No model output and no motors."""
 
+from tests.control_auth import TEST_KEY
 from tests.contract_schema import (
     BLENDSHAPES,
-    sender_may_request_motion,
     validate_feature,
     validate_gesture,
     validate_motor,
     validate_status,
 )
+from tests.status_gate import StatusGate
 
 T0 = 1_795_276_800_000
 
@@ -32,7 +33,7 @@ def pose():
 
 def feature(**overrides):
     message = {
-        "schema_version": "2",
+        "schema_version": "3",
         "timestamp_ms": T0,
         "tracking_state": "tracking",
         "features": features(),
@@ -45,7 +46,7 @@ def feature(**overrides):
 
 def gesture(**overrides):
     message = {
-        "schema_version": "2",
+        "schema_version": "3",
         "timestamp_ms": T0 + 40,
         "source_timestamp_ms": T0,
         "window_start_timestamp_ms": T0,
@@ -61,16 +62,21 @@ def gesture(**overrides):
 
 def motor(**overrides):
     message = {
-        "schema_version": "2",
+        "schema_version": "3",
+        "controller_id": "laptop",
         "boot_nonce": 42,
         "session_id": 7,
         "sequence": 1,
+        "freshness_id": 1,
+        "rearm_generation": 0,
+        "status_challenge": 1,
         "issued_at_ms": T0,
         "expires_at_ms": T0 + 250,
         "task_state": "idle",
         "linear_mps": 0,
         "angular_rad_s": 0,
         "stop": True,
+        "mac": "ab" * 32,
     }
     message.update(overrides)
     return message
@@ -159,18 +165,29 @@ def test_motor_stop_shape_and_limits():
 
 def test_status_reports_physical_estop_separately():
     message = {
-        "schema_version": "2",
+        "schema_version": "3",
+        "controller_id": "laptop",
         "timestamp_ms": T0,
         "boot_nonce": 42,
         "session_id": 7,
         "last_sequence": 2,
+        "status_sequence": 1,
+        "freshness_id": 1,
+        "rearm_generation": 1,
+        "status_challenge": 1,
+        "clock_state": "unsynchronized",
+        "sensor_state": "asserted",
+        "cutoff_open": True,
         "physical_estop": True,
         "software_estop_latch": False,
         "fault_latch": False,
         "armed": False,
         "commanding_stop": True,
+        "mac": "ab" * 32,
     }
     assert validate_status(message) == []
     message["armed"] = True
     assert validate_status(message)
-    assert sender_may_request_motion(message, session_id=7, sequence=3) is False
+    gate = StatusGate(TEST_KEY, "laptop")
+    assert gate.observe(message, 0) == "spoofed"
+    assert gate.motion_authorized(0, 7, 3, 1) is False

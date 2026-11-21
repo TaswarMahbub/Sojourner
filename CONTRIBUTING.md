@@ -81,7 +81,7 @@ These rules stay in force for that review:
 - `tracking_state` other than `tracking`, a gesture label of `unknown`, a stale feature frame, an invalid message, and an expired command do not produce motion.
 - The firmware may use limits that are stricter than `docs/contracts.md`. It must not exceed them.
 - The laptop shared-control state machine is owned by Mridhul. A change that can publish non-zero motion still needs Hardware/ML approval before merge.
-- Clearing the software estop latch or a watchdog fault takes its own accepted `rearm` command with `stop` true and zero motion. An `idle` command does not clear those latches. A network command does not clear a physical emergency stop. The physical control must be released, and a later `rearm` is what arms the receiver. The `rearm` command does not also request motion.
+- Clearing the software estop latch or a watchdog fault takes its own accepted `rearm` command with `stop` true and zero motion. An `idle` command does not clear those latches. A network command does not clear a physical emergency stop or close the electrical cutoff. The physical control must be released, and a later `rearm` bound to the post-release status is what arms the receiver. A `rearm` captured before that release does not arm. The `rearm` command does not also request motion.
 - Bench work with the motors powered uses a vehicle that cannot reach a person. The stop path is checked before any non-zero command.
 
 ## Credentials, data, and claims
@@ -94,7 +94,7 @@ These rules stay in force for that review:
 
 ## Contract changes
 
-`docs/contracts.md` schema `"2"` is binding. A change that redefines a field, a unit, a range, or stop behavior increments `schema_version` and updates every producer and consumer of that message in the same pull request. While no producer exists, the contract pull request stands alone and names the owners who must review the next implementation.
+`docs/contracts.md` schema `"3"` is binding. A change that redefines a field, a unit, a range, or stop behavior increments `schema_version` and updates every producer and consumer of that message in the same pull request. While no producer exists, the contract pull request stands alone and names the owners who must review the next implementation.
 
 Owners for a contract edit:
 

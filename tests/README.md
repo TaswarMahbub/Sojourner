@@ -1,6 +1,8 @@
 # Tests
 
-This directory holds the schema 2 checks for `docs/contracts.md`. Application areas will keep their own unit tests beside their code when that code is added.
+This directory holds the schema 3 checks for `docs/contracts.md`. Application areas will keep their own unit tests beside their code when that code is added.
+
+`control_auth.py` contains the HMAC-SHA256 canonical encoding and a fixed test key. That key is a fixture for these tests. It is not a credential and it must not be provisioned onto an ESP32. Passing these tests does not verify firmware, radio timing, or the electrical cutoff.
 
 Run the checks from the repository root:
 

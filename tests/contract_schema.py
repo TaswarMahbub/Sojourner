@@ -1,7 +1,8 @@
-"""Schema 2 checks for Sojourner messages.
+"""Schema 3 checks for Sojourner messages.
 
 This module is the test oracle for docs/contracts.md. It is not a runtime
-service, and it does not talk to motors.
+service, and it does not talk to motors. Validation returns errors. It does
+not raise on hostile numbers or types.
 """
 
 from __future__ import annotations
@@ -9,7 +10,9 @@ from __future__ import annotations
 import math
 import re
 
-SCHEMA = "2"
+SCHEMA = "3"
+CONTROLLER_ID = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
+MAC_HEX = re.compile(r"^[0-9a-f]{64}$")
 SAFE_INT_MAX = 9007199254740991
 SEQUENCE_MAX = 4294967295
 MODEL_VERSION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$")
@@ -95,27 +98,41 @@ GESTURE_FIELDS = {
 }
 MOTOR_FIELDS = {
     "schema_version",
+    "controller_id",
     "boot_nonce",
     "session_id",
     "sequence",
+    "freshness_id",
+    "rearm_generation",
+    "status_challenge",
     "issued_at_ms",
     "expires_at_ms",
     "task_state",
     "linear_mps",
     "angular_rad_s",
     "stop",
+    "mac",
 }
 STATUS_FIELDS = {
     "schema_version",
+    "controller_id",
     "timestamp_ms",
     "boot_nonce",
     "session_id",
     "last_sequence",
+    "status_sequence",
+    "freshness_id",
+    "rearm_generation",
+    "status_challenge",
+    "clock_state",
+    "sensor_state",
+    "cutoff_open",
     "physical_estop",
     "software_estop_latch",
     "fault_latch",
     "armed",
     "commanding_stop",
+    "mac",
 }
 
 
@@ -152,7 +169,10 @@ def _exact_keys(message, allowed, errors) -> None:
 
 
 def _unit(value) -> float:
-    return float(value)
+    try:
+        return float(value)
+    except (OverflowError, ValueError, TypeError):
+        return math.nan
 
 
 def _score(value, errors, name: str, low: float, high: float) -> None:
@@ -246,12 +266,19 @@ def _features(value, errors, state: str) -> None:
 
 
 def validate_feature(message) -> list[str]:
+    try:
+        return _validate_feature(message)
+    except Exception:
+        return ["rejected"]
+
+
+def _validate_feature(message) -> list[str]:
     errors: list[str] = []
     _exact_keys(message, FEATURE_FIELDS, errors)
     if not isinstance(message, dict) or errors:
         return errors
     if message["schema_version"] != SCHEMA:
-        errors.append("schema_version is not 2")
+        errors.append("schema_version is not 3")
     if not is_timestamp(message["timestamp_ms"]):
         errors.append("timestamp_ms is not a timestamp")
     state = message["tracking_state"]
@@ -279,12 +306,19 @@ def validate_feature(message) -> list[str]:
 
 
 def validate_gesture(message) -> list[str]:
+    try:
+        return _validate_gesture(message)
+    except Exception:
+        return ["rejected"]
+
+
+def _validate_gesture(message) -> list[str]:
     errors: list[str] = []
     _exact_keys(message, GESTURE_FIELDS, errors)
     if not isinstance(message, dict) or errors:
         return errors
     if message["schema_version"] != SCHEMA:
-        errors.append("schema_version is not 2")
+        errors.append("schema_version is not 3")
     for name in (
         "timestamp_ms",
         "source_timestamp_ms",
@@ -325,16 +359,34 @@ def _zero(value) -> bool:
 
 
 def validate_motor(message) -> list[str]:
+    try:
+        return _validate_motor(message)
+    except Exception:
+        return ["rejected"]
+
+
+def _validate_motor(message) -> list[str]:
     errors: list[str] = []
     _exact_keys(message, MOTOR_FIELDS, errors)
     if not isinstance(message, dict) or errors:
         return errors
     if message["schema_version"] != SCHEMA:
-        errors.append("schema_version is not 2")
+        errors.append("schema_version is not 3")
+    if not isinstance(message["controller_id"], str) or CONTROLLER_ID.fullmatch(message["controller_id"]) is None:
+        errors.append("controller_id is invalid")
     if not is_safe_id(message["boot_nonce"]):
         errors.append("boot_nonce is invalid")
     if not is_safe_id(message["session_id"]):
         errors.append("session_id is invalid")
+    if not is_safe_id(message["freshness_id"]):
+        errors.append("freshness_id is invalid")
+    generation = message["rearm_generation"]
+    if not is_int(generation) or not 0 <= generation <= SAFE_INT_MAX:
+        errors.append("rearm_generation is invalid")
+    if not is_safe_id(message["status_challenge"]):
+        errors.append("status_challenge is invalid")
+    if not isinstance(message["mac"], str) or MAC_HEX.fullmatch(message["mac"]) is None:
+        errors.append("mac is invalid")
     sequence = message["sequence"]
     if not is_int(sequence) or not 1 <= sequence <= SEQUENCE_MAX:
         errors.append("sequence is invalid")
@@ -367,16 +419,44 @@ def validate_motor(message) -> list[str]:
 
 
 def validate_status(message) -> list[str]:
+    try:
+        return _validate_status(message)
+    except Exception:
+        return ["rejected"]
+
+
+def _validate_status(message) -> list[str]:
     errors: list[str] = []
     _exact_keys(message, STATUS_FIELDS, errors)
     if not isinstance(message, dict) or errors:
         return errors
     if message["schema_version"] != SCHEMA:
-        errors.append("schema_version is not 2")
+        errors.append("schema_version is not 3")
+    if not isinstance(message["controller_id"], str) or CONTROLLER_ID.fullmatch(message["controller_id"]) is None:
+        errors.append("controller_id is invalid")
     if not is_timestamp(message["timestamp_ms"]):
         errors.append("timestamp_ms is not a timestamp")
     if not is_safe_id(message["boot_nonce"]):
         errors.append("boot_nonce is invalid")
+    if not is_safe_id(message["freshness_id"]):
+        errors.append("freshness_id is invalid")
+    generation = message["rearm_generation"]
+    if not is_int(generation) or not 0 <= generation <= SAFE_INT_MAX:
+        errors.append("rearm_generation is invalid")
+    challenge = message["status_challenge"]
+    if not is_int(challenge) or not 0 <= challenge <= SAFE_INT_MAX:
+        errors.append("status_challenge is invalid")
+    status_sequence = message["status_sequence"]
+    if not is_int(status_sequence) or not 1 <= status_sequence <= SAFE_INT_MAX:
+        errors.append("status_sequence is invalid")
+    if message["clock_state"] not in ("unsynchronized", "synchronized"):
+        errors.append("clock_state is invalid")
+    if message["sensor_state"] not in ("asserted", "released", "unknown"):
+        errors.append("sensor_state is invalid")
+    if not is_bool(message["cutoff_open"]):
+        errors.append("cutoff_open is not a boolean")
+    if not isinstance(message["mac"], str) or MAC_HEX.fullmatch(message["mac"]) is None:
+        errors.append("mac is invalid")
     session = message["session_id"]
     sequence = message["last_sequence"]
     if session is not None and not is_safe_id(session):
@@ -398,28 +478,18 @@ def validate_status(message) -> list[str]:
     ):
         if not is_bool(message[name]):
             errors.append(f"{name} is not a boolean")
+    if message.get("sensor_state") == "released" and message.get("physical_estop") is not False:
+        errors.append("released sensor contradicts physical_estop")
+    if message.get("sensor_state") != "released" and message.get("physical_estop") is not True:
+        errors.append("unknown or asserted sensor requires physical_estop")
     if message.get("armed") is True and (
         message.get("physical_estop") is not False
         or message.get("software_estop_latch") is not False
         or message.get("fault_latch") is not False
+        or message.get("cutoff_open") is not False
+        or message.get("sensor_state") != "released"
     ):
         errors.append("armed status contradicts a stop condition")
     if session is None and message.get("armed") is True:
         errors.append("armed requires an active session")
     return errors
-
-
-def sender_may_request_motion(status, session_id: int, sequence: int) -> bool:
-    """Publisher gate from the schema 2 handshake. Absence of status denies motion."""
-    if not isinstance(status, dict) or validate_status(status):
-        return False
-    if status["session_id"] != session_id:
-        return False
-    if status["last_sequence"] is None or sequence <= status["last_sequence"]:
-        return False
-    return (
-        status["physical_estop"] is False
-        and status["software_estop_latch"] is False
-        and status["fault_latch"] is False
-        and status["armed"] is True
-    )

@@ -3,8 +3,9 @@
 These tests do not power motors and do not verify ESP32 behavior.
 """
 
-from tests.contract_schema import sender_may_request_motion
+from tests.control_auth import seal
 from tests.motor_receiver import MotorReceiver
+from tests.status_gate import StatusGate
 
 T0 = 1_795_276_800_000
 NONCE = 42
@@ -12,7 +13,7 @@ NONCE = 42
 
 def command(**overrides):
     message = {
-        "schema_version": "2",
+        "schema_version": "3",
         "boot_nonce": NONCE,
         "session_id": 10,
         "sequence": 1,
@@ -27,30 +28,38 @@ def command(**overrides):
     return message
 
 
+def framed(receiver, **overrides):
+    return seal(receiver, command(**overrides))
+
+
 def boot(nonce=NONCE):
     receiver = MotorReceiver(nonce)
-    receiver.set_time(T0)
+    receiver.complete_startup()
+    receiver.set_sensor("released")
+    receiver.set_monotonic(T0)
     return receiver
 
 
 def start(receiver, session_id=10, at=T0):
-    receiver.set_time(at)
+    receiver.set_monotonic(at)
     outcome = receiver.handle(
-        command(
+        framed(
+            receiver,
             session_id=session_id,
             sequence=1,
             issued_at_ms=at,
             expires_at_ms=at + 250,
         )
     )
-    assert outcome == "accepted_start"
+    assert outcome == "accepted_start", outcome
     return outcome
 
 
 def rearm(receiver, session_id=10, sequence=2, at=T0):
-    receiver.set_time(at)
+    receiver.set_monotonic(at)
     outcome = receiver.handle(
-        command(
+        framed(
+            receiver,
             session_id=session_id,
             sequence=sequence,
             issued_at_ms=at,
@@ -58,18 +67,19 @@ def rearm(receiver, session_id=10, sequence=2, at=T0):
             task_state="rearm",
         )
     )
-    assert outcome == "accepted_rearm"
+    assert outcome == "accepted_rearm", outcome
     return outcome
 
 
-def motion(receiver, session_id=10, sequence=3, at=T0, linear=0.2):
-    receiver.set_time(at)
+def motion(receiver, session_id=10, sequence=3, at=T0, linear=0.2, lifetime=250):
+    receiver.set_monotonic(at)
     return receiver.handle(
-        command(
+        framed(
+            receiver,
             session_id=session_id,
             sequence=sequence,
             issued_at_ms=at,
-            expires_at_ms=at + 250,
+            expires_at_ms=at + lifetime,
             task_state="manual",
             linear_mps=linear,
             angular_rad_s=0,
@@ -85,7 +95,11 @@ def test_session_start_is_stopped_and_disarmed():
     assert state["linear_mps"] == 0
     assert state["armed"] is False
     assert state["last_sequence"] == 1
-    assert sender_may_request_motion(receiver.status(), 10, 2) is False
+    status = receiver.status()
+    gate = StatusGate(receiver.key, receiver.controller_id)
+    gate.expect(status["status_challenge"], receiver.monotonic_ms)
+    assert gate.observe(status, receiver.monotonic_ms) == "accepted"
+    assert gate.motion_authorized(receiver.monotonic_ms, 10, 2, status["freshness_id"]) is False
 
 
 def test_motion_before_rearm_is_rejected():
@@ -100,8 +114,20 @@ def test_rearm_then_motion_requires_observed_status():
     receiver = boot()
     start(receiver)
     rearm(receiver)
-    assert sender_may_request_motion(receiver.status(), 10, 3) is True
-    assert sender_may_request_motion(None, 10, 3) is False
+    status = receiver.status()
+    gate = StatusGate(receiver.key, receiver.controller_id)
+    gate.expect(status["status_challenge"], receiver.monotonic_ms)
+    assert gate.observe(status, receiver.monotonic_ms) == "accepted"
+    assert (
+        gate.motion_authorized(
+            receiver.monotonic_ms,
+            10,
+            status["last_sequence"] + 1,
+            status["freshness_id"],
+        )
+        is True
+    )
+    assert StatusGate(receiver.key, receiver.controller_id).motion_authorized(0, 10, 3, 1) is False
     assert motion(receiver) == "accepted_motion"
     assert receiver.snapshot()["linear_mps"] == 0.2
 
@@ -112,7 +138,7 @@ def test_invalid_message_stops_without_refreshing_the_watchdog():
     rearm(receiver, at=T0 + 10)
     assert motion(receiver, at=T0 + 20) == "accepted_motion"
     accepted = receiver.snapshot()["last_accept_ms"]
-    receiver.set_time(T0 + 30)
+    receiver.set_monotonic(T0 + 30)
     bad = command(
         sequence=4,
         issued_at_ms=T0 + 30,
@@ -144,8 +170,8 @@ def test_older_stop_beats_a_newer_motion_without_refresh_or_latch_clear():
     rearm(receiver, at=T0 + 10)
     assert motion(receiver, sequence=5, at=T0 + 20, linear=0.25) == "accepted_motion"
     accepted = receiver.snapshot()["last_accept_ms"]
-    receiver.set_time(T0 + 40)
-    stale_estop = command(
+    receiver.set_monotonic(T0 + 40)
+    stale_estop = framed(receiver,
         sequence=4,
         issued_at_ms=T0 + 40,
         expires_at_ms=T0 + 290,
@@ -158,8 +184,8 @@ def test_older_stop_beats_a_newer_motion_without_refresh_or_latch_clear():
     assert state["armed"] is False
     assert state["last_sequence"] == 5
     assert state["last_accept_ms"] == accepted
-    receiver.set_time(T0 + 50)
-    stale_rearm = command(
+    receiver.set_monotonic(T0 + 50)
+    stale_rearm = framed(receiver,
         sequence=2,
         issued_at_ms=T0 + 50,
         expires_at_ms=T0 + 300,
@@ -174,11 +200,11 @@ def test_older_stop_beats_a_newer_motion_without_refresh_or_latch_clear():
 def test_stale_idle_stop_does_not_clear_a_fault_latch():
     receiver = boot()
     start(receiver)
-    receiver.set_time(T0 + 251)
+    receiver.set_monotonic(T0 + 251)
     assert receiver.snapshot()["fault_latch"] is True
     accepted = receiver.snapshot()["last_accept_ms"]
-    receiver.set_time(T0 + 300)
-    stale_idle = command(
+    receiver.set_monotonic(T0 + 300)
+    stale_idle = framed(receiver,
         sequence=1,
         issued_at_ms=T0 + 300,
         expires_at_ms=T0 + 550,
@@ -197,8 +223,8 @@ def test_new_session_cannot_be_rearmed_by_the_previous_session():
     start(receiver, session_id=10)
     rearm(receiver, session_id=10, sequence=2, at=T0 + 10)
     assert motion(receiver, session_id=10, sequence=3, at=T0 + 20) == "accepted_motion"
-    receiver.set_time(T0 + 30)
-    new_start = command(
+    receiver.set_monotonic(T0 + 30)
+    new_start = framed(receiver,
         session_id=11,
         sequence=1,
         issued_at_ms=T0 + 30,
@@ -209,7 +235,7 @@ def test_new_session_cannot_be_rearmed_by_the_previous_session():
     assert state["session_id"] == 11
     assert state["armed"] is False
     assert state["linear_mps"] == 0
-    delayed_motion = command(
+    delayed_motion = framed(receiver,
         session_id=10,
         sequence=9,
         issued_at_ms=T0 + 40,
@@ -218,12 +244,12 @@ def test_new_session_cannot_be_rearmed_by_the_previous_session():
         linear_mps=0.2,
         stop=False,
     )
-    receiver.set_time(T0 + 40)
+    receiver.set_monotonic(T0 + 40)
     assert receiver.handle(delayed_motion) == "ignored"
     assert receiver.snapshot()["linear_mps"] == 0
     assert receiver.snapshot()["armed"] is False
     assert receiver.snapshot()["session_id"] == 11
-    delayed_rearm = command(
+    delayed_rearm = framed(receiver,
         session_id=10,
         sequence=8,
         issued_at_ms=T0 + 40,
@@ -239,7 +265,7 @@ def test_reboot_nonce_drops_packets_from_the_previous_boot():
     start(first)
     rearm(first)
     assert motion(first) == "accepted_motion"
-    old_motion = command(
+    old_motion = framed(first,
         sequence=4,
         issued_at_ms=T0 + 10,
         expires_at_ms=T0 + 260,
@@ -248,7 +274,7 @@ def test_reboot_nonce_drops_packets_from_the_previous_boot():
         stop=False,
     )
     rebooted = boot(nonce=99)
-    rebooted.set_time(T0 + 10)
+    rebooted.set_monotonic(T0 + 10)
     assert rebooted.handle(old_motion) == "ignored"
     assert rebooted.snapshot()["armed"] is False
     assert rebooted.snapshot()["linear_mps"] == 0
@@ -260,10 +286,14 @@ def test_watchdog_expiration_latches_a_fault():
     start(receiver)
     rearm(receiver)
     assert motion(receiver, at=T0 + 20) == "accepted_motion"
-    receiver.set_time(T0 + 20 + 250)
+    receiver.set_monotonic(T0 + 20 + 249)
     assert receiver.snapshot()["fault_latch"] is False
     assert receiver.snapshot()["linear_mps"] == 0.2
-    receiver.set_time(T0 + 20 + 251)
+    receiver.set_monotonic(T0 + 20 + 250)
+    assert receiver.snapshot()["fault_latch"] is False
+    assert receiver.snapshot()["armed"] is True
+    assert receiver.snapshot()["linear_mps"] == 0
+    receiver.set_monotonic(T0 + 20 + 251)
     state = receiver.snapshot()
     assert state["fault_latch"] is True
     assert state["armed"] is False
@@ -281,8 +311,8 @@ def test_physical_estop_is_not_cleared_by_idle_or_rearm():
     assert receiver.snapshot()["physical_estop"] is True
     assert receiver.snapshot()["linear_mps"] == 0
     assert receiver.snapshot()["armed"] is False
-    receiver.set_time(T0 + 30)
-    idle = command(
+    receiver.set_monotonic(T0 + 30)
+    idle = framed(receiver,
         sequence=4,
         issued_at_ms=T0 + 30,
         expires_at_ms=T0 + 280,
@@ -291,8 +321,8 @@ def test_physical_estop_is_not_cleared_by_idle_or_rearm():
     assert receiver.handle(idle) == "accepted_stop"
     assert receiver.snapshot()["physical_estop"] is True
     assert receiver.snapshot()["armed"] is False
-    receiver.set_time(T0 + 40)
-    early_rearm = command(
+    receiver.set_monotonic(T0 + 40)
+    early_rearm = framed(receiver,
         sequence=5,
         issued_at_ms=T0 + 40,
         expires_at_ms=T0 + 290,
@@ -311,20 +341,16 @@ def test_physical_estop_is_not_cleared_by_idle_or_rearm():
     assert motion(receiver, sequence=7, at=T0 + 60, linear=0.1) == "accepted_motion"
 
 
-def test_expired_stop_still_stops_without_refreshing_or_clearing():
+def test_active_motion_expires_without_another_packet():
     receiver = boot()
     start(receiver)
     rearm(receiver)
-    assert motion(receiver, sequence=4, at=T0 + 20, linear=0.2) == "accepted_motion"
+    assert motion(receiver, sequence=4, at=T0 + 20, linear=0.2, lifetime=40) == "accepted_motion"
     accepted = receiver.snapshot()["last_accept_ms"]
-    receiver.set_time(T0 + 40)
-    late_stop = command(
-        sequence=5,
-        issued_at_ms=T0 + 10,
-        expires_at_ms=T0 + 30,
-        task_state="idle",
-    )
-    assert receiver.handle(late_stop) == "expired_stop"
+    receiver.set_monotonic(T0 + 20 + 39)
+    assert receiver.snapshot()["linear_mps"] == 0.2
+    assert receiver.snapshot()["fault_latch"] is False
+    receiver.set_monotonic(T0 + 20 + 40)
     state = receiver.snapshot()
     assert state["linear_mps"] == 0
     assert state["last_sequence"] == 4
@@ -338,7 +364,7 @@ def test_early_packet_from_a_later_session_does_not_take_over():
     start(receiver, session_id=10)
     rearm(receiver, session_id=10)
     assert motion(receiver, session_id=10, linear=0.15) == "accepted_motion"
-    early = command(
+    early = framed(receiver,
         session_id=12,
         sequence=3,
         task_state="manual",
@@ -355,10 +381,10 @@ def test_ordinary_idle_does_not_clear_software_estop():
     receiver = boot()
     start(receiver)
     rearm(receiver, at=T0 + 10)
-    receiver.set_time(T0 + 20)
+    receiver.set_monotonic(T0 + 20)
     assert (
         receiver.handle(
-            command(
+            framed(receiver,
                 sequence=3,
                 issued_at_ms=T0 + 20,
                 expires_at_ms=T0 + 270,
@@ -367,10 +393,10 @@ def test_ordinary_idle_does_not_clear_software_estop():
         )
         == "accepted_stop"
     )
-    receiver.set_time(T0 + 30)
+    receiver.set_monotonic(T0 + 30)
     assert (
         receiver.handle(
-            command(
+            framed(receiver,
                 sequence=4,
                 issued_at_ms=T0 + 30,
                 expires_at_ms=T0 + 280,

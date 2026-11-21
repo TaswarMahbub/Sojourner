@@ -4,7 +4,7 @@ Sojourner is a four-person WHACK 2026 research prototype. It studies adaptive fa
 
 Repository: [https://github.com/TaswarMahbub/Sojourner](https://github.com/TaswarMahbub/Sojourner)
 
-This revision contains the repository layout, ownership, schema 2 data contracts, and contract tests. It does not contain perception, classifier, firmware, backend, or frontend application code. It does not contain trained models, datasets, or deployment configuration.
+This revision contains the repository layout, ownership, schema 3 data contracts, and contract tests. It does not contain perception, classifier, firmware, backend, or frontend application code. It does not contain trained models, datasets, or deployment configuration.
 
 ## Architecture
 
@@ -39,12 +39,12 @@ TigerData is the PostgreSQL database for profiles and sessions. Vultr is the int
 
 ## Data contracts
 
-`docs/contracts.md` is schema 2. Schema 1 is withdrawn.
+`docs/contracts.md` is schema 3. Schema 1 and schema 2 were not published as a producer.
 
 - Camera feature stream: timestamp, tracking state, named facial features, head pose, and confidence. Stock MediaPipe publishes `confidence: null`.
 - Gesture classification: label, confidence, model version, and the source time window.
-- Motor command: boot nonce, session, sequence, timestamps, task state, linear and angular motion, and the stop flag.
-- Motor status: the receiver's boot nonce, session, latches, physical emergency stop, and armed flag.
+- Motor command: authenticated boot, session, sequence, freshness challenge, rearm generation, task state, linear and angular motion, and the stop flag.
+- Motor status: authenticated boot, session, latches, sensor, cutoff, physical emergency stop, and armed flag. A cached armed status does not authorize motion.
 
 Units, ranges, neutral values, and stop behavior are defined there. A producer or consumer that needs behavior the contract does not describe needs a contract change before the code change.
 
@@ -65,7 +65,7 @@ python3 -m pip install -r tests/requirements.txt
 python3 -m pytest tests
 ```
 
-The tests check message shape and a software model of the motor-command rules. They use mocked datagrams. They do not power motors, and they do not verify the ESP32 or the physical emergency-stop control. Application directories still have no programs to run.
+The tests check message shape and a software model of the motor-command rules. They use mocked datagrams. They do not power motors, and they do not verify the ESP32, the electrical cutoff, or the physical emergency-stop control. The key in `tests/control_auth.py` is a test fixture, not a rover secret. Application directories still have no programs to run.
 
 ## Safety scope
 

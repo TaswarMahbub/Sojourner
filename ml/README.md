@@ -11,6 +11,6 @@ Planned responsibilities:
 - Treat a frame that is not `tracking` as `unknown`. The label `unknown` is not a motion request.
 - Add a reviewed label list for a real `model_version` before any consumer depends on a label other than `neutral` or `unknown`.
 
-Schema 1 does not define a control mapping from labels to motor commands. That mapping belongs to shared control and needs its own reviewed change.
+The contract does not define a control mapping from labels to motor commands. That mapping belongs to shared control and needs its own reviewed change.
 
 No training code, weights, or reported results are included in this revision.
