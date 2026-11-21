@@ -14,7 +14,14 @@ Persisted state holds only durable high-water marks. A restart never restores
 an outstanding challenge, its monotonic issuance time, or an accepted status,
 because the sender's monotonic epoch may have reset. A restarted gate needs a
 newly issued challenge and a new authenticated status before it authorizes
-anything. Missing, corrupted, or inconsistent persisted state locks the gate.
+anything. Missing, corrupted, or inconsistent persisted state locks the gate,
+and so does a snapshot older than the marks the gate already holds.
+
+The optional `persist` callback is a specification hook, not durable storage.
+The gate calls it with the new state before a new challenge becomes
+outstanding and before a newly accepted status can authorize anything. If it
+raises, the challenge is not issued and the status does not authorize. No real
+file-I/O layer exists in this repository.
 """
 
 from __future__ import annotations
@@ -33,6 +40,10 @@ STATE_KEYS = frozenset(
 
 class PersistedStateError(ValueError):
     """Saved gate state is missing, malformed, ambiguous, or inconsistent."""
+
+
+class PersistFailed(RuntimeError):
+    """The persist hook did not confirm a durable write."""
 
 
 class ChallengeExhausted(RuntimeError):
@@ -76,8 +87,9 @@ def load_state(text) -> dict:
 
 
 class StatusGate:
-    def __init__(self, key: bytes, controller_id: str):
+    def __init__(self, key: bytes, controller_id: str, *, persist=None):
         self.key = key
+        self.persist = persist
         self.controller_id = controller_id
         self.sequences: dict[int, int] = {}
         self.boot_nonce = None
@@ -102,6 +114,8 @@ class StatusGate:
             raise ChallengeExhausted("challenge ids are exhausted")
         challenge = self.challenge_high_water + 1
         if not self.expect(challenge, sent_mono):
+            if self.challenge_high_water == challenge:
+                raise PersistFailed("challenge high-water mark was not persisted")
             raise ValueError("sent_mono is invalid")
         return challenge
 
@@ -124,15 +138,22 @@ class StatusGate:
         self._drop_challenge()
         if challenge <= self.challenge_high_water:
             return False
+        # The mark rises in memory even if the write fails, so the id is
+        # never offered again. It is outstanding only after a durable write.
+        self.challenge_high_water = challenge
+        if not self._persist():
+            return False
         self.challenge = challenge
         self.challenge_mono = sent_mono
-        self.challenge_high_water = challenge
         return True
 
     def export_state(self) -> dict:
         """Durable high-water marks only. JSON-safe: no integer dict keys."""
         if self.locked:
             raise PersistedStateError("gate is locked by invalid persisted state")
+        return self._snapshot()
+
+    def _snapshot(self) -> dict:
         return {
             "version": STATE_VERSION,
             "controller_id": self.controller_id,
@@ -144,16 +165,20 @@ class StatusGate:
     def restore_state(self, state) -> None:
         """Restore high-water marks after a sender restart.
 
-        Never restores an outstanding challenge or an accepted status. On any
-        invalid input the gate is locked and PersistedStateError is raised. A
-        locked gate refuses challenges and authorizes nothing, so replay
-        marks are never silently reset to empty.
+        Never restores an outstanding challenge or an accepted status. The
+        whole snapshot is validated before anything is applied. A snapshot
+        that would lower any mark the gate already holds, including one that
+        omits a known boot, is rejected. On any rejection the gate is locked,
+        keeps its existing marks, and raises PersistedStateError. A locked
+        gate refuses challenges and authorizes nothing. The same check applies
+        when a locked gate is recovered.
         """
         self.latest = None
         self.received_mono = None
         self._drop_challenge()
         try:
             sequences, boot_nonce, high_water = self._validate_state(state)
+            self._reject_rollback(sequences, boot_nonce, high_water)
         except PersistedStateError:
             self.locked = True
             raise
@@ -208,6 +233,30 @@ class StatusGate:
             raise PersistedStateError("boot_nonce is invalid or has no sequence")
         return sequences, boot_nonce, high_water
 
+    def _reject_rollback(self, sequences, boot_nonce, high_water) -> None:
+        if high_water < self.challenge_high_water:
+            raise PersistedStateError("snapshot lowers challenge_high_water")
+        for boot, known in self.sequences.items():
+            if boot not in sequences:
+                raise PersistedStateError("snapshot omits a known boot")
+            if sequences[boot] < known:
+                raise PersistedStateError("snapshot lowers a status sequence")
+        if (
+            self.boot_nonce is not None
+            and boot_nonce != self.boot_nonce
+            and boot_nonce in self.sequences
+        ):
+            raise PersistedStateError("snapshot returns to an earlier boot")
+
+    def _persist(self) -> bool:
+        if self.persist is None:
+            return True
+        try:
+            self.persist(self._snapshot())
+        except Exception:
+            return False
+        return True
+
     def _drop_challenge(self) -> None:
         self.challenge = None
         self.challenge_mono = None
@@ -250,6 +299,8 @@ class StatusGate:
                 return "wrong_boot"
         self.sequences[boot] = seq
         self.boot_nonce = boot
+        if not self._persist():
+            return "persist_failed"
         self.latest = status
         self.received_mono = sender_mono
         return "accepted"

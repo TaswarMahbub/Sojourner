@@ -256,9 +256,15 @@ def test_malformed_persisted_state_locks_the_gate(label, state):
     assert gate.observe(delayed, 0) == "locked"
     assert _authorized(gate, 0, first) == (False, False)
 
-    gate.restore_state(_valid_state())
+    with pytest.raises(PersistedStateError):
+        gate.restore_state(_valid_state())
+    assert gate.locked is True
+    assert gate.sequences == {42: 9}
+
+    gate.restore_state({**_valid_state(), "sequences": [[42, 9]]})
     assert gate.locked is False
-    assert gate.sequences == {42: 2}
+    assert gate.sequences == {42: 9}
+    assert gate.challenge is None and gate.latest is None
 
 
 @pytest.mark.parametrize(

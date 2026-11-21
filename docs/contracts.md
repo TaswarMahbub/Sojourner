@@ -595,11 +595,13 @@ Shared control authorizes motion only from a status that passes every check belo
 
 A cached armed status does not authorize motion after a newer status says disarmed, after either `250` ms window, after the outstanding challenge changes, or after a restart that restored a high-water mark at or above the cached `status_sequence`. A status with a bad MAC, the wrong schema, a wrong boot, a repeated sequence, or a challenge the sender does not currently have outstanding is rejected. A delayed status that echoes a retired challenge stays rejected even if the sender later asks for that id again.
 
-#### Persisted sender state
+#### Persisted status-gate state
 
-A sender restart may reset its monotonic clock epoch, so an issuance time from before the restart is meaningless afterwards. The sender persists only durable high-water marks, and it never restores an outstanding challenge, an issuance time, or an accepted status. After a restart it has no outstanding challenge and no current status. It authorizes neither motion nor `rearm` until it issues a new challenge above the persisted mark and receives a new authenticated status that echoes it.
+The sender keeps two separate persisted records. The status gate persists the challenge high-water mark and the per-boot `status_sequence` high-water marks, in the object below. The controller command-session allocator separately persists its own `session_id` high-water mark, as required under "Sessions on UDP". `session_id` is not part of the status-gate object, and adding it, or any other key, makes that object invalid.
 
-The persisted state is one JSON object with exactly these keys:
+A sender restart may reset its monotonic clock epoch, so an issuance time from before the restart is meaningless afterwards. The status gate persists only durable high-water marks, and it never restores an outstanding challenge, an issuance time, or an accepted status. After a restart it has no outstanding challenge and no current status. It authorizes neither motion nor `rearm` until it issues a new challenge above the persisted mark and receives a new authenticated status that echoes it.
+
+The persisted status-gate state is one JSON object with exactly these keys:
 
 | Key | Value |
 | --- | --- |
@@ -609,7 +611,17 @@ The persisted state is one JSON object with exactly these keys:
 | `boot_nonce` | The most recently accepted boot, or `null` when no status has been accepted |
 | `sequences` | A list of `[boot_nonce, status_sequence]` pairs, each an exact integer from `1` to `9007199254740991`, one pair per boot |
 
-The sequence marks are a list of pairs, not an object, because JSON object keys are strings. Restoration rejects the whole state when the input is missing, is not valid JSON, has a duplicate JSON key, a non-finite number, a missing or extra key, another version or controller, a non-integer or out-of-range value, a boolean or float alias, a pair that is not exactly two items, two pairs for the same boot, a `boot_nonce` with no pair, or any pair while `boot_nonce` is `null`. A rejected restoration fails closed: the sender keeps its in-memory marks, refuses every challenge, authorizes nothing, and does not export a state. It does not fall back to empty marks. Recovering from a lost or corrupt state is an operator decision outside this contract.
+The sequence marks are a list of pairs, not an object, because JSON object keys are strings. Restoration rejects the whole state when the input is missing, is not valid JSON, has a duplicate JSON key, a non-finite number, a missing or extra key, another version or controller, a non-integer or out-of-range value, a boolean or float alias, a pair that is not exactly two items, two pairs for the same boot, a `boot_nonce` with no pair, or any pair while `boot_nonce` is `null`. The whole object is validated before any part of it is applied. Restoration also rejects a snapshot that is older than the marks the gate already holds: a lower `challenge_high_water`, a lower `status_sequence` for a known boot, a missing pair for a known boot, or a `boot_nonce` that returns to an earlier known boot. Equal or higher marks, and pairs for boots the gate has not seen, are accepted. A rejected restoration fails closed: the gate keeps its in-memory marks, refuses every challenge, authorizes nothing, and does not export a state. It does not fall back to empty marks. A locked gate unlocks only through a snapshot that passes the same validation and rollback checks. A restoration that succeeds still restores no challenge and no status. Recovering from a lost or corrupt state is an operator decision outside this contract.
+
+Write ordering for the eventual laptop implementation:
+
+- A new `challenge_high_water` is persisted durably before the challenge is transmitted. A new `status_sequence` mark is persisted durably before that status can authorize motion or `rearm`.
+- A durable write is an atomic replacement of the whole object (write a new file, flush it, rename it over the old one, and flush the directory) that has completed before the value is used.
+- A write that fails or cannot be confirmed prevents that transmission or authorization. The in-memory mark still rises, so the id is not offered again in that process.
+- Missing or corrupt persisted state fails closed, as above. An interrupted write leaves either the previous complete object or an invalid one. Because a challenge is never transmitted before its mark is durable, the previous object cannot lead to reuse of a transmitted challenge id.
+- A fresh process cannot tell an old but structurally valid backup from the current file without independent trusted history, such as a monotonic hardware counter or a second trusted store. Restoring such a backup can lower the marks. This limitation remains.
+
+This durability is not implemented or tested in this repository. `tests/status_gate.py` checks the ordering through an in-memory `persist` hook only.
 
 ## Publisher duties before motion exists
 
