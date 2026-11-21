@@ -17,7 +17,7 @@ Use lowercase letters, numbers, and hyphens. Keep the description short and spec
 | Owner | Branch prefix | Areas |
 | --- | --- | --- |
 | Hardware/ML | `hardware/` | `ml`, `firmware` |
-| Mridhul | `mridhul/` | `perception` |
+| Mridhul | `mridhul/` | `perception`, and the laptop shared-control state machine |
 | Bailey | `bailey/` | `backend` |
 | Davina | `davina/` | `frontend` |
 
@@ -52,12 +52,12 @@ One branch addresses one change. Do not combine a firmware motor change with an 
 
 Direct commits to `main` are reserved for repository administrators during the initial setup. Feature work uses a pull request.
 
-There is no continuous-integration workflow yet. The pull request that introduces the first test runner adds the workflow for that runner. Until then, reviewers use the tests the author ran and the checklist in this file.
+`.github/workflows/tests.yml` runs `python3 -m pytest tests` on pull requests and on pushes to `main`. Reviewers still read the contract diff. A green workflow does not replace a Hardware/ML safety review and does not verify the rover.
 
 ## Testing expectations
 
-- This initialization has no test runner. Do not add a test file that asserts invented accuracy, latency, or clinical performance.
-- The first pull request that adds executable code in an area documents the test command in that area's `README.md` and includes tests for the behavior it adds.
+- Contract checks run with `python3 -m pytest tests`. Do not add a test that asserts invented accuracy, latency, or clinical performance.
+- The first pull request that adds executable application code in an area documents that area's test command in its `README.md` and includes tests for the behavior it adds.
 - A pure documentation change says how the author checked it. For `docs/contracts.md`, the author walks through units, ranges, neutral values, and stop behavior in the pull request body.
 - A contract change keeps `docs/contracts.md` as the only specification. Examples in that file are encoding illustrations. Tests must not treat them as recorded model output.
 - Firmware and motor-command changes describe the bench check of the stop path. State the supply state, whether the wheels were free to turn, and what happened when the command stream stopped. A motor-path change is not merged from code review alone.
@@ -80,7 +80,8 @@ These rules stay in force for that review:
 - Every new state, mode, and error path names how it reaches that safe state.
 - `tracking_state` other than `tracking`, a gesture label of `unknown`, a stale feature frame, an invalid message, and an expired command do not produce motion.
 - The firmware may use limits that are stricter than `docs/contracts.md`. It must not exceed them.
-- Clearing `estop` or a watchdog fault takes its own accepted command with `task_state` `idle` and `stop` true. The command that clears the latch does not also request motion.
+- The laptop shared-control state machine is owned by Mridhul. A change that can publish non-zero motion still needs Hardware/ML approval before merge.
+- Clearing the software estop latch or a watchdog fault takes its own accepted `rearm` command with `stop` true and zero motion. An `idle` command does not clear those latches. A network command does not clear a physical emergency stop or close the electrical cutoff. The physical control must be released, and a later `rearm` bound to the post-release status is what arms the receiver. A `rearm` captured before that release does not arm. The `rearm` command does not also request motion.
 - Bench work with the motors powered uses a vehicle that cannot reach a person. The stop path is checked before any non-zero command.
 
 ## Credentials, data, and claims
@@ -93,7 +94,7 @@ These rules stay in force for that review:
 
 ## Contract changes
 
-`docs/contracts.md` schema `"1"` is binding. A change that redefines a field, a unit, a range, or stop behavior increments `schema_version` and updates every producer and consumer of that message in the same pull request. While no producer exists, the contract pull request stands alone and names the owners who must review the next implementation.
+`docs/contracts.md` schema `"4"` is binding. A change that redefines a field, a unit, a range, or stop behavior increments `schema_version` and updates every producer and consumer of that message in the same pull request. While no producer exists, the contract pull request stands alone and names the owners who must review the next implementation.
 
 Owners for a contract edit:
 
@@ -101,6 +102,6 @@ Owners for a contract edit:
 | --- | --- | --- |
 | Camera feature stream | Mridhul | Hardware/ML, when classifier inputs change |
 | Gesture classification | Hardware/ML | Mridhul, when the feature inputs change |
-| Motor command | Hardware/ML, as a safety review | Davina, because the simulator consumes it. Bailey, when session logging changes |
+| Motor command and motor status | Hardware/ML, as a safety review | Mridhul, because he owns the laptop publisher. Davina, because the simulator consumes the command. Bailey, when session logging changes |
 
-Consumers reject a `schema_version` they do not implement. A motor-command consumer that rejects a message stops the motors.
+Consumers reject a `schema_version` they do not implement. A motor datagram that belongs to the active boot and fails validation stops the motors. A datagram from another boot or an earlier session is ignored.

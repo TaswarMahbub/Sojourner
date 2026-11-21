@@ -1,0 +1,20 @@
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  contract-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the test runner
+        run: python3 -m pip install -r tests/requirements.txt
+      - name: Run contract tests
+        run: python3 -m pytest tests

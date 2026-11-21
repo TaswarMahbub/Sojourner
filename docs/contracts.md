@@ -2,68 +2,105 @@
 
 Document date: 2026-11-21
 
-Schema version: `"1"`
+Schema version: `"4"`
 
-This file is the schema 1 interface between perception, the gesture classifier, shared control, the ESP32 firmware, the 2D simulator, and session logging. Code that produces or consumes these messages follows this file. Behavior that is not written here is not part of the interface.
+Schema 4 replaces schema 3. Schema 3 was the previous unmerged revision of this pull request, and no schema 3 producer was published. Consumers implement `"4"` and reject any other `schema_version`. A motor-command consumer that rejects a datagram belonging to its active boot stops the motors and does not apply that datagram. A datagram that does not belong to the active boot is ignored, so an older schema cannot rearm motion.
 
-Schema 1 is a research control interface for a four-motor rover. It is not a medical-device specification. Confidence values are producer scores. They are not clinical probabilities, and no label in this schema has a therapeutic meaning.
+This file is the interface between perception, the gesture classifier, the laptop shared-control state machine, the ESP32 firmware, the 2D simulator, and session logging. Behavior that is not written here is not part of the interface.
+
+Schema 4 is a research control interface for a four-motor rover. It is not a medical-device specification. Confidence values are producer scores when a score exists. They are not clinical probabilities, and no label in this schema has a therapeutic meaning.
+
+The Python modules under `tests/` check this document against mocked messages. They are not firmware and they do not verify the ESP32, the motors, or a physical emergency-stop switch.
 
 ## Versioning
 
-Every message carries `schema_version`. For this document the value is the string `"1"`.
+Every message carries `schema_version`. For this document the value is the string `"4"`.
 
-A change that removes a field, renames a field, changes a unit, changes a valid range, or changes stop behavior increments `schema_version` to the next integer string and is reviewed under `CONTRIBUTING.md`. Consumers reject a `schema_version` they do not implement. A motor-command consumer that rejects a message stops the motors and does not apply it.
+A change that removes a field, renames a field, changes a unit, changes a valid range, or changes stop behavior increments `schema_version` to the next integer string and is reviewed under `CONTRIBUTING.md`.
 
-Consumers of schema `"1"` reject a message that contains a field this document does not define for that message. They also reject a missing required field, a value of the wrong JSON type, a non-finite number, or a value outside its valid range. JSON object key order has no meaning.
+Consumers of schema `"4"` reject a message that contains a field this document does not define for that message. They also reject a missing required field, a duplicate key, a value of the wrong JSON type, a non-finite number, or a value outside its valid range. JSON object key order has no meaning. Booleans are not numbers. A decoder returns that rejection without raising.
 
-Timestamps are integer Unix epoch milliseconds in UTC. They are JSON numbers in the safe integer range, from `0` through `9007199254740991`. A timestamp is not a formatted date string.
+Timestamps and identifiers that travel as JSON numbers are integers in the safe integer range, from `0` through `9007199254740991`. A timestamp is Unix epoch milliseconds in UTC, not a formatted date string. `boot_nonce` and `session_id` use `1` through `9007199254740991`.
 
 ## Messages
 
 ```text
-camera feature stream  →  gesture classification  →  motor command
-                                                          ↓
-                                              ESP32 firmware and 2D simulator
+camera
+  → perception feature stream
+  → gesture classification
+  → laptop shared control (Mridhul)
+       → motor command datagram
+       → ESP32 firmware
+            reads the physical emergency stop locally
+            publishes motor status
+       → 2D simulator, same command and same status
+backend records profiles and sessions
 ```
 
-Shared control is the only publisher of motor commands. Perception does not publish motor commands. The classifier does not publish motor commands. The simulator does not publish a second command format.
+Shared control is the only publisher of motor commands. It runs on the laptop, not on the ESP32. Mridhul owns that state machine. Any change that can make it publish a non-zero motor command needs a Hardware/ML safety review before merge. Perception does not publish motor commands. The classifier does not publish motor commands. The simulator does not publish a second command format.
 
-An actionable camera frame has `tracking_state` `"tracking"`, a `confidence` inside `(0, 1]`, every required blendshape, and a valid `head_pose`. Every other camera frame is not actionable. The gesture label `"unknown"` is not a motion request. The label `"neutral"` means no intentional gesture and is not, by itself, a motion request. Schema 1 does not map gesture labels onto velocities. That mapping requires a later reviewed change.
+Motor commands are UDP datagrams. UDP has no connection. The receiver does not reset its sequence because a socket opened or closed. Session identity is `boot_nonce` plus `session_id`, defined below.
+
+An actionable camera frame has `tracking_state` `"tracking"`, every required blendshape, a valid `head_pose`, and `confidence` either `null` or inside `(0, 1]`. Every other camera frame is not actionable. `confidence: null` means the detector result did not carry a per-frame score. It does not mean the face was lost.
+
+The gesture label `"unknown"` is not a motion request. The label `"neutral"` means no intentional gesture and is not, by itself, a motion request. Schema 4 does not map gesture labels onto velocities. That mapping requires a later reviewed change.
 
 ## 1. Camera feature stream
 
 Publisher: perception (Mridhul).
 
-Consumers: the gesture classifier, the dashboard, and session logging. Shared control may also read tracking state so it can stop when the face is not actionable.
+Consumers: the gesture classifier, shared control, the dashboard, and session logging.
 
-One message describes at most one face. Zero detected faces produce `tracking_state` `"lost"`. This schema does not define how to choose among multiple faces. If the detector returns more than one face, the producer emits `"lost"`.
+One message describes at most one face. The producer uses MediaPipe Face Landmarker with blendshapes and the facial transformation matrix enabled.
+
+### What the Python result actually contains
+
+In the current `mediapipe.tasks.python.vision.face_landmarker` API, `FaceLandmarkerResult` has three attributes:
+
+- `face_landmarks`
+- `face_blendshapes`
+- `facial_transformation_matrixes`
+
+The matching C result struct carries those arrays and their counts. It does not carry detection, presence, or tracking confidence.
+
+`min_face_detection_confidence`, `min_face_presence_confidence`, and `min_tracking_confidence` are `FaceLandmarkerOptions`. They decide whether MediaPipe returns a face at all. Their defaults in that API are `0.5`. They are not fields of the result, and this schema does not copy them into `confidence`.
+
+The producer sets `tracking_state` from the result it actually received:
+
+| Result contents | `tracking_state` |
+| --- | --- |
+| `face_landmarks` is empty, or more than one face is present | `lost` |
+| Exactly one face, and blendshapes or the pose fail the rules below | `partial` |
+| Exactly one face, all 52 blendshapes are present and in range, and `head_pose` is valid | `tracking` |
+
+A face that passes the configured options and returns landmarks is not marked `lost` merely because the result has no numeric confidence.
 
 ### Fields
 
 | Field | JSON type | Required | Definition |
 | --- | --- | --- | --- |
-| `schema_version` | string | yes | `"1"` |
+| `schema_version` | string | yes | `"4"` |
 | `timestamp_ms` | integer | yes | Capture time of the camera frame, Unix epoch milliseconds, UTC |
 | `tracking_state` | string | yes | `"tracking"`, `"partial"`, or `"lost"` |
 | `features` | object | yes | Named blendshape scores. See below |
 | `head_pose` | object or null | yes | Head pose. `null` unless `tracking_state` is `"tracking"` |
-| `confidence` | number | yes | Overall face score in `[0, 1]` |
+| `confidence` | number or null | yes | A real per-frame score, or `null` when the result has none |
 
 `timestamp_ms` is the capture time of the camera frame this message describes. It is not the time the message was later written to the database.
 
 ### Tracking state
 
-| State | Meaning | `features` | `head_pose` | `confidence` | Actionable |
-| --- | --- | --- | --- | --- | --- |
-| `tracking` | Exactly one face, and blendshapes and pose passed validation | All 52 names, each in `[0, 1]` | Valid pose object | `(0, 1]` | Yes |
-| `partial` | A face was seen, but blendshapes or pose failed validation | Any subset, including empty. Present values must still lie in `[0, 1]` | `null` | `[0, 1]` | No |
-| `lost` | No usable face | Empty object `{}` | `null` | `0` | No |
+| State | `features` | `head_pose` | `confidence` | Actionable |
+| --- | --- | --- | --- | --- |
+| `tracking` | All 52 names, each in `[0, 1]` | Valid pose object | `null`, or a number in `(0, 1]` | Yes |
+| `partial` | Any subset of the 52 names, including empty. Present values lie in `[0, 1]` | `null` | `null`, or a number in `[0, 1]` | No |
+| `lost` | Empty object `{}` | `null` | `null` | No |
 
 ### Named facial features
 
 `features` uses the 52 Face Landmarker blendshape names. `*Left` and `*Right` are the subject's left and right, which is the MediaPipe definition. The producer publishes names for the image buffer it passed to Face Landmarker. A mirrored preview on screen does not rename the scores. If that buffer was mirrored, the producer corrects the left and right names before publishing so the message stays subject-relative.
 
-Each score is a JSON number in `[0, 1]`. For every name except `_neutral`, `0` is the inactive value and is the neutral value used by Sojourner. `1` is the full activation of that shape as defined by MediaPipe. `_neutral` is forwarded so the set matches Face Landmarker. Consumers must not map `_neutral` to a gesture or to motion. Schema 1 does not give `_neutral` a neutral value.
+Each score is a JSON number in `[0, 1]`. For every name except `_neutral`, `0` is the inactive value and is the neutral value used by Sojourner. `1` is the full activation of that shape as defined by MediaPipe. `_neutral` is forwarded so the set matches Face Landmarker. Consumers must not map `_neutral` to a gesture or to motion. Schema 4 does not give `_neutral` a neutral value.
 
 A `tracking` message contains every name in this table and no other feature keys.
 
@@ -211,26 +248,28 @@ If the derived angles or the translation fall outside the valid ranges, the prod
 
 ### Confidence
 
-`confidence` is the minimum of the Face Landmarker detection, presence, and tracking scores that the producer actually received for the frame. If none of those scores is available, the producer sends `lost` and `confidence` `0`.
+`confidence` is `null` unless the producer read a per-frame score from the result object it actually received. The stock `FaceLandmarkerResult` has no such score, so the stock producer publishes `null`.
 
-`0` means the producer reports no face confidence. `1` means every score included in the minimum was `1`. The value is not a calibrated probability and is not a measure of gesture-classification accuracy.
+The producer must not invent a score. In particular it must not publish the option thresholds, `0`, or `1` as a substitute for a missing result field. `null` on a `tracking` frame remains actionable. `lost` also uses `null`, because "no face in the result" is expressed by `tracking_state`, not by a fabricated zero.
+
+If a later MediaPipe result object exposes a real per-frame score, the producer may publish that number. A `tracking` score must lie in `(0, 1]`. A value of `0` is not a tracking confidence. The number is still not a calibrated probability and is not a measure of gesture-classification accuracy.
 
 ### Encoding illustration
 
-This fragment shows field types for a lost face. It is not a recorded frame.
+This fragment shows a lost face when the result contains no landmarks. It is not a recorded frame.
 
 ```json
 {
-  "schema_version": "1",
+  "schema_version": "4",
   "timestamp_ms": 1795276800000,
   "tracking_state": "lost",
   "features": {},
   "head_pose": null,
-  "confidence": 0
+  "confidence": null
 }
 ```
 
-A `tracking` message uses the same fields, with all 52 feature names, a `head_pose` object, and a non-zero confidence. The neutral orientation inside that object is `"yaw_deg": 0`, `"pitch_deg": 0`, `"roll_deg": 0`. The matrix of a real face also carries translation and scale, so identity-with-zeros is not a required tracking example.
+A `tracking` message uses the same fields, with all 52 feature names, a `head_pose` object, and `"confidence": null` for the stock Face Landmarker. The neutral orientation inside that object is `"yaw_deg": 0`, `"pitch_deg": 0`, `"roll_deg": 0`. The matrix of a real face also carries translation and scale, so identity-with-zeros is not a required tracking example.
 
 ## 2. Gesture classification
 
@@ -238,20 +277,27 @@ Publisher: the gesture classifier (Hardware/ML).
 
 Consumers: shared control, the dashboard, and session logging.
 
-One message classifies one camera feature frame.
+One message classifies one time window of camera feature frames. A one-frame classifier is the window whose start and end are the same frame.
 
 ### Fields
 
 | Field | JSON type | Required | Definition |
 | --- | --- | --- | --- |
-| `schema_version` | string | yes | `"1"` |
+| `schema_version` | string | yes | `"4"` |
 | `timestamp_ms` | integer | yes | Time the classification was produced, Unix epoch milliseconds, UTC |
-| `source_timestamp_ms` | integer | yes | `timestamp_ms` of the camera feature message that was classified |
+| `source_timestamp_ms` | integer | yes | `timestamp_ms` of the newest feature frame that was an input |
+| `window_start_timestamp_ms` | integer | yes | `timestamp_ms` of the oldest feature frame that was an input |
+| `window_end_timestamp_ms` | integer | yes | Equal to `source_timestamp_ms` |
+| `window_frame_count` | integer | yes | Number of feature messages actually passed into the model, `>= 1` |
 | `label` | string | yes | Gesture label, defined below |
 | `confidence` | number | yes | Classifier score for `label`, in `[0, 1]` |
 | `model_version` | string | yes | Identifier of the weights and label list |
 
-`timestamp_ms` must be greater than or equal to `source_timestamp_ms`.
+The window is closed: every input frame's `timestamp_ms` satisfies `window_start_timestamp_ms <= timestamp_ms <= window_end_timestamp_ms`. Frames the model did not use are not counted and do not widen the window. Gaps inside the window are allowed. Schema 4 does not set a maximum window duration. Shared control still treats a gesture whose `window_end_timestamp_ms` is more than `250` ms behind the command clock as stale and publishes a stop.
+
+`window_start_timestamp_ms` is less than or equal to `window_end_timestamp_ms`. `source_timestamp_ms` equals `window_end_timestamp_ms`. `timestamp_ms` is greater than or equal to `window_end_timestamp_ms`. For a one-frame model, the start, the end, and `source_timestamp_ms` are the same number and `window_frame_count` is `1`.
+
+If any input frame was not actionable, `label` is `"unknown"`. The classifier does not invent a gesture for `partial` or `lost`.
 
 ### Label
 
@@ -259,10 +305,10 @@ One message classifies one camera feature frame.
 
 | Label | Meaning | Motion |
 | --- | --- | --- |
-| `neutral` | The source frame was actionable, and the model assigned no intentional gesture | Does not request motion |
-| `unknown` | The source frame was not actionable, the label is not in the reviewed list, or the model cannot assign a class | Does not request motion. Shared control must stop |
+| `neutral` | Every input frame was actionable, and the model assigned no intentional gesture | Does not request motion |
+| `unknown` | An input frame was not actionable, the label is not in the reviewed list, or the model cannot assign a class | Does not request motion. Shared control must stop |
 
-Any other label must appear in a reviewed label list for that exact `model_version` before a consumer treats it as known. Schema 1 does not include a label list, because no model is in the repository. A label that is not reserved and has no reviewed list entry is invalid. Consumers handle an invalid label as `unknown` and do not move the rover.
+Any other label must appear in a reviewed label list for that exact `model_version` before a consumer treats it as known. Schema 4 does not include a label list, because no model is in the repository. A label that is not reserved and has no reviewed list entry is invalid. Consumers handle an invalid label as `unknown` and do not move the rover.
 
 `model_version` matches `^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$`. It names one weight file and one label list. An empty string is invalid. The field has no neutral value.
 
@@ -272,17 +318,18 @@ Any other label must appear in a reviewed label list for that exact `model_versi
 
 There is no neutral confidence. For `unknown`, the producer still sends a score in `[0, 1]`. That score must not be used to override the `unknown` label.
 
-A source frame that is not actionable produces `label` `"unknown"`. The classifier does not invent a gesture for `partial` or `lost`.
-
 ### Encoding illustration
 
-This illustrates a non-actionable result. It is not model output.
+This illustrates a one-frame non-actionable result. It is not model output.
 
 ```json
 {
-  "schema_version": "1",
+  "schema_version": "4",
   "timestamp_ms": 1795276800040,
   "source_timestamp_ms": 1795276800000,
+  "window_start_timestamp_ms": 1795276800000,
+  "window_end_timestamp_ms": 1795276800000,
+  "window_frame_count": 1,
   "label": "unknown",
   "confidence": 0,
   "model_version": "none"
@@ -293,7 +340,7 @@ This illustrates a non-actionable result. It is not model output.
 
 ## 3. Motor command
 
-Publisher: shared control only.
+Publisher: laptop shared control (Mridhul), with Hardware/ML safety review for any change that can emit non-zero motion.
 
 Consumers: ESP32 firmware and the 2D simulator. The backend may store a copy. Storage is not a consumer of the real-time stop path.
 
@@ -305,47 +352,100 @@ The wheel mapping for the four motors is not part of this message. Firmware owns
 
 | Field | JSON type | Required | Definition |
 | --- | --- | --- | --- |
-| `schema_version` | string | yes | `"1"` |
-| `sequence` | integer | yes | Command sequence number |
-| `issued_at_ms` | integer | yes | Time the command was created, Unix epoch milliseconds, UTC |
-| `expires_at_ms` | integer | yes | Time after which the command must not be applied |
+| `schema_version` | string | yes | `"4"` |
+| `controller_id` | string | yes | Authorized controller, `1` to `32` characters from `A-Z`, `a-z`, `0-9`, `_`, and `-` |
+| `boot_nonce` | integer | yes | Nonce from the receiver status for this firmware boot |
+| `session_id` | integer | yes | Sender session, strictly increasing across sessions from that sender |
+| `sequence` | integer | yes | Sequence inside the session, from `1` through `4294967295` |
+| `freshness_id` | integer | yes | Challenge copied from the newest motor status |
+| `rearm_generation` | integer | yes | Generation copied from the newest motor status, from `0` upward |
+| `status_challenge` | integer | yes | Sender-chosen challenge that the next status must echo |
+| `issued_at_ms` | integer | yes | Unix epoch milliseconds, UTC, used as a log time and as one end of the lifetime |
+| `expires_at_ms` | integer | yes | The other end of the lifetime. It is not, by itself, a freshness proof |
 | `task_state` | string | yes | One of the task states below |
 | `linear_mps` | number | yes | Forward velocity, meters per second |
 | `angular_rad_s` | number | yes | Yaw rate, radians per second |
 | `stop` | boolean | yes | Stop flag |
+| `mac` | string | yes | HMAC-SHA256 of the canonical command, 64 lowercase hex characters |
 
-### Sequence
+There is no field a sender can use to clear the physical emergency stop, close the motor cutoff, or declare the receiver clock synchronized.
 
-`sequence` is an integer from `1` through `4294967295`. The first command on a connection uses `1` or any integer in that range. Each later accepted command on that connection uses a strictly greater sequence. Gaps are allowed. Wraparound is not allowed. When the publisher would pass `4294967295`, it opens a new connection instead.
+### Clocks
 
-The receiver stores the last accepted sequence for the connection. A message with `sequence` less than or equal to that value is not accepted. A duplicate does not refresh the watchdog and does not change the motors. After a new connection, the receiver forgets the previous sequence. The first command it accepts on the new connection has `stop` true.
+The receiver keeps two clocks apart.
 
-Only a valid, unexpired message is accepted. An invalid or expired message does not advance the stored sequence. The publisher may correct it and send the same sequence again, or it may send a greater sequence. Either way, the receiver has already applied the stop behavior below.
+| Clock | What it is | What it decides |
+| --- | --- | --- |
+| Monotonic milliseconds | A counter that starts at `0` on each boot and never moves backward | Freshness-challenge age, the active motion deadline, the software watchdog, and the hardware-pet deadline |
+| Unix UTC milliseconds | Wall time | Logging. It also bounds commands, but only after a verified bounded-error synchronization |
 
-### Timestamps
+`clock_state` starts at `unsynchronized`. Receiving a packet does not change it. The receiver does not infer a trusted clock from the time a datagram arrived. While the clock is unsynchronized, the receiver does not compare `issued_at_ms` or `expires_at_ms` with a wall clock, and it does not arm or apply motion from Unix time alone.
 
-`expires_at_ms` is greater than `issued_at_ms`. Their difference is the command lifetime:
+The command lifetime is still required:
 
 ```text
 1 <= expires_at_ms - issued_at_ms <= 250
 ```
 
-The lifetime is an interface limit. It is not a measured round-trip time. At the linear limit of `0.30` m/s, `250` ms of continued motion would travel `0.075` m, which is why an old command is not left applied.
+That difference is a duration. On an accepted motion command the receiver stores a deadline at the earlier of two times on the same monotonic counter: accept time plus that duration, and the time the authorizing freshness challenge was issued plus `250` ms. If less than `1` ms remains before that challenge bound, the receiver rejects the motion command. It commands the safe output when monotonic time reaches the deadline, even if no later packet arrives. Reaching the deadline does not by itself set the fault latch, and it is not evidence that the electrical cutoff opened. A frozen firmware does not apply this software deadline. The hardware cutoff is a separate timer.
 
-A receiver that has a clock rejects a command whose `expires_at_ms` is already in the past, and rejects a command whose `issued_at_ms` is more than `2000` ms ahead of the receiver clock. A receiver without a trusted clock still enforces the watchdog below.
+When a verified synchronization has completed, the receiver does both checks. It still uses the monotonic deadline, and it also commands the safe output when the trusted Unix time reaches `expires_at_ms`. Expiry is inclusive on both paths: a command has expired when trusted Unix time is greater than or equal to `expires_at_ms`. The receiver stops an active motion at that instant. It rejects an incoming active-session command whose `expires_at_ms` is at or behind that trusted clock, and a command whose `issued_at_ms` is more than `2000` ms ahead of it. A command is potentially acceptable only while trusted Unix time is strictly less than `expires_at_ms`, and only if every other check also passes. The Unix check is an extra bound. It does not replace the freshness challenge. This repository does not implement the synchronization protocol on an ESP32. The test hook that marks a clock synchronized stands in for a completed protocol, and a packet cannot call it.
+
+### Freshness challenge
+
+The receiver publishes `freshness_id` in motor status. A session start, a `rearm`, and a motion command are fresh only when they echo the current id and the monotonic age of that id is at most `250` ms. Otherwise the receiver does not arm and does not apply motion. A freshness match is not enough for motion. Motion also needs at least `1` ms remaining before the challenge's issuance time plus `250` ms. A session start and a `rearm` may still be accepted at an age of exactly `250` ms.
+
+The receiver rotates the id when its age passes `250` ms, after every accepted datagram, and when the physical stop is asserted, when it is released, or when motor power is restored. One challenge authorizes one accepted datagram. A command that was sealed under an older id stays stale after it arrives. Arrival time is not a substitute for the id.
+
+An authenticated safety stop (`idle`, `hold`, `estop`, or `fault`) may still stop the motors when its challenge has expired. That stop does not refresh the watchdog, does not move `last_sequence` forward, and does not arm. A newer authenticated motion command for the active session that is rejected commands the safe output. The rejection reasons are an expired challenge, the wrong `rearm_generation`, trusted-clock expiry, less than `1` ms of remaining lifetime, the physical stop, a sensor that is not `released`, either software latch, an open cutoff, an unpowered motor bus, unfinished startup, or `armed` false. That rejection does not accept the sequence, does not refresh the watchdog, does not clear either latch, and does not change `armed`. An older or replayed motion command, a lower session, a wrong boot, a command for a different session that is not a valid session start, and a bad MAC for a session that is not active leave the active command unchanged.
+
+### Command authentication
+
+The demonstration control channel is HMAC-SHA256, as specified by RFC 2104, over a canonical encoding of the fields. The Python standard library `hmac` and `hashlib` are the primitives used by the contract tests. This is not a new cipher, and it is not an integration of DTLS or mbedTLS. Firmware verification of the same MAC is unverified until a bench test.
+
+The pre-shared key and the one `controller_id` bound to it are provisioned out of band. They are not in this repository. Wi-Fi association, a source IP address, and a public `boot_nonce` are not application authorization. A message whose `controller_id` is not the provisioned controller is not authorized, including when it was signed with the same key bytes.
+
+The command MAC input is the prefix `sojourner-command-mac-v1` and a newline, then each field below as `name=value` and a newline, in this order: `schema_version`, `controller_id`, `boot_nonce`, `session_id`, `sequence`, `freshness_id`, `rearm_generation`, `status_challenge`, `issued_at_ms`, `expires_at_ms`, `task_state`, `linear_mps`, `angular_rad_s`, `stop`. Integers are decimal. Booleans are `true` or `false`. Each velocity is the applied value printed with exactly six digits after the decimal point, and the applied value is that same decimal. A velocity that is not already equal to its six-digit form is rejected. That includes a value that would round onto a different velocity, and it includes negative zero. The receiver applies the canonical value. It does not apply a different raw float that prints the same way. The `mac` field is not an input. The MAC is lowercase hex.
+
+The status MAC uses the prefix `sojourner-status-mac-v1` and the status fields in the order listed in the status section, except `mac`. A null session or sequence is the token `null`.
+
+The MAC does not encrypt the datagram. It does not by itself provide freshness, sequence order, or rearm-generation binding. Those checks stay beside it. A bad MAC for the active boot and active session commands the safe output and is not accepted. A bad MAC for any other boot or session is ignored. The labeled key in `tests/control_auth.py` is a test fixture. It must not be installed on a rover.
+
+### Sessions on UDP
+
+Each firmware boot chooses a new `boot_nonce` and publishes it in motor status. The nonce stays constant until the next boot. The receiver starts that boot stopped, disarmed, with the cutoff open and the sensor state `unknown`. It forgets every previous session because those packets carry the old nonce.
+
+The sender persists the highest `session_id` it has used and the highest `status_sequence` it has accepted for each boot. A restart that loses that memory must not treat a replayed status as a new observation.
+
+The sender:
+
+1. Chooses a new `status_challenge` and sends a session start only after a status whose MAC verifies for the provisioned controller.
+2. Copies `boot_nonce`, `freshness_id`, and `rearm_generation` from that status. It does not invent them.
+3. Chooses a `session_id` strictly greater than every session id it has already used.
+4. Sends a session-start datagram: sequence `1`, `task_state` `"idle"`, `stop` true, both velocities `0`, the copied freshness and generation, and the new challenge.
+5. Trusts the session only after a later status echoes that challenge, names the same boot and session, and passes the status gate below.
+6. Sends `rearm` when the operator has asked to arm and a current authenticated status shows the physical control released, the sensor released, and the cutoff closed. The software estop latch and the fault latch may still be set. `rearm` is the datagram that clears them, so the sender does not require those latches to be clear first, and it does not require `armed`. The operator request is a local decision on the laptop. It is not a bit the rover trusts from the network. The rover still requires the fresh authenticated `rearm`.
+7. Sends non-zero motion only when the status gate authorizes it. The command uses the freshness id and rearm generation from that same status, and a sequence greater than `last_sequence`. Motion authorization still requires both software latches to be clear and `armed` to be true.
+
+Inside one session, `sequence` starts at `1` and then increases. Gaps are allowed. Wraparound is not allowed. After `4294967295` the sender starts a greater `session_id` instead of wrapping. Replaying the previous session's `rearm` does not arm the replacement session. A sender that restarts and repeats the active session id cannot rearm; it has to open a greater session.
+
+At the linear limit of `0.30` m/s, `250` ms of continued motion would travel `0.075` m. An accepted motion command ends no later than `250` ms after the authorizing challenge was issued, when the firmware is running the same monotonic timer the challenge uses. It is not left applied until `500` ms after that issuance.
 
 ### Task state
 
 | `task_state` | Meaning | Motion fields | `stop` |
 | --- | --- | --- | --- |
-| `idle` | No active task | Both `0` | `true` |
+| `idle` | No active task. Does not clear latches or the physical emergency stop | Both `0` | `true` |
 | `manual` | Operator input is the only motion source | Inside the ranges below | `false` to move, `true` to stop |
 | `shared` | The message already combines operator and assist input | Inside the ranges below | `false` to move, `true` to stop |
 | `hold` | The task is retained and motion is held | Both `0` | `true` |
-| `estop` | Latched emergency stop | Both `0` | `true` |
-| `fault` | The publisher or a previous check failed | Both `0` | `true` |
+| `estop` | Software emergency stop. Sets the software latch | Both `0` | `true` |
+| `fault` | The publisher is reporting a failure. Sets the fault latch | Both `0` | `true` |
+| `rearm` | Deliberate request to clear software latches and arm | Both `0` | `true` |
 
 A message that does not match its row in this table is invalid. `manual` and `shared` are the only states that may request non-zero motion, and only when `stop` is `false`. When `stop` is `true`, both motion fields are `0` in every state. Firmware does not add assist on top of the message. Shared control has already combined the sources before publishing.
+
+`idle` is ordinary stopped traffic. It is not an emergency-stop reset and it is not a rearm.
 
 ### Linear and angular motion
 
@@ -354,57 +454,185 @@ A message that does not match its row in this table is invalid. `manual` and `sh
 | `linear_mps` | meters per second | `[-0.30, 0.30]` | `0` | Forward, body +X |
 | `angular_rad_s` | radians per second | `[-1.00, 1.00]` | `0` | Left turn, positive yaw about body +Z |
 
-These ranges are the schema 1 interface limits. They are not a measured top speed of the rover. Firmware may clamp more tightly. Firmware must not apply a value outside these ranges. A message outside these ranges is invalid.
+These ranges are the schema 4 interface limits. They are not a measured top speed of the rover. Firmware may clamp more tightly. Firmware must not apply a value outside these ranges. A message outside these ranges is invalid. A velocity is also invalid when it is not canonical: it must already equal the value printed with six digits after the decimal point. Negative zero is invalid. The neutral value `0` is the canonical `0.000000`.
 
 When `stop` is `true`, both motion fields must be `0`. That is the neutral motor command.
 
-### Stop behavior
+### Stop conditions and the physical cutoff
 
-The safe state is stopped: `linear_mps` is `0`, `angular_rad_s` is `0`, and the motor driver is not still applying an older non-zero command. The firmware reaches that state by commanding zero wheel effort. Schema 1 does not require a mechanical brake. It does require that the previous non-zero effort is cleared.
+These conditions are independent. One of them being clear does not clear the others.
 
-An accepted command with `task_state` `"estop"` sets the estop latch. The watchdog sets a fault latch. Opening a new connection clears the stored sequence and does not clear either latch.
+| Condition | How it becomes true | What a network `idle` command does | How it becomes false |
+| --- | --- | --- | --- |
+| Physical emergency stop | The local sensor reads `asserted` or `unknown` | Nothing. Idle cannot clear it | The sensor reads `released`. Release stops the motors, leaves the cutoff open with its hold set, leaves the receiver disarmed, and increments `rearm_generation`. Closing the cutoff afterwards takes the explicit restoration in the motor cutoff row |
+| Software estop latch | An authenticated `estop` for the active boot and session is applied, including an older sequence | Nothing. The latch stays set | An accepted `rearm` bound to the generation from after the latest release |
+| Fault latch | An authenticated `fault` for the active session is applied, or the monotonic watchdog expires | Nothing. The latch stays set | The same accepted `rearm` |
+| Motor cutoff | Startup is unfinished, the motor bus is unpowered, the sensor is not `released`, the hardware pet is more than `250` ms old, or a cutoff hold is set. The hold is set when the sensor changes to `asserted` or `unknown` (the initial `unknown` at boot is covered by the startup latch instead), when a pet is found more than `250` ms late, and when motor power returns | Nothing | An explicit restoration while the firmware is running, the bus is powered, startup is finished, and the sensor is `released`. That restoration clears the hold and PWM. It does not arm and it does not put a previous PWM value back on the drivers |
 
-The receiver takes the first matching action and then stops reading the list:
+The physical control is local to the rover. Asserted means the sensor is in the stop position. `unknown` is treated as asserted, including at startup and after a brownout before the sensor has been read. Released means the operator has returned it to the run position. Release alone does not arm the motors and does not close the cutoff.
 
-1. Stale sequence. If `sequence` is less than or equal to the last accepted sequence on this connection, ignore the message. Leave the motors, the watchdog timer, and any latch as they are.
-2. Invalid or expired message. This includes a wrong `schema_version`, a field this schema does not define, a missing field, a motion value outside its range, `stop` true with a non-zero motion field, a task state that does not match its table row, a lifetime outside `1` to `250` ms, `expires_at_ms` already in the past, or `issued_at_ms` more than `2000` ms ahead of a trusted receiver clock. Do not accept the message. Go to the safe state. Leave the stored sequence unchanged.
-3. Latch set. If either latch is set, accept only a newer valid command with `task_state` `"idle"`, `stop` true, and both motion fields `0`. Accepting it applies the safe state, clears the latch, and refreshes the watchdog. Every other message is not accepted, and the motors stay stopped.
-4. First command requests motion. If this connection has not yet accepted a command, and this message has `stop` false or a non-zero motion field, do not accept it. Go to the safe state.
-5. Valid stop. If `stop` is true and both motion fields are `0`, accept the command, go to the safe state, and refresh the watchdog. A `task_state` of `"estop"` sets the estop latch.
-6. Valid motion. If `task_state` is `"manual"` or `"shared"`, `stop` is false, and both motion fields are inside their ranges, accept the command, apply those velocities, and refresh the watchdog.
+The rover requires an electrical cutoff of motor power or of the driver enable. The cutoff has to remove torque even when the firmware is frozen and never runs the software watchdog. The software watchdog is a second path for a firmware loop that is still running but has not accepted a datagram. This document does not assign a pin, a contactor, or a normally-open or normally-closed contact. Those choices, and the claim that a particular board removes torque while the MCU is frozen, are unverified until a bench test. The model in `tests/motor_receiver.py` checks the contract. It is not that bench test, and it is not a verified electrical implementation.
 
-Watchdog: if `250` ms pass with no accepted command, the receiver goes to the safe state and sets the fault latch. A stream of accepted stop commands keeps the connection alive without motion, because each accepted command refreshes the timer.
+The cutoff state in that model does not depend on the firmware executing. A frozen firmware cannot publish a new status and cannot pet the hardware watchdog. The model keeps driver enable, the time of the last hardware pet, whether the cutoff is open, and a cutoff hold. Driver enable is true only when the motor bus is powered and the cutoff is closed. Expiration of a software motion deadline does not pet the cutoff and is not proof that the cutoff opened. While the firmware is frozen, a stored non-zero output can remain and the model can still report torque until the pet age passes `250` ms. After that the cutoff opens and the hold stays set. The hold also latches when the firmware resumes after a freeze and its first execution finds the previous pet more than `250` ms old: that execution compares the age with the previous pet before it is allowed to pet, so a pet at exactly `250` ms is on time and one at `251` ms is late. A late pet does not clear the hold. When the firmware later runs, it commands the safe output and stays disarmed while the hold is set. It does not close the cutoff by polling, and it does not restore the retained PWM. Restoring motor power sets the hold, opens the cutoff, clears PWM, and stays disarmed. The hold clears only through the explicit restoration. Closing the cutoff still does not arm.
 
-The command that clears a latch has zero motion. A later command may request motion only after that latch is clear.
+`rearm_generation` increments when the sensor enters `asserted` or `unknown`, when it changes to `released`, and when motor power returns without an MCU reset. A `rearm` or a motion command must carry the current generation. A `rearm` that was rejected while the stop was asserted, and any command sealed before the release or before the power return, cannot arm or move afterward. The sender has to read a status taken after that event and send a new `rearm`.
 
-The simulator uses these same acceptance and latch rules for the motion it displays. It may show a rejected message as rejected. It does not animate that message as rover motion.
+`rearm` clears the software estop latch and the fault latch only when all of the following are true:
+
+- the MAC verifies for the provisioned controller
+- `boot_nonce`, `freshness_id`, and `rearm_generation` match the receiver
+- `session_id` is the active session
+- `sequence` is strictly greater than the last accepted sequence
+- the physical sensor is `released`, the cutoff is closed, the motor bus is powered, and startup is finished
+- `task_state` is `"rearm"`, `stop` is true, and both velocities are `0`
+
+That `rearm` sets `armed` true and leaves the motors stopped. The next accepted motion command is a later datagram. A rejected `rearm` does not refresh the watchdog.
+
+Power-on, brownout, and loss of the MCU are a new boot: new `boot_nonce`, monotonic clock restarted, session cleared, disarmed, cutoff open, sensor `unknown`, clock unsynchronized. Finishing startup does not arm and does not invent a sensor reading. Restoring motor power without resetting the MCU keeps the boot nonce, stops the motors, stays disarmed, opens the cutoff, sets the cutoff hold, rotates freshness, and increments `rearm_generation`. It does not close the cutoff.
+
+### Parsing
+
+A receiver decodes a datagram without raising. Duplicate JSON keys are rejected. `NaN` and infinities are rejected. Integers that the JSON parser refuses, numbers outside the safe integer range, values of the wrong type, and non-finite or noncanonical velocities are validation errors. A validation error is a result, not an exception.
+
+A datagram larger than `8192` bytes is malformed. Nesting deeper than `32` containers is malformed. The decoder catches parser failures, including a recursion error from deeply nested JSON, and returns a malformed result. When a malformed datagram's top-level `boot_nonce` and `session_id` can be read as ordinary integers without a recursive parse, and those values name the active boot and active session, the receiver commands the safe output. That identity scan is not authentication. If the identity cannot be read that way, the receiver ignores the datagram.
+
+The receiver checks the hardware pet age, the monotonic deadline, and the watchdog before it parses, unless the firmware is frozen. A frozen firmware does not pet and does not parse into an accepted command. A parse failure cannot refresh or disable the watchdog. The watchdog still fires on a later monotonic advance.
+
+### Receiver procedure
+
+The safe output is `linear_mps` `0`, `angular_rad_s` `0`, and the cutoff not leaving a previous non-zero command in force. Schema 4 does not require a mechanical brake.
+
+On each loop, including a loop with no new datagram, a running firmware first compares the time since the previous pet with `250` ms. If more has passed, it sets the cutoff hold before it pets, and that hold stays set until the explicit restoration. It then pets the cutoff and applies the deadline and the watchdog. The watchdog fires when more than `250` ms of monotonic time have passed since the last accepted datagram. Firing commands the safe output, sets the fault latch, and clears `armed`. It does not clear the physical stop or the software estop latch, and it does not count as an accepted datagram. A frozen firmware does not pet and does not apply the software motion deadline. After more than `250` ms without a pet, the cutoff opens and holds open even if the firmware's last velocity value is still non-zero. That pet timeout is the modeled hardware cutoff. The software deadline is not.
+
+For a datagram, the running receiver takes the first matching action:
+
+1. The payload cannot be decoded, or it is structurally invalid. This includes the wrong `schema_version`, an unknown or missing field, a bad type, a non-finite, noncanonical, or out-of-range number, a bad MAC or `controller_id`, a stop task that is not stopped, a datagram over `8192` bytes, nesting deeper than `32`, or a lifetime outside `1` to `250` ms. If the payload names the active boot and the active session, command the safe output and do not accept it. Otherwise ignore a payload that cannot be authenticated for this boot. Do not throw.
+2. Wrong `boot_nonce`. Ignore the datagram.
+3. `session_id` lower than the active session. Ignore the datagram.
+4. No active session, or a greater `session_id`. Accept it only when it is a fresh session start for the current `rearm_generation`: sequence `1`, `idle`, `stop` true, both velocities `0`, and not rejected by a trusted clock. Accepting it makes that session active, stores sequence `1`, commands the safe output, clears `armed`, stores `status_challenge`, rotates freshness, and refreshes the watchdog. It does not clear the physical stop or either latch. Any other datagram for that session is ignored.
+5. Trusted clock only: `issued_at_ms` is more than `2000` ms ahead. Command the safe output and do not accept.
+6. `sequence` less than or equal to the last accepted sequence. An authenticated safety stop is applied now. `estop` sets the software latch and clears `armed`. `fault` sets the fault latch and clears `armed`. This does not refresh the watchdog, does not clear a latch, does not move the sequence backward, and does not arm. An older `rearm` or motion command is ignored.
+7. `stop` false. If the challenge or the rearm generation does not match, a trusted clock says the command has expired (trusted Unix time at or after `expires_at_ms`), less than `1` ms remains before challenge issuance plus `250` ms, the physical stop is asserted, either latch is set, the cutoff is open, the motor bus is unpowered, startup is unfinished, or `armed` is false, command the safe output and do not accept. Do not refresh the watchdog, do not move the sequence, and do not clear a latch or change `armed`. Otherwise apply the canonical velocities, store the monotonic deadline at the earlier of the lifetime deadline and challenge issuance plus `250` ms, accept the sequence, store the challenge, rotate freshness, and refresh the watchdog.
+8. A newer safety stop whose challenge has expired, or whose trusted Unix time has expired. Apply the stop effects from step 6. Do not accept the sequence and do not refresh the watchdog. An unfresh `rearm` is rejected and does not arm.
+9. `task_state` `"rearm"` with a current challenge. If the generation, the sensor, the cutoff, bus power, or startup blocks it, command the safe output, do not accept, and do not refresh. Otherwise clear both software latches, set `armed` true, command the safe output, accept the sequence, and refresh the watchdog.
+10. Any other newer authenticated stop (`idle`, `hold`, `estop`, or `fault`) with a current challenge. Accept it, command the safe output, and refresh the watchdog. `estop` and `fault` set their latches and clear `armed`. `idle` and `hold` do not clear latches and do not clear the physical stop.
+
+Only an accepted datagram refreshes the watchdog. The simulator uses this same procedure. It may show an ignored datagram as ignored. It does not animate that datagram as rover motion.
 
 ### Encoding illustration
 
-This is a valid stop command for sequence 1. It is not a log from a vehicle.
+This is a valid session-start shape. It is not a log from a vehicle. The MAC below is not a value to copy; a real datagram computes it from the provisioned key. `boot_nonce` `1` is only an illustration.
 
 ```json
 {
-  "schema_version": "1",
+  "schema_version": "4",
+  "controller_id": "laptop",
+  "boot_nonce": 1,
+  "session_id": 1795276800100,
   "sequence": 1,
+  "freshness_id": 1,
+  "rearm_generation": 1,
+  "status_challenge": 1,
   "issued_at_ms": 1795276800100,
   "expires_at_ms": 1795276800350,
   "task_state": "idle",
   "linear_mps": 0,
   "angular_rad_s": 0,
-  "stop": true
+  "stop": true,
+  "mac": "0000000000000000000000000000000000000000000000000000000000000000"
 }
 ```
 
-The lifetime in the illustration is `250` ms, which is the maximum.
+The lifetime in the illustration is `250` ms, which is the maximum. This datagram does not arm the receiver. The illustrated MAC does not verify.
 
-## Producer duties before motion exists
+## 4. Motor status
+
+Publisher: ESP32 firmware. The simulator publishes the same shape for its own mocked receiver when it is showing a drill, and that drill status cannot arm the physical rover.
+
+Consumers: laptop shared control, the dashboard, and session logging.
+
+The receiver publishes a status message whenever the fields below change, and at least once per `100` ms while it is powered and the firmware is running. `100` ms is an interface rate so the sender can complete a challenge inside the watchdog window. It is not a measured radio rate. A frozen firmware does not publish a fresh status.
+
+| Field | JSON type | Required | Definition |
+| --- | --- | --- | --- |
+| `schema_version` | string | yes | `"4"` |
+| `controller_id` | string | yes | Provisioned controller |
+| `timestamp_ms` | integer | yes | Trusted Unix time, or `0` while `clock_state` is `unsynchronized` |
+| `boot_nonce` | integer | yes | Nonce for this firmware boot |
+| `session_id` | integer or null | yes | Active session, or `null` before the first accepted session start |
+| `last_sequence` | integer or null | yes | Last accepted sequence, or `null` when `session_id` is `null` |
+| `status_sequence` | integer | yes | Status sequence for this boot, strictly increasing, with no wrap in the safe integer range |
+| `freshness_id` | integer | yes | Current command challenge |
+| `rearm_generation` | integer | yes | Current rearm generation |
+| `status_challenge` | integer | yes | Challenge from the last accepted command, or `0` before any command is accepted |
+| `clock_state` | string | yes | `unsynchronized` or `synchronized` |
+| `sensor_state` | string | yes | `asserted`, `released`, or `unknown` |
+| `cutoff_open` | boolean | yes | True when the electrical cutoff is open |
+| `physical_estop` | boolean | yes | True unless `sensor_state` is `released` |
+| `software_estop_latch` | boolean | yes | Software estop latch |
+| `fault_latch` | boolean | yes | Watchdog or publisher fault latch |
+| `armed` | boolean | yes | True only after an accepted `rearm` while the sensor is released, the cutoff is closed, and both latches are clear |
+| `commanding_stop` | boolean | yes | True when the output velocities are both `0` |
+| `mac` | string | yes | HMAC-SHA256 of the canonical status |
+
+The status MAC field order is `schema_version`, `controller_id`, `timestamp_ms`, `boot_nonce`, `session_id`, `last_sequence`, `status_sequence`, `freshness_id`, `rearm_generation`, `status_challenge`, `clock_state`, `sensor_state`, `cutoff_open`, `physical_estop`, `software_estop_latch`, `fault_latch`, `armed`, `commanding_stop`.
+
+`armed` true requires a non-null session, `physical_estop` false, `sensor_state` `released`, `cutoff_open` false, and both latches false. Status does not command the motors. A sender cannot clear `physical_estop` by writing this message.
+
+### Publisher status gate
+
+Shared control authorizes motion only from a status that passes every check below. A stored status object is not authorization. The gate validates the whole signed status, including `schema_version` `"4"`, before it accepts the status. A status whose MAC verifies but whose schema does not is rejected.
+
+- The status MAC verifies for the provisioned controller and `controller_id` matches that controller.
+- `status_challenge` is the challenge this sender currently has outstanding. Challenge ids are strictly increasing for the life of the sender. The sender persists the highest id it has issued across its own restarts, and a new challenge must be greater than it. An id at or below that mark, other than the one outstanding, is retired and is never fresh again. Asking for a retired id leaves no challenge outstanding, so nothing is authorized until a new id is issued. Changing the outstanding challenge discards the previously accepted status, so it invalidates both motion and `rearm` authorization from that status. Sending the outstanding challenge id again does not move its issuance time forward. A challenge id is an exact integer from `1` to `9007199254740991`. A boolean, a float such as `44.0`, a string, zero, a negative value, or a larger value is refused and leaves no challenge outstanding. The issuance time and the receipt time are exact integers from `0` to `9007199254740991` on the sender's monotonic clock. Ids never wrap. When the highest id issued is `9007199254740991`, the sender cannot issue another challenge and authorizes nothing more under that persisted state.
+- The sender's own monotonic clock has advanced at most `250` ms since it issued that challenge, and at most `250` ms since it received the status. Both ages are required. Either one being older rejects motion.
+- `status_sequence` is strictly greater than the highest sequence this sender has already accepted for that `boot_nonce`. The sender persists those high-water marks across its own restarts. A repeated or older status sequence is rejected.
+- After the first accepted boot, an armed status from a different boot is rejected. A disarmed status from a new boot may be adopted, and adopting it does not authorize motion.
+- For motion, `armed` is true, `cutoff_open` is false, `sensor_state` is `released`, both latches are clear, and `physical_estop` is false.
+- `session_id` is the session the sender is using, `freshness_id` is the id the sender will copy into the next command, and the next sequence is greater than `last_sequence`.
+
+`rearm` uses the same current status: a verifying MAC, a valid schema, both ages inside `250` ms, and a challenge that still matches. It also requires the physical stop released, the sensor `released`, the cutoff closed, the status boot and session, the freshness id and `rearm_generation` from that status, a sequence greater than `last_sequence`, and an explicit local operator authorization. It does not require the software estop latch or the fault latch to be clear, and it does not require `armed`. The operator authorization is a local laptop boolean. The rover does not accept it as a network bit. The rover still requires a fresh authenticated `rearm` before it clears those latches.
+
+A cached armed status does not authorize motion after a newer status says disarmed, after either `250` ms window, after the outstanding challenge changes, or after a restart that restored a high-water mark at or above the cached `status_sequence`. A status with a bad MAC, the wrong schema, a wrong boot, a repeated sequence, or a challenge the sender does not currently have outstanding is rejected. A delayed status that echoes a retired challenge stays rejected even if the sender later asks for that id again.
+
+#### Persisted status-gate state
+
+The sender keeps two separate persisted records. The status gate persists the challenge high-water mark and the per-boot `status_sequence` high-water marks, in the object below. The controller command-session allocator separately persists its own `session_id` high-water mark, as required under "Sessions on UDP". `session_id` is not part of the status-gate object, and adding it, or any other key, makes that object invalid.
+
+A sender restart may reset its monotonic clock epoch, so an issuance time from before the restart is meaningless afterwards. The status gate persists only durable high-water marks, and it never restores an outstanding challenge, an issuance time, or an accepted status. After a restart it has no outstanding challenge and no current status. It authorizes neither motion nor `rearm` until it issues a new challenge above the persisted mark and receives a new authenticated status that echoes it.
+
+The persisted status-gate state is one JSON object with exactly these keys:
+
+| Key | Value |
+| --- | --- |
+| `version` | Integer `1` |
+| `controller_id` | The provisioned controller id. Must match the sender restoring it |
+| `challenge_high_water` | Highest challenge id ever issued, an exact integer from `0` to `9007199254740991` |
+| `boot_nonce` | The most recently accepted boot, or `null` when no status has been accepted |
+| `sequences` | A list of `[boot_nonce, status_sequence]` pairs, each an exact integer from `1` to `9007199254740991`, one pair per boot |
+
+The sequence marks are a list of pairs, not an object, because JSON object keys are strings. Restoration rejects the whole state when the input is missing, is not valid JSON, has a duplicate JSON key, a non-finite number, a missing or extra key, another version or controller, a non-integer or out-of-range value, a boolean or float alias, a pair that is not exactly two items, two pairs for the same boot, a `boot_nonce` with no pair, or any pair while `boot_nonce` is `null`. The whole object is validated before any part of it is applied. Restoration also rejects a snapshot that is older than the marks the gate already holds: a lower `challenge_high_water`, a lower `status_sequence` for a known boot, a missing pair for a known boot, or a `boot_nonce` that returns to an earlier known boot. Equal or higher marks, and pairs for boots the gate has not seen, are accepted. A rejected restoration fails closed: the gate keeps its in-memory marks, refuses every challenge, authorizes nothing, and does not export a state. It does not fall back to empty marks. A locked gate unlocks only through a snapshot that passes the same validation and rollback checks. A restoration that succeeds still restores no challenge and no status. Recovering from a lost or corrupt state is an operator decision outside this contract.
+
+Write ordering for the eventual laptop implementation:
+
+- A new `challenge_high_water` is persisted durably before the challenge is transmitted. A new `status_sequence` mark is persisted durably before that status can authorize motion or `rearm`.
+- A durable write is an atomic replacement of the whole object (write a new file, flush it, rename it over the old one, and flush the directory) that has completed before the value is used.
+- A write that fails or cannot be confirmed prevents that transmission or authorization. The in-memory mark still rises, so the id is not offered again in that process.
+- Missing or corrupt persisted state fails closed, as above. An interrupted write leaves either the previous complete object or an invalid one. Because a challenge is never transmitted before its mark is durable, the previous object cannot lead to reuse of a transmitted challenge id.
+- A fresh process cannot tell an old but structurally valid backup from the current file without independent trusted history, such as a monotonic hardware counter or a second trusted store. Restoring such a backup can lower the marks. This limitation remains.
+
+This durability is not implemented or tested in this repository. `tests/status_gate.py` checks the ordering through an in-memory `persist` hook only.
+
+## Publisher duties before motion exists
 
 Until shared control is implemented, no software in this repository publishes a motor command. A later publisher still has these duties:
 
+- Verify an authenticated, fresh, in-order status before any non-zero motion. Do not move from a cached armed status.
 - Publish a stop when the newest camera frame is missing, not actionable, or older than `250` ms.
-- Publish a stop when the newest gesture label is `unknown` or the gesture message is older than `250` ms.
-- Publish `estop` when a person requests an emergency stop, and leave the latch to the receiver rules above.
+- Publish a stop when the newest gesture label is `unknown`, any frame in its window was not actionable, or `window_end_timestamp_ms` is older than `250` ms.
+- Publish `task_state` `"estop"` when the operator asks for a software emergency stop. That datagram does not replace the physical control or the electrical cutoff.
+- Publish `rearm` only as its own later datagram, after the operator has asked to arm and a current authenticated status shows the physical control released and the cutoff closed. The software latches do not have to be clear before that datagram.
 - Keep `linear_mps` and `angular_rad_s` at `0` whenever `stop` is true.
+- Persist `session_id` and per-boot `status_sequence` high-water marks across restarts.
 
-Those duties are interface rules. They are not a claim that a controller has been tested.
+Those duties are interface rules. They are not a claim that a controller, a radio, a cutoff circuit, or the rover has been tested.

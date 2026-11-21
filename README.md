@@ -4,7 +4,7 @@ Sojourner is a four-person WHACK 2026 research prototype. It studies adaptive fa
 
 Repository: [https://github.com/TaswarMahbub/Sojourner](https://github.com/TaswarMahbub/Sojourner)
 
-This revision contains the repository layout, ownership, and versioned data contracts. It does not contain application code, trained models, datasets, or deployment configuration.
+This revision contains the repository layout, ownership, schema 4 data contracts, and contract tests. It does not contain perception, classifier, firmware, backend, or frontend application code. It does not contain trained models, datasets, or deployment configuration.
 
 ## Architecture
 
@@ -12,15 +12,15 @@ This revision contains the repository layout, ownership, and versioned data cont
 camera
   → perception          MediaPipe facial features and head pose
   → gesture classifier  personalized gesture label
-  → shared control      task state and one motor command
+  → shared control      laptop state machine owned by Mridhul
        → ESP32 firmware four motors, limits, stop, and watchdog
        → 2D simulator   same motor command, drawn in the browser
 backend                 profiles, sessions, and command logs
 ```
 
-Perception publishes the camera feature stream. The classifier publishes a gesture label for one feature frame. Shared control is the only publisher of motor commands. The firmware and the simulator are consumers of that command. The backend records profiles and sessions; it does not decide whether the motors move.
+Perception publishes the camera feature stream. The classifier publishes a gesture label for the feature window it actually used. Shared control is the only publisher of motor commands. The firmware and the simulator are consumers of that command. The backend records profiles and sessions; it does not decide whether the motors move.
 
-The shared-control state machine does not have an owner yet. It runs on the companion computer, not on the ESP32. The team will name its owner before any control code is added. Until then, `docs/contracts.md` is the behavior that code has to meet.
+Mridhul owns the laptop shared-control state machine. It runs on the companion computer, not on the ESP32. Its code directory is not created yet. Any change that can publish non-zero motion needs a Hardware/ML safety review. Until that code exists, `docs/contracts.md` is the behavior it has to meet.
 
 Real-time stop behavior lives in the motor-command consumer on the ESP32. Writing a command to the database does not replace that watchdog.
 
@@ -29,21 +29,22 @@ Real-time stop behavior lives in the motor-command consumer on the ESP32. Writin
 | Area | Path | Owner | Responsibility |
 | --- | --- | --- | --- |
 | Firmware and machine learning | `firmware/`, `ml/` | Hardware/ML | ESP32 firmware, motor control, watchdog, training, and personalized gesture classification |
-| Perception | `perception/` | Mridhul | MediaPipe, facial features, tracking, and integration of the feature stream |
+| Perception and shared control | `perception/` | Mridhul | MediaPipe, facial features, tracking, and the laptop shared-control state machine |
+| Contract tests | `tests/` | Author of the interface under test | Schema and mocked protocol checks |
 | Backend | `backend/` | Bailey | FastAPI, TigerData, profiles, sessions, and the Vultr deployment |
 | Frontend | `frontend/` | Davina | React dashboard, 2D simulator, and visualizations |
 | Contracts | `docs/contracts.md` | All owners of the affected stream | Versioned messages between those areas |
-| Cross-component tests | `tests/` | Author of the interface under test | Checks that span more than one area |
 
 TigerData is the PostgreSQL database for profiles and sessions. Vultr is the intended deployment target. Neither is configured in this revision. Connection strings, host names, and API tokens stay in the local environment.
 
 ## Data contracts
 
-`docs/contracts.md` is schema 1 for three messages:
+`docs/contracts.md` is schema 4. Schema 1 and schema 2 were not published as a producer. Schema 3 was the previous unmerged revision of the contract pull request.
 
-- Camera feature stream: timestamp, tracking state, named facial features, head pose, and confidence.
-- Gesture classification: label, confidence, and model version.
-- Motor command: sequence number, timestamps, task state, linear and angular motion, and the stop flag.
+- Camera feature stream: timestamp, tracking state, named facial features, head pose, and confidence. Stock MediaPipe publishes `confidence: null`.
+- Gesture classification: label, confidence, model version, and the source time window.
+- Motor command: authenticated boot, session, sequence, freshness challenge, rearm generation, task state, linear and angular motion, and the stop flag.
+- Motor status: authenticated boot, session, latches, sensor, cutoff, physical emergency stop, and armed flag. A cached armed status does not authorize motion.
 
 Units, ranges, neutral values, and stop behavior are defined there. A producer or consumer that needs behavior the contract does not describe needs a contract change before the code change.
 
@@ -55,9 +56,16 @@ Units, ranges, neutral values, and stop behavior are defined there. A producer o
 4. If the change alters a message, its units, a range, or stop behavior, edit the contract in the same pull request and request the review that `CONTRIBUTING.md` requires.
 5. Open a pull request into `main`. After this initial setup, feature work reaches `main` through that pull request.
 
-## Running locally
+## Running the contract tests
 
-There is nothing to install or run yet. The module directories explain what each owner will add. The first pull request that adds executable code also adds the command that runs it and the tests for that area.
+From the repository root:
+
+```bash
+python3 -m pip install -r tests/requirements.txt
+python3 -m pytest tests
+```
+
+The tests check message shape and a software model of the motor-command rules. They use mocked datagrams. They do not power motors, and they do not verify the ESP32, the electrical cutoff, or the physical emergency-stop control. The key in `tests/control_auth.py` is a test fixture, not a rover secret. Application directories still have no programs to run.
 
 ## Safety scope
 
