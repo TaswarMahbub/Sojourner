@@ -197,4 +197,3 @@ class MotorReceiver:
             "linear_mps": self.linear_mps,
             "angular_rad_s": self.angular_rad_s,
         }
-
