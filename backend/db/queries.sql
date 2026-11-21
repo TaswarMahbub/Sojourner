@@ -1,4 +1,4 @@
--- Sojourner: example queries. Run with: psql "$DATABASE_URL" -f queries.sql
+-- Sojourner: example queries. Run with: psql "$TIMESCALE_SERVICE_URL" -f queries.sql
 -- (or paste any one into the Tiger Cloud SQL editor)
 -- Run `python tiger_store.py refresh` after loading so the aggregates include new data.
 

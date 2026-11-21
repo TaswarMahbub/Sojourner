@@ -1,6 +1,6 @@
 -- Sojourner: Tiger Cloud (TimescaleDB) schema
 --
--- Run with:  psql "$DATABASE_URL" -f schema.sql
+-- Run with:  psql "$TIMESCALE_SERVICE_URL" -f schema.sql
 -- Do NOT wrap in a single transaction: continuous aggregates cannot be created inside one.
 -- Safe to re-run (idempotent).
 --

@@ -1,4 +1,6 @@
-# Sojourner: Tiger Cloud data layer
+# Sojourner: Tiger Cloud data layer 
+
+## ONLY READ IF SETTING UP TIGER DATA
 
 Managed Postgres with TimescaleDB for derived channel metrics, control events and per-user profiles.
 
