@@ -664,13 +664,18 @@ def test_status_gate_rejects_cached_stale_reordered_and_wrong_boot_status():
     assert gate.motion_authorized(receiver.monotonic_ms, 10, 5, cached["freshness_id"]) is False
 
     restarted = StatusGate(TEST_KEY, receiver.controller_id)
-    restarted.restore_state(saved)
-    restarted.expect(404, receiver.monotonic_ms)
-    assert restarted.observe(disarmed, receiver.monotonic_ms) == "stale_or_reordered"
+    restarted.restore_state(json.loads(json.dumps(saved)))
+    assert restarted.expect(404, receiver.monotonic_ms) is False
+    assert restarted.observe(disarmed, receiver.monotonic_ms) == "stale_challenge"
     assert restarted.motion_authorized(receiver.monotonic_ms, 10, 5, disarmed["freshness_id"]) is False
 
+    renewed = restarted.issue_challenge(receiver.monotonic_ms)
+    assert renewed == 405
+    assert (
+        receiver.handle(packet(receiver, sequence=5, task_state="idle", status_challenge=renewed))
+        == "accepted_stop"
+    )
     newer = receiver.status()
-    restarted.expect(404, receiver.monotonic_ms)
     assert restarted.observe(newer, receiver.monotonic_ms) == "accepted"
     assert newer["armed"] is False
     assert restarted.motion_authorized(receiver.monotonic_ms, 10, 5, newer["freshness_id"]) is False

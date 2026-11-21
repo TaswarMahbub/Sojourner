@@ -584,7 +584,7 @@ The status MAC field order is `schema_version`, `controller_id`, `timestamp_ms`,
 Shared control authorizes motion only from a status that passes every check below. A stored status object is not authorization. The gate validates the whole signed status, including `schema_version` `"4"`, before it accepts the status. A status whose MAC verifies but whose schema does not is rejected.
 
 - The status MAC verifies for the provisioned controller and `controller_id` matches that controller.
-- `status_challenge` is the challenge this sender currently has outstanding. Challenge ids are strictly increasing for the life of the sender. The sender persists the highest id it has issued across its own restarts, and a new challenge must be greater than it. An id at or below that mark, other than the one outstanding, is retired and is never fresh again. Asking for a retired id leaves no challenge outstanding, so nothing is authorized until a new id is issued. Changing the outstanding challenge discards the previously accepted status, so it invalidates both motion and `rearm` authorization from that status. Sending the outstanding challenge id again does not move its issuance time forward.
+- `status_challenge` is the challenge this sender currently has outstanding. Challenge ids are strictly increasing for the life of the sender. The sender persists the highest id it has issued across its own restarts, and a new challenge must be greater than it. An id at or below that mark, other than the one outstanding, is retired and is never fresh again. Asking for a retired id leaves no challenge outstanding, so nothing is authorized until a new id is issued. Changing the outstanding challenge discards the previously accepted status, so it invalidates both motion and `rearm` authorization from that status. Sending the outstanding challenge id again does not move its issuance time forward. A challenge id is an exact integer from `1` to `9007199254740991`. A boolean, a float such as `44.0`, a string, zero, a negative value, or a larger value is refused and leaves no challenge outstanding. The issuance time and the receipt time are exact integers from `0` to `9007199254740991` on the sender's monotonic clock. Ids never wrap. When the highest id issued is `9007199254740991`, the sender cannot issue another challenge and authorizes nothing more under that persisted state.
 - The sender's own monotonic clock has advanced at most `250` ms since it issued that challenge, and at most `250` ms since it received the status. Both ages are required. Either one being older rejects motion.
 - `status_sequence` is strictly greater than the highest sequence this sender has already accepted for that `boot_nonce`. The sender persists those high-water marks across its own restarts. A repeated or older status sequence is rejected.
 - After the first accepted boot, an armed status from a different boot is rejected. A disarmed status from a new boot may be adopted, and adopting it does not authorize motion.
@@ -594,6 +594,22 @@ Shared control authorizes motion only from a status that passes every check belo
 `rearm` uses the same current status: a verifying MAC, a valid schema, both ages inside `250` ms, and a challenge that still matches. It also requires the physical stop released, the sensor `released`, the cutoff closed, the status boot and session, the freshness id and `rearm_generation` from that status, a sequence greater than `last_sequence`, and an explicit local operator authorization. It does not require the software estop latch or the fault latch to be clear, and it does not require `armed`. The operator authorization is a local laptop boolean. The rover does not accept it as a network bit. The rover still requires a fresh authenticated `rearm` before it clears those latches.
 
 A cached armed status does not authorize motion after a newer status says disarmed, after either `250` ms window, after the outstanding challenge changes, or after a restart that restored a high-water mark at or above the cached `status_sequence`. A status with a bad MAC, the wrong schema, a wrong boot, a repeated sequence, or a challenge the sender does not currently have outstanding is rejected. A delayed status that echoes a retired challenge stays rejected even if the sender later asks for that id again.
+
+#### Persisted sender state
+
+A sender restart may reset its monotonic clock epoch, so an issuance time from before the restart is meaningless afterwards. The sender persists only durable high-water marks, and it never restores an outstanding challenge, an issuance time, or an accepted status. After a restart it has no outstanding challenge and no current status. It authorizes neither motion nor `rearm` until it issues a new challenge above the persisted mark and receives a new authenticated status that echoes it.
+
+The persisted state is one JSON object with exactly these keys:
+
+| Key | Value |
+| --- | --- |
+| `version` | Integer `1` |
+| `controller_id` | The provisioned controller id. Must match the sender restoring it |
+| `challenge_high_water` | Highest challenge id ever issued, an exact integer from `0` to `9007199254740991` |
+| `boot_nonce` | The most recently accepted boot, or `null` when no status has been accepted |
+| `sequences` | A list of `[boot_nonce, status_sequence]` pairs, each an exact integer from `1` to `9007199254740991`, one pair per boot |
+
+The sequence marks are a list of pairs, not an object, because JSON object keys are strings. Restoration rejects the whole state when the input is missing, is not valid JSON, has a duplicate JSON key, a non-finite number, a missing or extra key, another version or controller, a non-integer or out-of-range value, a boolean or float alias, a pair that is not exactly two items, two pairs for the same boot, a `boot_nonce` with no pair, or any pair while `boot_nonce` is `null`. A rejected restoration fails closed: the sender keeps its in-memory marks, refuses every challenge, authorizes nothing, and does not export a state. It does not fall back to empty marks. Recovering from a lost or corrupt state is an operator decision outside this contract.
 
 ## Publisher duties before motion exists
 
