@@ -317,3 +317,33 @@ def test_contract_documents_the_split_and_the_ordering():
         "not implemented or tested",
     ):
         assert phrase in text, phrase
+
+
+def test_failed_persist_of_a_newer_stop_status_revokes_the_cached_armed_status():
+    checks = []
+    ref = [None]
+
+    def failing(state):
+        gate = ref[0]
+        if gate is not None:
+            checks.append(_authorized(gate, 12, armed))
+            raise OSError("simulated write failure")
+
+    receiver, gate, older, delayed, armed = _live(persist=failing)
+    assert armed["armed"] is True
+    assert _authorized(gate, 12, armed) == (True, True)
+
+    receiver.set_physical_estop(True)
+    stopped = receiver.status()
+    assert stopped["status_challenge"] == armed["status_challenge"] == 44
+    assert stopped["status_sequence"] > armed["status_sequence"]
+    assert stopped["armed"] is False and stopped["physical_estop"] is True
+
+    ref[0] = gate
+    assert gate.observe(stopped, 12) == "persist_failed"
+    assert checks == [(False, False)]
+    assert gate.latest is None and gate.received_mono is None
+    assert _authorized(gate, 12, armed) == (False, False)
+    assert _authorized(gate, 12, stopped) == (False, False)
+    assert gate.observe(armed, 12) == "stale_or_reordered"
+    assert _authorized(gate, 12, armed) == (False, False)

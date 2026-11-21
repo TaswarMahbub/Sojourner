@@ -297,6 +297,10 @@ class StatusGate:
         if self.boot_nonce is not None and boot != self.boot_nonce:
             if status.get("armed") is True:
                 return "wrong_boot"
+        # A newer status supersedes the cached one before anything can fail,
+        # so a failed write cannot leave an older armed status authorizing.
+        self.latest = None
+        self.received_mono = None
         self.sequences[boot] = seq
         self.boot_nonce = boot
         if not self._persist():
