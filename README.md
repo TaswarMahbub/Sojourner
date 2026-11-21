@@ -4,7 +4,7 @@ Sojourner is a four-person WHACK 2026 research prototype. It studies adaptive fa
 
 Repository: [https://github.com/TaswarMahbub/Sojourner](https://github.com/TaswarMahbub/Sojourner)
 
-This revision contains the repository layout, ownership, schema 3 data contracts, and contract tests. It does not contain perception, classifier, firmware, backend, or frontend application code. It does not contain trained models, datasets, or deployment configuration.
+This revision contains the repository layout, ownership, schema 4 data contracts, and contract tests. It does not contain perception, classifier, firmware, backend, or frontend application code. It does not contain trained models, datasets, or deployment configuration.
 
 ## Architecture
 
@@ -39,7 +39,7 @@ TigerData is the PostgreSQL database for profiles and sessions. Vultr is the int
 
 ## Data contracts
 
-`docs/contracts.md` is schema 3. Schema 1 and schema 2 were not published as a producer.
+`docs/contracts.md` is schema 4. Schema 1 and schema 2 were not published as a producer. Schema 3 was the previous unmerged revision of the contract pull request.
 
 - Camera feature stream: timestamp, tracking state, named facial features, head pose, and confidence. Stock MediaPipe publishes `confidence: null`.
 - Gesture classification: label, confidence, model version, and the source time window.

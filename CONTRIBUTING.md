@@ -94,7 +94,7 @@ These rules stay in force for that review:
 
 ## Contract changes
 
-`docs/contracts.md` schema `"3"` is binding. A change that redefines a field, a unit, a range, or stop behavior increments `schema_version` and updates every producer and consumer of that message in the same pull request. While no producer exists, the contract pull request stands alone and names the owners who must review the next implementation.
+`docs/contracts.md` schema `"4"` is binding. A change that redefines a field, a unit, a range, or stop behavior increments `schema_version` and updates every producer and consumer of that message in the same pull request. While no producer exists, the contract pull request stands alone and names the owners who must review the next implementation.
 
 Owners for a contract edit:
 

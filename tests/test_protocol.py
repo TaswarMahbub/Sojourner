@@ -13,7 +13,7 @@ NONCE = 42
 
 def command(**overrides):
     message = {
-        "schema_version": "3",
+        "schema_version": "4",
         "boot_nonce": NONCE,
         "session_id": 10,
         "sequence": 1,
@@ -285,15 +285,15 @@ def test_watchdog_expiration_latches_a_fault():
     receiver = boot()
     start(receiver)
     rearm(receiver)
-    assert motion(receiver, at=T0 + 20) == "accepted_motion"
-    receiver.set_monotonic(T0 + 20 + 249)
+    assert motion(receiver, at=T0) == "accepted_motion"
+    receiver.set_monotonic(T0 + 249)
     assert receiver.snapshot()["fault_latch"] is False
     assert receiver.snapshot()["linear_mps"] == 0.2
-    receiver.set_monotonic(T0 + 20 + 250)
+    receiver.set_monotonic(T0 + 250)
     assert receiver.snapshot()["fault_latch"] is False
     assert receiver.snapshot()["armed"] is True
     assert receiver.snapshot()["linear_mps"] == 0
-    receiver.set_monotonic(T0 + 20 + 251)
+    receiver.set_monotonic(T0 + 251)
     state = receiver.snapshot()
     assert state["fault_latch"] is True
     assert state["armed"] is False

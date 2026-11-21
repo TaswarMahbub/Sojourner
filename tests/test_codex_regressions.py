@@ -19,20 +19,19 @@ OTHER_KEY = b"sojourner-other-key-not-for-hardware"
 
 
 def torque_from_contract(snap: dict) -> bool:
-    """Contract torque rule, written here so the oracle method is not the oracle."""
-    if snap["cutoff_open"] or not snap["bus_powered"]:
+    """Torque from the contract. A software deadline is not the hardware cutoff."""
+    if snap["cutoff_open"] or not snap["bus_powered"] or not snap["driver_enabled"]:
         return False
     if snap["sensor_state"] != "released" or snap["physical_estop"]:
-        return False
-    if snap["firmware_frozen"] and snap["monotonic_ms"] - snap["last_pet_mono"] > 250:
         return False
     if not snap["armed"]:
         return False
     if snap["linear_mps"] == 0 and snap["angular_rad_s"] == 0:
         return False
-    deadline = snap["motion_deadline_mono"]
-    if deadline is not None and snap["monotonic_ms"] >= deadline:
-        return False
+    if not snap["firmware_frozen"]:
+        deadline = snap["motion_deadline_mono"]
+        if deadline is not None and snap["monotonic_ms"] >= deadline:
+            return False
     return True
 
 
@@ -43,7 +42,7 @@ def packet(receiver, **overrides):
     status_challenge = overrides.pop("status_challenge", None)
     key = overrides.pop("key", None)
     message = {
-        "schema_version": "3",
+        "schema_version": "4",
         "boot_nonce": receiver.boot_nonce,
         "session_id": 10,
         "sequence": 1,
@@ -168,11 +167,15 @@ def test_receipt_of_an_old_command_does_not_make_it_fresh():
         status_challenge=81,
     )
     assert receiver.handle(applied) == "accepted_motion"
+    accepted = receiver.snapshot()["last_accept_ms"]
     assert receiver.handle(queued) == "rejected_motion"
-    assert receiver.snapshot()["linear_mps"] == 0.2
+    assert receiver.snapshot()["linear_mps"] == 0
+    assert receiver.snapshot()["linear_mps"] != -0.2
     assert receiver.snapshot()["last_sequence"] == 4
+    assert receiver.snapshot()["last_accept_ms"] == accepted
+    assert receiver.snapshot()["armed"] is True
     assert receiver.handle(queued) == "rejected_motion"
-    assert receiver.snapshot()["linear_mps"] == 0.2
+    assert receiver.snapshot()["linear_mps"] == 0
 
     receiver.set_monotonic(200)
     stale_stop = packet(
@@ -328,6 +331,13 @@ def test_motor_power_restoration_requires_a_new_rearm():
     assert restored["boot_nonce"] == 42
     assert restored["rearm_generation"] == generation + 1
     receiver.poll()
+    assert receiver.snapshot()["cutoff_open"] is True
+    assert receiver.snapshot()["cutoff_hold"] is True
+    assert receiver.snapshot()["linear_mps"] == 0
+    assert receiver.acknowledge_cutoff() is True
+    assert receiver.snapshot()["cutoff_open"] is False
+    assert receiver.snapshot()["armed"] is False
+    assert receiver.snapshot()["linear_mps"] == 0
     assert receiver.handle(queued_rearm) == "rejected_rearm"
     assert receiver.handle(queued_motion) == "rejected_motion"
     assert receiver.snapshot()["armed"] is False
@@ -488,7 +498,7 @@ def test_unauthorized_controller_cannot_take_the_session_or_forge_status():
     assert gate.motion_authorized(receiver.monotonic_ms, session, 4, status["freshness_id"]) is False
 
     unsigned = {
-        "schema_version": "3",
+        "schema_version": "4",
         "controller_id": "laptop",
         "boot_nonce": receiver.boot_nonce,
         "session_id": session + 3,
@@ -609,7 +619,7 @@ def test_parser_rejects_hostile_json_without_disabling_the_watchdog():
         over_outcome = receiver.handle_raw(over_limit)
     except Exception as exc:
         raise AssertionError(f"over-limit number raised {exc!r}") from exc
-    assert over_outcome == "malformed"
+    assert over_outcome == "invalid_stop"
     assert receiver.snapshot()["last_accept_ms"] == accepted
     assert receiver.snapshot()["fault_latch"] is False
 

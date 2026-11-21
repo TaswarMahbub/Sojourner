@@ -1,4 +1,4 @@
-"""Schema 3 checks for Sojourner messages.
+"""Schema 4 checks for Sojourner messages.
 
 This module is the test oracle for docs/contracts.md. It is not a runtime
 service, and it does not talk to motors. Validation returns errors. It does
@@ -10,7 +10,9 @@ from __future__ import annotations
 import math
 import re
 
-SCHEMA = "3"
+from tests.control_auth import canonical_velocity
+
+SCHEMA = "4"
 CONTROLLER_ID = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 MAC_HEX = re.compile(r"^[0-9a-f]{64}$")
 SAFE_INT_MAX = 9007199254740991
@@ -278,7 +280,7 @@ def _validate_feature(message) -> list[str]:
     if not isinstance(message, dict) or errors:
         return errors
     if message["schema_version"] != SCHEMA:
-        errors.append("schema_version is not 3")
+        errors.append("schema_version is not 4")
     if not is_timestamp(message["timestamp_ms"]):
         errors.append("timestamp_ms is not a timestamp")
     state = message["tracking_state"]
@@ -318,7 +320,7 @@ def _validate_gesture(message) -> list[str]:
     if not isinstance(message, dict) or errors:
         return errors
     if message["schema_version"] != SCHEMA:
-        errors.append("schema_version is not 3")
+        errors.append("schema_version is not 4")
     for name in (
         "timestamp_ms",
         "source_timestamp_ms",
@@ -354,8 +356,17 @@ def _validate_gesture(message) -> list[str]:
     return errors
 
 
+def _velocity(value, errors, name: str, low: float, high: float) -> None:
+    applied = canonical_velocity(value)
+    if applied is None:
+        errors.append(f"{name} is not a canonical velocity")
+        return
+    if applied < low or applied > high:
+        errors.append(f"{name} is outside [{low}, {high}]")
+
+
 def _zero(value) -> bool:
-    return is_number(value) and math.isfinite(_unit(value)) and _unit(value) == 0.0
+    return canonical_velocity(value) == 0.0
 
 
 def validate_motor(message) -> list[str]:
@@ -371,7 +382,7 @@ def _validate_motor(message) -> list[str]:
     if not isinstance(message, dict) or errors:
         return errors
     if message["schema_version"] != SCHEMA:
-        errors.append("schema_version is not 3")
+        errors.append("schema_version is not 4")
     if not isinstance(message["controller_id"], str) or CONTROLLER_ID.fullmatch(message["controller_id"]) is None:
         errors.append("controller_id is invalid")
     if not is_safe_id(message["boot_nonce"]):
@@ -404,8 +415,8 @@ def _validate_motor(message) -> list[str]:
         errors.append("stop is not a boolean")
     linear = message["linear_mps"]
     angular = message["angular_rad_s"]
-    _score(linear, errors, "linear_mps", -0.30, 0.30)
-    _score(angular, errors, "angular_rad_s", -1.00, 1.00)
+    _velocity(linear, errors, "linear_mps", -0.30, 0.30)
+    _velocity(angular, errors, "angular_rad_s", -1.00, 1.00)
     if task in STOP_TASKS:
         if stop is not True or not _zero(linear) or not _zero(angular):
             errors.append("stop task must have stop true and zero motion")
@@ -431,7 +442,7 @@ def _validate_status(message) -> list[str]:
     if not isinstance(message, dict) or errors:
         return errors
     if message["schema_version"] != SCHEMA:
-        errors.append("schema_version is not 3")
+        errors.append("schema_version is not 4")
     if not isinstance(message["controller_id"], str) or CONTROLLER_ID.fullmatch(message["controller_id"]) is None:
         errors.append("controller_id is invalid")
     if not is_timestamp(message["timestamp_ms"]):

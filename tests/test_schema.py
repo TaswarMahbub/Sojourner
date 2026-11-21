@@ -33,7 +33,7 @@ def pose():
 
 def feature(**overrides):
     message = {
-        "schema_version": "3",
+        "schema_version": "4",
         "timestamp_ms": T0,
         "tracking_state": "tracking",
         "features": features(),
@@ -46,7 +46,7 @@ def feature(**overrides):
 
 def gesture(**overrides):
     message = {
-        "schema_version": "3",
+        "schema_version": "4",
         "timestamp_ms": T0 + 40,
         "source_timestamp_ms": T0,
         "window_start_timestamp_ms": T0,
@@ -62,7 +62,7 @@ def gesture(**overrides):
 
 def motor(**overrides):
     message = {
-        "schema_version": "3",
+        "schema_version": "4",
         "controller_id": "laptop",
         "boot_nonce": 42,
         "session_id": 7,
@@ -165,7 +165,7 @@ def test_motor_stop_shape_and_limits():
 
 def test_status_reports_physical_estop_separately():
     message = {
-        "schema_version": "3",
+        "schema_version": "4",
         "controller_id": "laptop",
         "timestamp_ms": T0,
         "boot_nonce": 42,

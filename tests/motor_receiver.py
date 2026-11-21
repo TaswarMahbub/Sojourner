@@ -1,4 +1,4 @@
-"""Schema 3 motor-command oracle.
+"""Schema 4 motor-command oracle.
 
 The oracle applies docs/contracts.md to mocked datagrams. It is not firmware,
 it does not drive motors, and a passing test is not a hardware verification.
@@ -7,10 +7,11 @@ Hardware cutoff behavior here is a model. It is unverified on a bench.
 
 from __future__ import annotations
 
-from tests.contract_schema import SAFETY_STOP_TASKS, validate_motor, validate_status
+from tests.contract_schema import SAFETY_STOP_TASKS, SCHEMA, validate_motor, validate_status
 from tests.control_auth import (
     CONTROLLER,
     TEST_KEY,
+    canonical_velocity,
     decode_strict,
     peek_object,
     sign_status,
@@ -51,6 +52,8 @@ class MotorReceiver:
         self.startup_latch = True
         self.bus_powered = True
         self.cutoff_open = True
+        self.cutoff_hold = False
+        self.driver_enabled = False
         self.firmware_frozen = False
         self.linear_mps = 0.0
         self.angular_rad_s = 0.0
@@ -61,7 +64,7 @@ class MotorReceiver:
             return
         self.monotonic_ms = ms
         if self.firmware_frozen:
-            self.cutoff_open = self._hardware_cutoff_required()
+            self._hardware_tick()
             return
         self._enforce_timeouts()
 
@@ -111,20 +114,39 @@ class MotorReceiver:
     def lose_motor_power(self) -> None:
         self.bus_powered = False
         self.cutoff_open = True
+        self.driver_enabled = False
         self.armed = False
         self._stop_output()
 
     def restore_motor_power(self) -> None:
-        """Motor supply returns without an MCU reset. The same boot stays disarmed."""
+        """Motor supply returns without an MCU reset.
+
+        The cutoff stays open and retained PWM is cleared. Closing the cutoff
+        takes acknowledge_cutoff. This does not arm.
+        """
         self.bus_powered = True
+        self.cutoff_hold = True
+        self.cutoff_open = True
+        self.driver_enabled = False
         self.armed = False
         self._stop_output()
         self._bump_generation()
         self._rotate_challenge()
-        if not self.firmware_frozen:
-            self._refresh_cutoff()
-        else:
-            self.cutoff_open = True
+
+    def acknowledge_cutoff(self) -> bool:
+        """Explicit safe restoration. Does not arm and does not restore PWM.
+
+        A frozen firmware cannot call this. The model is not a bench test.
+        """
+        if self.firmware_frozen or not self.bus_powered or self.startup_latch:
+            return False
+        if self.sensor_state != "released" or self.physical_estop:
+            return False
+        self._stop_output()
+        self.cutoff_hold = False
+        self._pet()
+        self._refresh_cutoff()
+        return self.cutoff_open is False
 
     def brownout_reset(self, new_nonce: int) -> None:
         """Power loss of the MCU. This is a new boot, stopped and disarmed."""
@@ -135,16 +157,22 @@ class MotorReceiver:
     def freeze_firmware(self) -> None:
         self.firmware_frozen = True
 
+    def unfreeze_firmware(self) -> None:
+        """Firmware begins to run again. This does not pet, arm, or restore PWM."""
+        self.firmware_frozen = False
+
     def poll(self) -> None:
         """One firmware loop. A frozen MCU does not call this."""
         if self.firmware_frozen:
             return
         self._enforce_timeouts()
 
-    def status(self) -> dict:
+    def status(self) -> dict | None:
+        if self.firmware_frozen:
+            return None
         self.status_sequence += 1
         message = {
-            "schema_version": "3",
+            "schema_version": SCHEMA,
             "controller_id": self.controller_id,
             "timestamp_ms": self.unix_ms if self.clock_synchronized and self.unix_ms is not None else 0,
             "boot_nonce": self.boot_nonce,
@@ -175,7 +203,7 @@ class MotorReceiver:
     def handle_raw(self, raw) -> str:
         try:
             if self.firmware_frozen:
-                self.cutoff_open = self._hardware_cutoff_required()
+                self._hardware_tick()
                 return "frozen"
             self._enforce_timeouts()
             message, identity, kind = self._decode(raw)
@@ -198,15 +226,16 @@ class MotorReceiver:
             return False
         if snap["sensor_state"] != "released" or snap["physical_estop"]:
             return False
-        if snap["firmware_frozen"] and snap["monotonic_ms"] - snap["last_pet_mono"] > WATCHDOG_MS:
+        if not snap["driver_enabled"]:
             return False
         if not snap["armed"]:
             return False
         if snap["linear_mps"] == 0.0 and snap["angular_rad_s"] == 0.0:
             return False
-        deadline = snap["motion_deadline_mono"]
-        if deadline is not None and snap["monotonic_ms"] >= deadline:
-            return False
+        if not snap["firmware_frozen"]:
+            deadline = snap["motion_deadline_mono"]
+            if deadline is not None and snap["monotonic_ms"] >= deadline:
+                return False
         return True
 
     def snapshot(self) -> dict:
@@ -231,6 +260,8 @@ class MotorReceiver:
             "last_pet_mono": self.last_pet_mono,
             "sensor_state": self.sensor_state,
             "cutoff_open": self.cutoff_open,
+            "cutoff_hold": self.cutoff_hold,
+            "driver_enabled": self.driver_enabled,
             "bus_powered": self.bus_powered,
             "startup_latch": self.startup_latch,
             "firmware_frozen": self.firmware_frozen,
@@ -299,15 +330,24 @@ class MotorReceiver:
                 return "stale_stop"
             return "ignored"
         if message["stop"] is False:
-            if not fresh or not generation_ok or self._unix_expired(message):
-                return "rejected_motion"
-            if self._motion_blocked():
+            if (
+                not fresh
+                or not generation_ok
+                or self._unix_expired(message)
+                or self._motion_blocked()
+                or self._remaining_motion_ms() < 1
+            ):
                 self._stop_output()
                 return "rejected_motion"
-            self.linear_mps = float(message["linear_mps"])
-            self.angular_rad_s = float(message["angular_rad_s"])
+            linear = canonical_velocity(message["linear_mps"])
+            angular = canonical_velocity(message["angular_rad_s"])
+            if linear is None or angular is None:
+                self._stop_output()
+                return "invalid_stop"
+            self.linear_mps = linear
+            self.angular_rad_s = angular
             lifetime = message["expires_at_ms"] - message["issued_at_ms"]
-            self.motion_deadline_mono = self.monotonic_ms + lifetime
+            self.motion_deadline_mono = self.monotonic_ms + min(lifetime, self._remaining_motion_ms())
             self.motion_expires_unix = message["expires_at_ms"]
             self._mark_accepted(message["sequence"], message)
             return "accepted_motion"
@@ -354,6 +394,10 @@ class MotorReceiver:
             and float(message["linear_mps"]) == 0.0
             and float(message["angular_rad_s"]) == 0.0
         )
+
+    def _remaining_motion_ms(self) -> int:
+        """Time left before challenge issuance plus 250 ms. May be negative."""
+        return self.challenge_issued_mono + FRESH_MS - self.monotonic_ms
 
     def _fresh(self, message) -> bool:
         return (
@@ -429,10 +473,18 @@ class MotorReceiver:
     def _pet(self) -> None:
         self.last_pet_mono = self.monotonic_ms
 
+    def _hardware_tick(self) -> None:
+        """Hardware cutoff timer. Runs when the firmware is frozen and does not pet."""
+        if self.monotonic_ms - self.last_pet_mono > WATCHDOG_MS:
+            self.cutoff_hold = True
+        self.cutoff_open = self._hardware_cutoff_required()
+        self.driver_enabled = self.bus_powered and not self.cutoff_open
+
     def _hardware_cutoff_required(self) -> bool:
         pet_late = self.monotonic_ms - self.last_pet_mono > WATCHDOG_MS
         return (
-            self.startup_latch
+            self.cutoff_hold
+            or self.startup_latch
             or not self.bus_powered
             or self.sensor_state != "released"
             or self.physical_estop
@@ -441,6 +493,7 @@ class MotorReceiver:
 
     def _refresh_cutoff(self) -> None:
         self.cutoff_open = self._hardware_cutoff_required()
+        self.driver_enabled = self.bus_powered and not self.cutoff_open
         if self.cutoff_open:
             self.armed = False
             self._stop_output()

@@ -9,6 +9,7 @@ wrong-boot, and stale status do not authorize motion.
 
 from __future__ import annotations
 
+from tests.contract_schema import validate_status
 from tests.control_auth import verify_status
 
 FRESH_MS = 250
@@ -26,8 +27,14 @@ class StatusGate:
         self.challenge_mono = None
 
     def expect(self, challenge: int, sent_mono: int) -> None:
-        self.challenge = challenge
-        self.challenge_mono = sent_mono
+        """Record the challenge the sender has outstanding.
+
+        Repeating the same challenge does not move its issuance time forward.
+        A different challenge invalidates authorization from the previous status.
+        """
+        if challenge != self.challenge:
+            self.challenge = challenge
+            self.challenge_mono = sent_mono
 
     def export_state(self) -> dict:
         return {
@@ -48,6 +55,8 @@ class StatusGate:
     def observe(self, status, sender_mono: int) -> str:
         if not isinstance(status, dict) or not verify_status(self.key, status):
             return "spoofed"
+        if validate_status(status):
+            return "invalid_status"
         if status.get("controller_id") != self.controller_id:
             return "wrong_controller"
         if (
@@ -81,15 +90,21 @@ class StatusGate:
         self.received_mono = sender_mono
         return "accepted"
 
-    def motion_authorized(self, sender_mono, session_id, sequence, freshness_id) -> bool:
-        if self.latest is None or self.received_mono is None:
+    def _current(self, sender_mono) -> bool:
+        if self.latest is None or self.received_mono is None or self.challenge_mono is None:
             return False
-        if (
-            isinstance(sender_mono, bool)
-            or not isinstance(sender_mono, int)
-            or sender_mono < self.received_mono
-            or sender_mono - self.received_mono > FRESH_MS
-        ):
+        if isinstance(sender_mono, bool) or not isinstance(sender_mono, int):
+            return False
+        if sender_mono < self.received_mono or sender_mono < self.challenge_mono:
+            return False
+        if sender_mono - self.received_mono > FRESH_MS:
+            return False
+        if sender_mono - self.challenge_mono > FRESH_MS:
+            return False
+        return self.latest.get("status_challenge") == self.challenge
+
+    def motion_authorized(self, sender_mono, session_id, sequence, freshness_id) -> bool:
+        if not self._current(sender_mono):
             return False
         status = self.latest
         last = status.get("last_sequence")
@@ -106,4 +121,38 @@ class StatusGate:
             and status.get("fault_latch") is False
             and status.get("session_id") == session_id
             and status.get("freshness_id") == freshness_id
+        )
+
+    def rearm_authorized(
+        self,
+        sender_mono,
+        session_id,
+        sequence,
+        freshness_id,
+        rearm_generation,
+        *,
+        operator_authorized: bool,
+    ) -> bool:
+        """Allow the command that clears software latches.
+
+        The software estop latch and the watchdog fault latch may be set.
+        The physical stop must be released, and the operator must have asked.
+        """
+        if operator_authorized is not True or not self._current(sender_mono):
+            return False
+        status = self.latest
+        last = status.get("last_sequence")
+        if isinstance(sequence, bool) or not isinstance(sequence, int):
+            return False
+        if isinstance(last, bool) or not isinstance(last, int) or sequence <= last:
+            return False
+        if isinstance(rearm_generation, bool) or not isinstance(rearm_generation, int):
+            return False
+        return (
+            status.get("cutoff_open") is False
+            and status.get("sensor_state") == "released"
+            and status.get("physical_estop") is False
+            and status.get("session_id") == session_id
+            and status.get("freshness_id") == freshness_id
+            and status.get("rearm_generation") == rearm_generation
         )
