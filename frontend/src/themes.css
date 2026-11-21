@@ -1,0 +1,52 @@
+/* Dashboard theme: "soft neutral". Every colour, radius, border width and shadow lives here.
+   Components reference these variable names only, so a restyle edits this file.
+   Light by default; the dark set follows the operating system's dark mode setting.
+   Status colours are never the only signal: each status also has a word and a symbol. */
+
+:root {
+  color-scheme: light;
+  --color-bg: #f3f4f7;
+  --color-surface: #ffffff;
+  --color-surface-raised: #eef0f5;
+  --color-text: #1c2330;
+  --color-text-muted: #4f5869;
+  --color-border: #d8dce4;
+  --color-focus: #3a5ccc;
+  --color-accent: #3a5ccc;
+  --color-good: #1d6b3f;
+  --color-warn: #845300;
+  --color-bad: #b02a22;
+  --color-neutral: #4f5869;
+  --color-mock-bg: #fde7a6;
+  --color-mock-text: #4a3500;
+  --color-meter-track: #e2e5ec;
+  --color-meter-fill: #3a5ccc;
+  --radius: 12px;
+  --border-width: 1px;
+  --shadow: 0 1px 2px rgb(20 30 50 / 0.06), 0 4px 12px rgb(20 30 50 / 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --color-bg: #161a21;
+    --color-surface: #1e232c;
+    --color-surface-raised: #272d38;
+    --color-text: #e4e7ec;
+    --color-text-muted: #a6aebb;
+    --color-border: #313846;
+    --color-focus: #8aa4ff;
+    --color-accent: #8aa4ff;
+    --color-good: #6fcf97;
+    --color-warn: #e9b949;
+    --color-bad: #f28b82;
+    --color-neutral: #a6aebb;
+    --color-mock-bg: #e9b949;
+    --color-mock-text: #161a21;
+    --color-meter-track: #313846;
+    --color-meter-fill: #8aa4ff;
+    --radius: 12px;
+    --border-width: 1px;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 4px 12px rgb(0 0 0 / 0.25);
+  }
+}
