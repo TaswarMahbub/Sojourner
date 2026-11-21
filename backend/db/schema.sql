@@ -1,6 +1,6 @@
 -- Sojourner: Tiger Cloud (TimescaleDB) schema
 --
--- Run with:  psql "$TIMESCALE_SERVICE_URL" -f schema.sql
+-- Run with:  psql "$TIMESCALE_SERVICE_URL" -f schema.sql   (as the admin role, e.g. tsdbadmin)
 -- Do NOT wrap in a single transaction: continuous aggregates cannot be created inside one.
 -- Safe to re-run (idempotent).
 --
@@ -9,6 +9,24 @@
 --   * Every record is keyed by a pseudonymous profile_id (random UUID). display_name is optional.
 --   * Deleting a profile cascades to every row that references it, including both hypertables.
 --   * demo_reader (below) can only see aggregated, consented, demo_visible data.
+--   * sojourner_app (below) is the least-privilege role teammates and tiger_store.py connect as.
+--
+-- Contract coverage (docs/contracts.md, schema "4"):
+--   Camera feature stream -> signal_samples. Stored: capture time (timestamp_ms), the 52
+--     blendshape scores under MediaPipe's names, head_pose yaw/pitch/roll in degrees,
+--     tracking_ok (tracking_state = 'tracking'), and confidence (NULL when the producer had none).
+--   Gesture classification -> control_events. OPEN: not in contract form yet. cue still holds
+--     interim labels and the window and model_version fields are not stored. Waits on a trained
+--     model and a reviewed label list.
+--   Motor command and motor status -> not stored, by decision. Storage is not part of the
+--     real-time stop path. The contract's boot_nonce/session_id are UDP link sessions and are
+--     not sessions.session_id; if datagrams are ever logged they get their own table.
+--   OPEN, not decided:
+--     - tracking_state is reduced to tracking_ok, so partial and lost are not distinguished, and
+--       a lost frame (no features, no pose) writes no row. tracking_ok fractions therefore
+--       count only frames that carried values.
+--     - head_pose.matrix (translation and scale) is validated on load but not stored.
+--     - The schema_version of loaded data is not recorded.
 
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 
@@ -82,8 +100,13 @@ CREATE TABLE IF NOT EXISTS signal_samples (
     profile_id   uuid NOT NULL REFERENCES profiles (profile_id) ON DELETE CASCADE,
     channel_name text NOT NULL,
     value        double precision NOT NULL,
-    tracking_ok  boolean NOT NULL
+    tracking_ok  boolean NOT NULL,
+    -- Producer's per-frame score when one exists. NULL when the frame carried none
+    -- (stock MediaPipe publishes null). Never replaced with 0, 1 or a threshold.
+    confidence   double precision
 );
+-- Brings a database created before the confidence column up to date.
+ALTER TABLE signal_samples ADD COLUMN IF NOT EXISTS confidence double precision;
 
 SELECT create_hypertable('signal_samples', 'ts',
                          chunk_time_interval => INTERVAL '1 day',
@@ -98,11 +121,12 @@ CREATE TABLE IF NOT EXISTS control_events (
     ts          timestamptz NOT NULL,
     session_id  uuid NOT NULL REFERENCES sessions (session_id) ON DELETE CASCADE,
     profile_id  uuid NOT NULL REFERENCES profiles (profile_id) ON DELETE CASCADE,
-    sequence    integer NOT NULL,
+    event_sequence integer NOT NULL,          -- order of the cue within its session (1, 2, ...);
+                                              -- not the contract's motor-command sequence
     cue         text NOT NULL,
     confidence  double precision,
     stop_reason text,                         -- NULL for ordinary cues; set when the event halted motion
-    PRIMARY KEY (session_id, sequence, ts)    -- a hypertable unique key must include the time column
+    PRIMARY KEY (session_id, event_sequence, ts) -- a hypertable unique key must include the time column
 );
 
 SELECT create_hypertable('control_events', 'ts',
@@ -111,6 +135,18 @@ SELECT create_hypertable('control_events', 'ts',
 
 CREATE INDEX IF NOT EXISTS control_events_profile_ts_idx
     ON control_events (profile_id, ts DESC);
+
+-- Renames the column on a database created when it was called "sequence". The primary key
+-- follows the rename. Skipped once the column is event_sequence.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_schema = 'public' AND table_name = 'control_events'
+                 AND column_name = 'sequence') THEN
+        ALTER TABLE control_events RENAME COLUMN sequence TO event_sequence;
+    END IF;
+END
+$$;
 
 -- Optional once data volume grows (left off so small demo deletes stay simple):
 -- ALTER TABLE signal_samples SET (timescaledb.compress,
@@ -226,3 +262,32 @@ GRANT SELECT ON demo_session_summary, demo_channel_trend TO demo_reader;
 
 -- To expose it to a public dashboard, create a login role yourself (do not commit the password):
 --   CREATE ROLE demo_dashboard LOGIN PASSWORD '<set-me>' IN ROLE demo_reader;
+
+-- ---------------------------------------------------------------------------
+-- Application role: what teammates and tiger_store.py connect as. Not the admin.
+-- It can insert and read the app tables, close a session (ended_at, simulator_metrics),
+-- and delete a profile (the cascade runs with the table owner's rights). It cannot
+-- DROP, TRUNCATE, ALTER, update samples or events, or refresh the continuous aggregates
+-- (the 1-minute policies refresh them; a manual refresh needs the admin connection).
+--
+-- Created NOLOGIN with no password. To let people connect, the admin sets a password
+-- interactively so it never lands in a file or shell history:
+--   psql "$TIMESCALE_SERVICE_URL" -c 'ALTER ROLE sojourner_app LOGIN'
+--   psql "$TIMESCALE_SERVICE_URL" -c '\password sojourner_app'
+-- ---------------------------------------------------------------------------
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'sojourner_app') THEN
+        CREATE ROLE sojourner_app NOLOGIN;
+    END IF;
+END
+$$;
+
+GRANT USAGE ON SCHEMA public TO sojourner_app;
+GRANT SELECT, INSERT ON profiles, calibrations, model_versions, sessions, labeled_trials,
+                        signal_samples, control_events TO sojourner_app;
+GRANT UPDATE (ended_at, simulator_metrics) ON sessions TO sojourner_app;
+GRANT DELETE ON profiles TO sojourner_app;
+GRANT SELECT ON signal_summary_1min, control_summary_1min, session_channel_stats,
+                demo_session_summary, demo_channel_trend TO sojourner_app;

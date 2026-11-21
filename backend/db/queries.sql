@@ -51,11 +51,11 @@ GROUP BY session_id, stop_reason
 ORDER BY session_id, n DESC;
 
 -- 7. Cue spacing (seconds between consecutive control events): a hesitation proxy.
-SELECT left(session_id::text, 8) AS session, sequence, cue,
-       round(extract(epoch FROM (ts - lag(ts) OVER (PARTITION BY session_id ORDER BY sequence)))::numeric, 2)
+SELECT left(session_id::text, 8) AS session, event_sequence, cue,
+       round(extract(epoch FROM (ts - lag(ts) OVER (PARTITION BY session_id ORDER BY event_sequence)))::numeric, 2)
          AS seconds_since_previous
 FROM control_events
-ORDER BY session_id, sequence;
+ORDER BY session_id, event_sequence;
 
 -- 8. Event rate per minute from the control aggregate.
 SELECT bucket, left(session_id::text, 8) AS session, n_events, n_stops,
