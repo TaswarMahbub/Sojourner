@@ -11,7 +11,7 @@
 --   * demo_reader (below) can only see aggregated, consented, demo_visible data.
 --   * sojourner_app (below) is the least-privilege role teammates and tiger_store.py connect as.
 --
--- Contract coverage (docs/contracts.md, schema "4"):
+-- Contract coverage (docs/contracts.md, schema "4", as merged to main in #1):
 --   Camera feature stream -> signal_samples. Stored: capture time (timestamp_ms), the 52
 --     blendshape scores under MediaPipe's names, head_pose yaw/pitch/roll in degrees,
 --     tracking_ok (tracking_state = 'tracking'), and confidence (NULL when the producer had none).
@@ -21,6 +21,9 @@
 --   Motor command and motor status -> not stored, by decision. Storage is not part of the
 --     real-time stop path. The contract's boot_nonce/session_id are UDP link sessions and are
 --     not sessions.session_id; if datagrams are ever logged they get their own table.
+--   Persisted status-gate state (challenge and status_sequence high-water marks) -> not stored
+--     here. The contract requires a durable local file on the laptop, replaced atomically and
+--     written before a challenge is transmitted; a network database cannot be on that path.
 --   OPEN, not decided:
 --     - tracking_state is reduced to tracking_ok, so partial and lost are not distinguished, and
 --       a lost frame (no features, no pose) writes no row. tracking_ok fractions therefore

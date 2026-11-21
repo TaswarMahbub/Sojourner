@@ -142,11 +142,12 @@ Public demo: point any public dashboard at a login role under `demo_reader`, nev
 
 #### Contract coverage and open items
 
-Checked against `docs/contracts.md` schema `"4"`.
+Checked against `docs/contracts.md` schema `"4"`, as merged to `main` in #1.
 
 - **Camera feature stream:** stored in `signal_samples` as described above. Frames are validated against the contract on load, including the head-pose matrix.
 - **Gesture classification: open.** Not stored in contract form yet. Events use the interim format, and `model_version` and the window fields are not stored. This waits on a trained model and a reviewed label list.
 - **Motor command and motor status:** not stored, by decision. Storage is not part of the real-time stop path. The contract's `boot_nonce` + `session_id` is a UDP link session, not `sessions.session_id`. If datagrams are ever logged, they get their own table.
+- **Persisted status-gate state** (challenge and `status_sequence` high-water marks): not stored here. The contract requires a durable local file on the laptop, written before a challenge is sent. A network database can't be on that path.
 - **Open, not yet decided:**
   - `tracking_state` is reduced to `tracking_ok`, so `partial` and `lost` aren't distinguished, and a `lost` frame writes no row. Tracking fractions count only frames that carried values.
   - `head_pose.matrix` (translation and scale) is validated but not stored.
