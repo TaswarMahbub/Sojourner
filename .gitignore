@@ -113,3 +113,6 @@ Desktop.ini
 tiger-cloud-db-*-credentials.env
 backend/db/fixtures/
 __pycache__/
+# Files specific to perception
+perception/models/
+*.task
