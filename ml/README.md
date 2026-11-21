@@ -7,7 +7,7 @@ This directory will hold training and the personalized gesture classifier that c
 Planned responsibilities:
 
 - Train and evaluate classifiers outside this repository's tracked files. Datasets, recordings, checkpoints, and weights stay local and are gitignored.
-- Publish `label`, `confidence`, and `model_version` for one source feature frame.
+- Publish `label`, `confidence`, and `model_version` together with the source window: the oldest and newest feature timestamps that were inputs, and the count of those frames. A one-frame model sets the start and end to the same timestamp and the count to 1.
 - Treat a frame that is not `tracking` as `unknown`. The label `unknown` is not a motion request.
 - Add a reviewed label list for a real `model_version` before any consumer depends on a label other than `neutral` or `unknown`.
 

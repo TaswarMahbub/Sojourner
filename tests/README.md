@@ -1,12 +1,14 @@
 # Tests
 
-This directory is for checks that cross module boundaries. Each area will keep unit tests beside its own code when that code is added.
+This directory holds the schema 2 checks for `docs/contracts.md`. Application areas will keep their own unit tests beside their code when that code is added.
 
-The first cross-component checks should cover schema 1 in `docs/contracts.md`:
+Run the checks from the repository root:
 
-- A camera feature message is actionable only in the `tracking` state with a valid pose and the full blendshape set.
-- `neutral` does not request motion. `unknown`, `lost`, and `partial` do not request motion.
-- A motor command outside its ranges, with a stale sequence, or past `expires_at_ms` is rejected.
-- `stop` true, a non-moving task state, `estop`, and the watchdog all end in zero linear and angular motion.
+```bash
+python3 -m pip install -r tests/requirements.txt
+python3 -m pytest tests
+```
 
-No test runner, fixture, or sample result is included in this revision. Do not add fixtures that look like measured model output.
+`contract_schema.py` checks message shape. `motor_receiver.py` is a mocked receiver for datagram ordering, session identity, watchdog expiration, and emergency-stop rules. The inputs are constructed in the test files. They are not recordings, model outputs, or logs from a rover.
+
+A passing run means the mock matches the written contract. It does not mean the ESP32, the motors, or the physical emergency-stop control have been tested.
