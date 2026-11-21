@@ -1,5 +1,5 @@
 import { useId, useState } from 'react'
-import { CONTROL_EXCLUDED_FEATURES } from '../contracts/cameraFrame.js'
+import { CONTROL_EXCLUDED_FEATURES, SCHEMA_VERSION } from '../contracts/cameraFrame.js'
 import './TrackingStatusPanel.css'
 
 const TOP_N = 8
@@ -61,7 +61,7 @@ export default function TrackingStatusPanel({ latest, isStale, sourceKind }) {
 
       {key === 'rejected' && (
         <div className="rejected">
-          <p>This message failed schema 1 validation and is not displayed as data:</p>
+          <p>This message failed schema {SCHEMA_VERSION} validation and is not displayed as data:</p>
           <ul>
             {latest.validation.errors.map((err) => <li key={err}>{err}</li>)}
           </ul>
@@ -72,7 +72,7 @@ export default function TrackingStatusPanel({ latest, isStale, sourceKind }) {
         <dl className="facts">
           <div>
             <dt>Face score</dt>
-            <dd>{frame.confidence.toFixed(2)}</dd>
+            <dd>{frame.confidence === null ? 'Not provided' : frame.confidence.toFixed(2)}</dd>
           </div>
           <div>
             <dt>Features reported</dt>
@@ -80,7 +80,7 @@ export default function TrackingStatusPanel({ latest, isStale, sourceKind }) {
           </div>
         </dl>
       )}
-      <p className="hint">Face score is the producer’s minimum detector score, not a probability.</p>
+      <p className="hint">Face score is a per-frame detector score when the detector provides one (stock MediaPipe does not). It is not a probability, and “Not provided” does not mean the face was lost.</p>
 
       {features.length > 0 && !isStale && (
         <>

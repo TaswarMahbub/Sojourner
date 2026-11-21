@@ -1,33 +1,41 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   BLENDSHAPE_NAMES,
+  SCHEMA_VERSION,
   anglesFromMatrix,
+  decodeCameraFrame,
   isActionable,
   poseMatrixFromAngles,
   validateCameraFrame,
 } from './cameraFrame.js'
-import { MOCK_CYCLE_MS, buildMockFrame } from '../data/mockCameraSource.js'
+import { MOCK_CYCLE_MS, buildMockFrame } from '../sources/mockCameraSource.js'
 
 // Synthetic fixtures built from the contract text. Not recorded frames.
 const lostFrame = () => ({
-  schema_version: '1',
+  schema_version: SCHEMA_VERSION,
   timestamp_ms: 1795276800000,
   tracking_state: 'lost',
   features: {},
   head_pose: null,
-  confidence: 0,
+  confidence: null,
 })
 
 const trackingFrame = (angles = { yaw_deg: 20, pitch_deg: -10, roll_deg: 5 }) => ({
-  schema_version: '1',
+  schema_version: SCHEMA_VERSION,
   timestamp_ms: 1795276800000,
   tracking_state: 'tracking',
   features: Object.fromEntries(BLENDSHAPE_NAMES.map((n) => [n, 0])),
   head_pose: { matrix: poseMatrixFromAngles(angles), ...angles },
-  confidence: 0.9,
+  confidence: null,
 })
 
-describe('camera frame contract (schema 1)', () => {
+describe('camera frame contract', () => {
+  it('implements schema "4"', () => {
+    expect(SCHEMA_VERSION).toBe('4')
+  })
+
   it('lists 52 unique blendshape names starting with _neutral', () => {
     expect(BLENDSHAPE_NAMES).toHaveLength(52)
     expect(new Set(BLENDSHAPE_NAMES).size).toBe(52)
@@ -39,22 +47,47 @@ describe('camera frame contract (schema 1)', () => {
     expect(isActionable(lostFrame())).toBe(false)
   })
 
-  it('accepts a full tracking frame and marks it actionable', () => {
+  it('accepts a tracking frame with confidence null and marks it actionable', () => {
     expect(validateCameraFrame(trackingFrame()).errors).toEqual([])
     expect(isActionable(trackingFrame())).toBe(true)
   })
 
-  it('rejects a wrong schema_version, an unknown field and a missing field', () => {
-    expect(validateCameraFrame({ ...lostFrame(), schema_version: '2' }).valid).toBe(false)
+  it('applies the confidence rules for each tracking state', () => {
+    expect(validateCameraFrame({ ...trackingFrame(), confidence: 0.9 }).valid).toBe(true)
+    expect(validateCameraFrame({ ...trackingFrame(), confidence: 0 }).valid).toBe(false)
+    expect(validateCameraFrame({ ...lostFrame(), confidence: 0 }).valid).toBe(false)
+    const partial = { ...lostFrame(), tracking_state: 'partial', features: { jawOpen: 0.3 } }
+    expect(validateCameraFrame(partial).valid).toBe(true)
+    expect(validateCameraFrame({ ...partial, confidence: 0 }).valid).toBe(true)
+    expect(validateCameraFrame({ ...partial, confidence: 1.5 }).valid).toBe(false)
+  })
+
+  it('rejects a missing confidence key and a boolean confidence', () => {
+    const missing = trackingFrame()
+    delete missing.confidence
+    expect(validateCameraFrame(missing).valid).toBe(false)
+    expect(validateCameraFrame({ ...trackingFrame(), confidence: true }).valid).toBe(false)
+  })
+
+  it('rejects an old schema_version, an unknown field and a missing field', () => {
+    expect(validateCameraFrame({ ...lostFrame(), schema_version: '1' }).valid).toBe(false)
     expect(validateCameraFrame({ ...lostFrame(), mock: true }).valid).toBe(false)
     const missing = lostFrame()
-    delete missing.confidence
+    delete missing.features
     expect(validateCameraFrame(missing).valid).toBe(false)
   })
 
   it('rejects non-integer and string timestamps', () => {
     expect(validateCameraFrame({ ...lostFrame(), timestamp_ms: 1.5 }).valid).toBe(false)
     expect(validateCameraFrame({ ...lostFrame(), timestamp_ms: '2026-11-21' }).valid).toBe(false)
+  })
+
+  it('decodeCameraFrame accepts valid text and rejects duplicate keys and float timestamps', () => {
+    const text = JSON.stringify(lostFrame())
+    expect(decodeCameraFrame(text).valid).toBe(true)
+    expect(decodeCameraFrame(text.replace('}', ', "confidence": null}')).valid).toBe(false)
+    expect(decodeCameraFrame(text.replace('1795276800000', '1795276800000.0')).valid).toBe(false)
+    expect(decodeCameraFrame('not json')).toEqual({ valid: false, errors: ['message: not valid JSON'], message: null })
   })
 
   it('rejects tracking with a missing blendshape or an out-of-range score', () => {
@@ -66,9 +99,7 @@ describe('camera frame contract (schema 1)', () => {
     expect(validateCameraFrame(high).valid).toBe(false)
   })
 
-  it('enforces per-state rules for confidence, features and head_pose', () => {
-    expect(validateCameraFrame({ ...lostFrame(), confidence: 0.2 }).valid).toBe(false)
-    expect(validateCameraFrame({ ...trackingFrame(), confidence: 0 }).valid).toBe(false)
+  it('requires head_pose null unless tracking', () => {
     const partialWithPose = { ...trackingFrame(), tracking_state: 'partial' }
     expect(validateCameraFrame(partialWithPose).valid).toBe(false)
   })
@@ -106,7 +137,7 @@ describe('camera frame contract (schema 1)', () => {
     expect(derived.scale).toBeCloseTo(1.7, 6)
   })
 
-  it('the mock source only emits valid schema 1 frames across its whole loop', () => {
+  it('the mock source only emits valid frames across its whole loop', () => {
     const seen = new Set()
     for (let t = 0; t < MOCK_CYCLE_MS; t += 50) {
       const frame = buildMockFrame(t, 1795276800000 + t)
@@ -115,5 +146,24 @@ describe('camera frame contract (schema 1)', () => {
       seen.add(frame.tracking_state)
     }
     expect([...seen].sort()).toEqual(['lost', 'partial', 'tracking'])
+  })
+})
+
+// Perception's fixture frames are the shared contract between perception and the
+// dashboard. They live outside frontend/, in perception/fixtures/. This block skips
+// (and says so in the test output) until those files exist in the repository.
+const FIXTURE_DIR = fileURLToPath(new URL('../../../perception/fixtures/', import.meta.url))
+const FIXTURES = ['frame_tracking.json', 'frame_partial.json', 'frame_lost.json']
+const fixturesPresent = FIXTURES.every((name) => existsSync(FIXTURE_DIR + name))
+
+describe.skipIf(!fixturesPresent)('perception fixtures (skipped until perception/fixtures/ is in the repo)', () => {
+  it.each(FIXTURES)('decodes %s from raw text with zero errors', (name) => {
+    const result = decodeCameraFrame(readFileSync(FIXTURE_DIR + name, 'utf8'))
+    expect(result.errors).toEqual([])
+  })
+
+  it('marks only the tracking fixture as actionable', () => {
+    const actionable = FIXTURES.map((name) => isActionable(JSON.parse(readFileSync(FIXTURE_DIR + name, 'utf8'))))
+    expect(actionable).toEqual([true, false, false])
   })
 })

@@ -1,8 +1,10 @@
-// Camera feature stream, docs/contracts.md section 1, schema "1".
+// Camera feature stream, docs/contracts.md section 1, schema "4".
 // Every field name, range and rule for this message lives in this file.
 // If the contract changes, this is the only frontend file that should change.
 
-export const SCHEMA_VERSION = '1'
+import { decodeJson, isIntegerField } from './json.js'
+
+export const SCHEMA_VERSION = '4'
 
 export const TRACKING_STATES = ['tracking', 'partial', 'lost']
 
@@ -59,8 +61,9 @@ export function isFiniteNumber(value) {
   return typeof value === 'number' && Number.isFinite(value)
 }
 
-export function isTimestampMs(value) {
-  return Number.isInteger(value) && value >= 0 && value <= MAX_TIMESTAMP_MS
+// obj[key] is a JSON integer timestamp in the safe range (Unix epoch ms).
+export function isTimestampMs(obj, key) {
+  return isIntegerField(obj, key) && obj[key] >= 0 && obj[key] <= MAX_TIMESTAMP_MS
 }
 
 // Pushes an error for every missing or undefined key. Shared by the contract modules.
@@ -69,7 +72,7 @@ export function checkExactKeys(obj, allowed, label, errors) {
     if (!allowed.includes(key)) errors.push(`${label}: unknown field "${key}"`)
   }
   for (const key of allowed) {
-    if (!(key in obj)) errors.push(`${label}: missing field "${key}"`)
+    if (!Object.hasOwn(obj, key)) errors.push(`${label}: missing field "${key}"`)
   }
 }
 
@@ -164,7 +167,7 @@ export function validateCameraFrame(msg) {
   if (msg.schema_version !== SCHEMA_VERSION) {
     errors.push(`schema_version: expected "${SCHEMA_VERSION}", got ${JSON.stringify(msg.schema_version)}`)
   }
-  if (!isTimestampMs(msg.timestamp_ms)) {
+  if (!isTimestampMs(msg, 'timestamp_ms')) {
     errors.push('timestamp_ms: must be an integer in the safe range (Unix epoch ms)')
   }
 
@@ -173,13 +176,20 @@ export function validateCameraFrame(msg) {
     errors.push(`tracking_state: must be one of ${TRACKING_STATES.join(', ')}`)
   }
 
-  const conf = msg.confidence
-  if (!isFiniteNumber(conf) || conf < 0 || conf > 1) {
-    errors.push('confidence: must be a finite number in [0, 1]')
-  } else if (state === 'tracking' && conf === 0) {
-    errors.push('confidence: must be in (0, 1] when tracking')
-  } else if (state === 'lost' && conf !== 0) {
-    errors.push('confidence: must be 0 when lost')
+  // confidence is a real per-frame score or null ("the result carried no score").
+  // null is NOT "face lost": a tracking frame with null confidence is still actionable.
+  // A missing key is still an error (reported by checkExactKeys above).
+  if (Object.hasOwn(msg, 'confidence')) {
+    const conf = msg.confidence
+    if (state === 'lost') {
+      if (conf !== null) errors.push('confidence: must be null when lost')
+    } else if (conf !== null) {
+      if (!isFiniteNumber(conf) || conf < 0 || conf > 1) {
+        errors.push('confidence: must be null or a finite number in [0, 1]')
+      } else if (state === 'tracking' && conf === 0) {
+        errors.push('confidence: must be null or in (0, 1] when tracking')
+      }
+    }
   }
 
   const features = msg.features
@@ -191,7 +201,7 @@ export function validateCameraFrame(msg) {
       else if (!isFiniteNumber(value) || value < 0 || value > 1) errors.push(`features.${name}: must be a number in [0, 1]`)
     }
     if (state === 'tracking') {
-      const missing = BLENDSHAPE_NAMES.filter((n) => !(n in features))
+      const missing = BLENDSHAPE_NAMES.filter((n) => !Object.hasOwn(features, n))
       if (missing.length > 0) errors.push(`features: tracking requires all 52 names, missing ${missing.length}`)
     }
     if (state === 'lost' && Object.keys(features).length > 0) {
@@ -199,7 +209,7 @@ export function validateCameraFrame(msg) {
     }
   }
 
-  if ('head_pose' in msg) {
+  if (Object.hasOwn(msg, 'head_pose')) {
     if (state === 'tracking') validateHeadPose(msg.head_pose, errors)
     else if (msg.head_pose !== null) errors.push('head_pose: must be null unless tracking')
   }
@@ -207,7 +217,14 @@ export function validateCameraFrame(msg) {
   return { valid: errors.length === 0, errors }
 }
 
-// Contract: actionable = tracking, confidence in (0, 1], all blendshapes, valid pose.
+// Contract: actionable = tracking, all blendshapes, valid pose, confidence null or in (0, 1].
 export function isActionable(msg) {
   return validateCameraFrame(msg).valid && msg.tracking_state === 'tracking'
+}
+
+// Raw JSON text (for example from a WebSocket) -> { valid, errors, message }. Never throws.
+export function decodeCameraFrame(text) {
+  const decoded = decodeJson(text)
+  if (!decoded.ok) return { valid: false, errors: [decoded.error], message: null }
+  return { ...validateCameraFrame(decoded.value), message: decoded.value }
 }

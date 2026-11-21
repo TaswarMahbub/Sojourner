@@ -1,4 +1,4 @@
-import { createMockCameraSource } from './data/mockCameraSource.js'
+import { createMockCameraSource } from './sources/mockCameraSource.js'
 import { useCameraStream } from './hooks/useCameraStream.js'
 import TrackingStatusPanel from './components/TrackingStatusPanel.jsx'
 
@@ -12,8 +12,10 @@ export default function App() {
   return (
     <main className="app">
       <header className="app__header">
-        <h1>Sojourner operator dashboard</h1>
-        <p>Research prototype: facial-movement control of a four-motor rover.</p>
+        <div>
+          <h1>Sojourner operator dashboard</h1>
+          <p>Research prototype: facial-movement control of a four-motor rover.</p>
+        </div>
       </header>
       <div className="app__grid">
         <TrackingStatusPanel {...camera} />
