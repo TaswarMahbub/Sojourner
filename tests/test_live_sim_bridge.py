@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 from demo.motor_bridge import DEFAULT_PORT, PORT_ENV, Fanout, OpLog, SharedCamera, TapReceiver, bridge_port
-from demo.run_live_sim import run_scripted
+from demo.run_live_sim import advance_after_run, main as run_live_sim_main, run_replayed, run_scripted
 from tests.control_auth import TEST_KEY
 from tests.motor_receiver import MotorReceiver
 from tests.session_harness import SimClock
@@ -169,3 +169,61 @@ def test_shared_camera_relays_each_frame_once_and_passes_items_through():
     assert [json.loads(t) for t in relay.sent] == [{"timestamp_ms": 1}]
     shared.close()
     assert source.closed
+
+
+def _constructed_recording(path: Path) -> dict:
+    """A recording in the probe-recording shape, of constructed frames only: rest, Go, a yaw turn, rest."""
+    from tests.run_doorway_e2e import posed_frame, synthetic_profile
+
+    profile = synthetic_profile()
+    rest = {b["channel"]: b["rest_mean"] for b in profile["bindings"]}
+    t0 = 1795276800000
+    plan = [("rest", 20), ("jaw", 2), ("rest", 20), ("left", 2), ("rest", 30)]
+    records = [{"record_type": "session_header", "protocol_kind": "constructed_test", "measured": False}]
+    i = 0
+    for action, frames in plan:
+        for _ in range(frames):
+            values = {"jaw": rest["jawOpen"], "yaw": rest["yaw_deg"], "pitch": rest["pitch_deg"], "roll": 0.0}
+            if action == "jaw":
+                values["jaw"] = 0.45
+            if action == "left":
+                values["yaw"] = rest["yaw_deg"] + 25.0
+            records.append({"record_type": "frame", "message": posed_frame(t0 + 50 * i, **values)})
+            i += 1
+    records.append({"record_type": "session_end", "ended_ms": t0 + 50 * i})
+    path.write_text("\n".join(json.dumps(r) for r in records) + "\n")
+    return profile
+
+
+def test_replay_mode_streams_recorded_frames_through_the_same_pipeline(tmp_path):
+    profile = _constructed_recording(tmp_path / "rec.jsonl")
+    clock = SimClock()
+    log = OpLog(clock_ms=lambda: clock.unix)
+    run_replayed(clock, tmp_path / "state", log, tmp_path / "rec.jsonl", profile, out=lambda _l: None)
+    accepted = [json.loads(base64.b64decode(r["op"]["raw_b64"])) for r in log.records
+                if r["op"]["op"] == "datagram" and r["result"] == "accepted_motion"]
+    assert accepted, "the replayed Go produced no accepted motion"
+    assert any(m["angular_rad_s"] > 0 for m in accepted), "the replayed yaw turn produced no left angular command"
+    assert replay(log) == [r["result"] for r in log.records]
+
+
+def test_replay_mode_requires_the_users_profile():
+    with pytest.raises(SystemExit):
+        run_live_sim_main(["--replay", "anything.jsonl"])
+
+
+def test_after_the_run_the_receiver_watchdog_halts_a_moving_rover(tmp_path):
+    """A run that ends while moving must not leave the mirror showing torque on forever."""
+    profile = _constructed_recording(tmp_path / "rec.jsonl")
+    clock = SimClock()
+    log = OpLog(clock_ms=lambda: clock.unix)
+    pipeline = run_replayed(clock, tmp_path / "state", log, tmp_path / "rec.jsonl", profile, out=lambda _l: None)
+    rx = pipeline.rig.receiver
+    assert rx.motors_have_torque(), "the constructed recording should end while moving"
+    for _ in range(6):
+        clock.advance(50)
+        advance_after_run(pipeline.rig)
+    assert not rx.motors_have_torque() and rx.fault_latch
+    # The browser mirror sees the same clock advances and so the same watchdog halt.
+    assert replay(log) == [r["result"] for r in log.records]
+    assert log.records[-1]["op"]["op"] == "mono"

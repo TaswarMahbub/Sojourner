@@ -54,6 +54,28 @@ python3 -m demo.run_live_sim --probe-report captures/calibration/<...>_probe_rep
 Jaw open = Go from Hold and Stop while moving; head lift/down = faster/slower; turn left/right =
 15° heading increments (`control/cue_map.py`). Looking away stops the rover (signal loss).
 
+Add `--record captures/control/live_sim_<name>.jsonl` to keep the measured frames, then replay them
+through the same pipeline and the browser mirror (labelled REPLAY, nothing re-detected):
+
+```zsh
+python3 -m demo.run_live_sim --replay captures/control/live_sim_<name>.jsonl --probe-report <report>
+python3 -m demo.run_live_sim --replay captures/calibration/<...>_probe.jsonl --probe-report <report>
+```
+
+### Head gestures: what the measured data shows
+
+- **Turn your head about 25–35°, hold about 1 s, and come back.** One Left/Right cue is one 15°
+  heading increment at 0.5 rad/s, so it takes about 0.5 s. In the probe recording, MediaPipe lost
+  the face every time the head went past about 44–58° of yaw. Losing the face is a signal-loss Stop
+  with a 2.5 s Go lockout, and the lockout discards the pending turn: a large turn stops the rover
+  instead of turning it.
+- **Head gestures only change the task.** In Hold a turn waits for Go and a speed change shows
+  nothing; Faster/Slower step the speed by 0.05 m/s. Watch the readout's `yaw` and `output` lines
+  and the top-down inset: the chase camera turns with the rover, so a 15° turn looks small in 3D.
+- **Sit for the calibration exactly as for the demo.** A side of a channel arms only after the value
+  has been back inside its deadband. If your resting head pose is outside the calibrated deadband
+  (for example, resting pitch above `deadband.upper`), that side never arms and the cue never fires.
+
 Do **not** run `python -m perception.publish` at the same time: the demo process owns the camera
 and relays its frames on 8765 itself (`--no-frame-relay` turns that off).
 

@@ -8,6 +8,11 @@ Fallback, no camera (scripted, synthetic frames through the same pipeline, in re
 
     python -m demo.run_live_sim --synthetic
 
+Replay of MEASURED frames (a probe recording or a --record file), in real time, with
+the user's profile. Labelled REPLAY on every line; nothing is re-detected:
+
+    python -m demo.run_live_sim --replay RECORDING.jsonl --probe-report PROBE_REPORT.json
+
 Both modes run the unmodified control/ code through tests/session_harness.py,
 exactly as tests/run_live_e2e.py does. The receiver is the in-process contract
 oracle, wrapped by demo/motor_bridge.TapReceiver, and every receiver call is
@@ -46,7 +51,10 @@ from tests.session_harness import (  # noqa: E402
     CameraThread,
     HarnessRig,
     Pipeline,
+    Recorder,
+    ReplaySource,
     WallClock,
+    load_recording,
     run_loop,
     start,
 )
@@ -148,17 +156,32 @@ def run_scripted(clock, state_dir: Path, sink, *, out=print, every_tick=False) -
     return pipeline
 
 
+def run_replayed(clock, state_dir: Path, sink, recording: Path, profile: dict, *, out=print,
+                 every_tick=False) -> Pipeline:
+    """Recorded frames through the unmodified pipeline, at their recorded offsets (tests/session_harness.ReplaySource)."""
+    _header, records = load_recording(recording)
+    rig = build(clock, state_dir, sink)
+    pipeline = Pipeline(rig, profile, CUE_MAP, label="REPLAY", out=out, every_tick=every_tick)
+    run_loop(pipeline, ReplaySource(records, clock))
+    return pipeline
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--probe-report", type=Path, help="probe report JSON for the live profile")
+    parser.add_argument("--probe-report", type=Path, help="probe report JSON: the user's calibration profile")
+    mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--synthetic", action="store_true", help="no camera: scripted synthetic frames")
+    mode.add_argument("--replay", type=Path, help="replay a recording of measured frames (needs --probe-report)")
+    parser.add_argument("--record", type=Path, default=None,
+                        help="live mode: also record frames to this JSONL (local, gitignored under captures/)")
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--model", type=Path, default=None)
     parser.add_argument("--seconds", type=float, default=300.0)
     parser.add_argument("--no-frame-relay", action="store_true", help=f"do not serve frames on {CAMERA_PORT}")
     parser.add_argument("--every-tick", action="store_true")
     args = parser.parse_args(argv)
+    if not args.synthetic and args.probe_report is None:
+        parser.error("--probe-report is required for the live camera and for --replay")
     logging.basicConfig(stream=sys.stdout, level=logging.WARNING, format=f"{LABEL} | log %(name)s: %(message)s")
 
     port = bridge_port()
@@ -175,16 +198,15 @@ def main(argv=None) -> int:
                 print(f"{LABEL} | synthetic scripted frames, not a camera and not measured")
                 pipeline = run_scripted(clock, Path(tmp), log, every_tick=args.every_tick)
                 pipeline.print_summary()
-                print(f"{LABEL} | script finished; the bridge keeps serving the session. Ctrl-C to stop.")
-                try:
-                    while True:
-                        time.sleep(1)
-                except KeyboardInterrupt:
-                    pass
-                return 0
+                return _serve_until_interrupted(pipeline.rig)
             from tests.run_live_e2e import profile_from
 
             profile, source = profile_from(args.probe_report, accepted_by="live sim demo")
+            if args.replay is not None:
+                print(f"REPLAY | {args.replay}: recorded MEASURED frames, NOT live; profile {source}")
+                pipeline = run_replayed(clock, Path(tmp), log, args.replay, profile, every_tick=args.every_tick)
+                pipeline.print_summary()
+                return _serve_until_interrupted(pipeline.rig)
             print(f"{LABEL} | live camera {args.camera}; profile {source}; cue map control/cue_map.py")
             # Open the camera before arming: arming starts the 250 ms watchdog (as run_live_e2e.py does).
             try:
@@ -197,7 +219,10 @@ def main(argv=None) -> int:
                 print(f"{LABEL} | camera frames relayed on ws://127.0.0.1:{relay.port} for the dashboard")
             frames = SharedCamera(camera, relay)
             rig = build(clock, Path(tmp), log)
-            pipeline = Pipeline(rig, profile, CUE_MAP, label=LABEL, every_tick=args.every_tick)
+            recorder = Recorder(args.record) if args.record is not None else None
+            if recorder is not None:
+                print(f"{LABEL} | recording frames to {args.record} (replay with --replay)")
+            pipeline = Pipeline(rig, profile, CUE_MAP, label=LABEL, every_tick=args.every_tick, recorder=recorder)
             try:
                 run_loop(pipeline, frames, duration_s=args.seconds)
             except KeyboardInterrupt:
@@ -205,10 +230,35 @@ def main(argv=None) -> int:
             finally:
                 frames.close()
             pipeline.print_summary()
+            if recorder is not None:
+                recorder.close()
     finally:
         bridge.close()
         if relay is not None:
             relay.close()
+    return 0
+
+
+def advance_after_run(rig: HarnessRig) -> None:
+    """The run has ended: the laptop sends nothing more, but a receiver's clock keeps running.
+
+    Advancing the oracle's clock lets its own watchdog halt a rover that was still moving, exactly
+    as a receiver whose laptop went silent would, and the browser mirror shows that halt.
+    """
+    rig.sync()
+
+
+def _serve_until_interrupted(rig: HarnessRig) -> int:
+    print(f"{LABEL} | finished; no more datagrams. The receiver clock keeps running (its watchdog halts a "
+          f"moving rover) and the bridge keeps serving late browsers. Ctrl-C to stop.")
+    try:
+        for _ in range(600):  # 30 s of receiver clock, then serve the frozen session
+            advance_after_run(rig)
+            time.sleep(0.05)
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
     return 0
 
 

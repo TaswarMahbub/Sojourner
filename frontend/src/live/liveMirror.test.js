@@ -63,6 +63,17 @@ describe('live mirror of the software-only control run', () => {
     expect(movedOnRefusal).toBe(false)
   })
 
+  it('applies the Left cue as angular output and rotates the rover by one 15 degree increment', () => {
+    let maxAngular = 0
+    replay(hello, (record, result, _before, mirror) => {
+      if (record.op.op === 'datagram' && result === 'accepted_motion') maxAngular = Math.max(maxAngular, mirror.receiver.angularRadS)
+    })
+    expect(maxAngular).toBeCloseTo(0.5, 6) // control/task.py TURN_RATE_RAD_S, positive = left (contracts section 3)
+    const headingDeg = (replay().view().pose.heading * 180) / Math.PI
+    expect(headingDeg).toBeGreaterThan(14) // one TURN_INCREMENT_RAD, at most one tick of overshoot
+    expect(headingDeg).toBeLessThan(17.5)
+  })
+
   it('drives the corridor rover forward and ends halted by the watchdog after the link drop', () => {
     const mirror = replay()
     const view = mirror.view()
