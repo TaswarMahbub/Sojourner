@@ -73,6 +73,15 @@ KNOWN RESIDUAL RISKS
    deceleration is not included because it has not been measured. Cost: a
    deliberate Go within 2.5 s of an uncued stop is ignored, which is felt
    most at the demo's closing beat, the signal-loss stop.
+7. The speed setting drifts without feedback. An incidental head-down
+   while in Hold fires Slower; Hold does not move, so nothing on the chair
+   shows it, and the next Go starts at the lower speed. Seen in the live
+   end-to-end run (v=0.05 before the first Go) and again in both live
+   smoke runs on 2026-11-22 (Slower in Hold at 3.6 s and at 2.2 s, with
+   nobody cueing). The setting is deliberately NOT reset automatically;
+   the drift is made visible instead: tests/session_harness.py prints v on
+   every transcript line and lists every speed change in the summary,
+   flagging the ones made in Hold. Only the Go lockout resets it (item 6).
 
 This map is PROVISIONAL until it is reviewed with the safety owner. It is
 data only; control/tiers.py validates it against a profile, and nothing here

@@ -48,7 +48,7 @@ All three tiers produce the same `Cue` stream (`tiers.py`). The calibration prof
 | turn right | Right |
 | roll | unbound |
 
-Go and Stop share the jaw so that Stop stays on the most reliable, fastest channel, and so that no incidental movement can start the chair: no other gesture reaches above 0.13 of the jaw threshold. `CueBinding(..., moving_cue=STOP)` is the context-dependent form, and on the stop channel it is the only alternative to plain Stop. The module docstring lists the six known residual risks with their numbers.
+Go and Stop share the jaw so that Stop stays on the most reliable, fastest channel, and so that no incidental movement can start the chair: no other gesture reaches above 0.13 of the jaw threshold. `CueBinding(..., moving_cue=STOP)` is the context-dependent form, and on the stop channel it is the only alternative to plain Stop. The module docstring lists the seven known residual risks with their numbers.
 
 **Go lockout.** Any stop the user did not cue starts a 2.5 s lockout (`GO_LOCKOUT_MS` in `task_controller.py`). That covers signal loss, low confidence, and the publisher not sending a requested motion (which includes a fault and an estop). During the lockout the jaw reads as Stop, never Go, and no cue from any source can take the task out of Hold. The lockout also resets the pending turn and the speed setting to defaults when it starts and again when it ends. It is there because the jaw's meaning follows the task state, and right after an uncued stop the task is Hold while the chair may still look like it is moving. Run `python tests/run_doorway_e2e.py [probe_report.json]` to see the map end to end.
 
@@ -79,3 +79,21 @@ python tests/run_task_controller_e2e.py
 ```
 
 The scripted run drives the publisher against the `MotorReceiver` contract oracle. It is not firmware and it is not a hardware test.
+
+## Evidence: stop latency, failure drills, replay
+
+These produce transcripts and numbers rather than features. All of them drive the unmodified controller and publisher through `tests/session_harness.py`, against the in-process `MotorReceiver` contract oracle, so none of them is a hardware test.
+
+```
+python tests/run_live_e2e.py --probe-report PROBE_REPORT.json [--model face_landmarker.task] [--seconds 60]
+python tests/run_replay.py captures/control/live_<UTC>.jsonl [--fast]
+python tests/drills.py a|b|c|d|e|f|all
+```
+
+**Stop latency** (`latency.py`). For each stop of a moving chair, the time from evidence to torque off, split into four parts. A cued stop is measured from the capture of the first frame past the stop threshold. A signal-loss stop is measured from the last actionable frame. The parts are: frame to cue (or loss) detected, cue to request, request to datagram sent, and datagram to receiver torque off. The summary gives the median, worst case and count of each part and of the total, compares the total with the project report's 150 ms budget, and names the part that spends the most. Two parts are over budget by design and not tuned: a sustained crossing needs two frames, so at 20 fps one frame interval is always spent, and a camera that stops delivering is caught only once the newest frame is older than 250 ms. A stop that could not be measured is listed with the reason. "Datagram to torque off" is the oracle's handling time, not the rover's: there is no radio hop and no ESP32 in it.
+
+**Drills** (`tests/drills.py`, also run as tests by `tests/test_drills.py`): (a) camera disconnected, (b) face leaves the frame, (c) light drops, (d) a deliberate wrong cue on the unbound roll axis, (e) operator estop, rearm and recovery, (f) laptop process restart. Each drill prints a transcript, asserts its outcomes and ends with one verdict line. Drill f shows the status gate across a restart. The high-water marks survive the kill, process 1's signed status and the receiver's current status are both refused until a new challenge above the persisted mark has been issued and echoed, motion also waits for an operator rearm, and eight kinds of corrupt state all lock the gate. Drill f also records two limits. First, with a corrupt gate file the laptop cannot send even an estop, because it holds no durable challenge id; the receiver's watchdog and the physical estop are what stop the chair. Second, an older but valid gate file restored into a fresh process is accepted, because the rollback check compares against marks held in memory and a fresh process holds none.
+
+**Replay** plays a recorded session's frames back at their recorded arrival offsets through a fresh controller, publisher, gate and receiver. Every line and the summary are prefixed `REPLAY`. Frames are re-stamped to replay time, and detector inference is not re-run.
+
+**Speed setting.** Every transcript line shows `v`, and the summary lists each speed change, flagging the ones made in Hold (residual risk 7 in `cue_map.py`). The setting is not reset automatically.
