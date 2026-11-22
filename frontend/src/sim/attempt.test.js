@@ -17,19 +17,25 @@ function walk(a, poses, t0 = 0) {
   return t
 }
 
-// The optimal path, sampled at 1 cm, with the in-place turns as zero-length heading changes.
+// A polyline sampled at 1 cm, each leg driven at its own heading (heading changes are free here:
+// these tests exercise the attempt's bookkeeping, not the drive).
+function polylinePoses(points, headings = []) {
+  const out = []
+  for (let k = 1; k < points.length; k += 1) {
+    const a = points[k - 1]
+    const b = points[k]
+    const h = headings[k - 1] ?? Math.atan2(b.y - a.y, b.x - a.x)
+    const n = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 0.01)
+    for (let i = k === 1 ? 0 : 1; i <= n; i += 1) out.push({ x: a.x + ((b.x - a.x) * i) / n, y: a.y + ((b.y - a.y) * i) / n, heading: h })
+  }
+  return out
+}
+
+// The optimal path, nudged one micrometre past the goal so the rear edge is strictly inside the room.
 function optimalPoses() {
   const [p0, p1, p2] = W.optimalPath
-  const h1 = Math.atan2(p1.y - p0.y, p1.x - p0.x)
-  const out = []
-  const leg = (a, b, h) => {
-    const n = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 0.01)
-    for (let i = 0; i <= n; i += 1) out.push({ x: a.x + ((b.x - a.x) * i) / n, y: a.y + ((b.y - a.y) * i) / n, heading: h })
-  }
-  leg(p0, p1, h1)
-  // Nudge one micrometre past the goal so the rear edge is strictly inside the room.
-  leg(p1, { x: p2.x, y: p2.y - 1e-6 }, DOWN)
-  return out
+  // The goal is defined at heading −Y, so the final leg is driven at −Y.
+  return polylinePoses([p0, p1, { x: p2.x, y: p2.y - 1e-6 }], [undefined, DOWN])
 }
 
 describe('Attempt lifecycle', () => {
@@ -69,20 +75,27 @@ describe('Attempt lifecycle', () => {
     expect(r.provenance).toEqual(provenance)
     expect(r.provenance).not.toBe(provenance) // copied, not aliased
     expect(Object.isFrozen(r)).toBe(true)
-    expect(r.collisions).toBe(0)
-    expect(r.max_penetration_m).toBe(0)
-    // Driving the optimal path itself scores (to sampling precision) a path efficiency of 1.
+    // Tracing the optimal path itself scores (to sampling precision) a path efficiency of 1. It is
+    // the inscribed circle's path, so the rectangle tracing it may touch the near jamb: not checked.
     expect(r.path_efficiency).toBeCloseTo(1, 6)
     expect(r.time_to_clear_s).toBeGreaterThan(0)
   })
 
-  it('the in-place turn at the optimal path approach point is legal through the whole turn', () => {
-    const [p0, approach] = W.optimalPath
-    const h0 = Math.atan2(approach.y - p0.y, approach.x - p0.x)
-    for (let k = 0; k <= 200; k += 1) {
-      const c = checkPose({ ...approach, heading: h0 + ((DOWN - h0) * k) / 200 }, W)
-      expect(c.penetration).toBe(0)
-    }
+  it('a route the rectangle can actually drive scores a path efficiency above 1', () => {
+    // Straight to the door centreline, turn in place clear of the rail line, straight in.
+    const approach = { x: 7.5, y: -W.bounds.railY + Math.hypot(0.845, 0.65) / 2 }
+    const goal = { x: 7.5, y: W.optimalPath[2].y - 1e-6 }
+    const emitted = []
+    const a = new Attempt({ world: W, onEmit: (r) => emitted.push(r) })
+    a.arm()
+    a.command(go(0))
+    const poses = polylinePoses([{ x: 0, y: 0 }, approach, goal])
+    walk(a, poses)
+    expect(emitted).toHaveLength(1)
+    expect(emitted[0].collisions).toBe(0)
+    expect(emitted[0].max_penetration_m).toBe(0)
+    expect(emitted[0].path_efficiency).toBeGreaterThan(1)
+    expect(emitted[0].path_efficiency).toBeLessThan(1.05)
   })
 
   it('an explicit reset while running emits once with ended_by "reset"', () => {

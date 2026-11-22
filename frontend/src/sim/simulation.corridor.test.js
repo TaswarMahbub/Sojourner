@@ -100,10 +100,12 @@ describe('Simulation in the corridor world', () => {
   it('stalls against the end wall instead of passing through it, and records one collision', () => {
     const { sim, tick } = armed({ world: CORRIDOR_WORLD })
     sim.setDrive({ linear: 0.3, angular: 0 })
-    tick(45000) // 12 m of commanded travel; the end wall is 11.4 m away
+    tick(45000) // 13.5 m of commanded travel; the end wall is 11.2 m away
+    const endX = CORRIDOR_WORLD.bounds.x1
+    expect(endX).toBeCloseTo(11.2, 12)
     expect(sim.contact).toBe('end_wall')
-    expect(sim.pose.x + 0.4225).toBeLessThanOrEqual(11.4)
-    expect(sim.pose.x + 0.4225).toBeGreaterThan(11.4 - 0.001 - 1e-9)
+    expect(sim.pose.x + 0.4225).toBeLessThanOrEqual(endX)
+    expect(sim.pose.x + 0.4225).toBeGreaterThan(endX - 0.001 - 1e-9)
     expect(sim.clearance.penetration).toBe(0)
     expect(sim.attempt.metrics.collisions).toBe(1)
   })
@@ -171,5 +173,41 @@ describe('Simulation in the corridor world', () => {
       return sim.resetAttempt()
     }
     expect(run()).toEqual(run())
+  })
+
+  it('hesitation comes from receiver state: rest while armed to the next accepted motion', () => {
+    const { sim, tick } = armed({ world: CORRIDOR_WORLD })
+    expect(sim.cueAvailable()).toBe(true)
+    tick(1000)
+    sim.setDrive({ linear: 0.2, angular: 0 })
+    tick(500)
+    expect(sim.cueAvailable()).toBe(false) // moving
+    sim.setDrive(null)
+    tick(500) // drill sends a stop; the receiver comes to rest
+    expect(sim.cueAvailable()).toBe(true)
+    sim.setDrive({ linear: 0, angular: 0.6 })
+    tick(500)
+    const r = sim.resetAttempt()
+    expect(r.hesitation_s).toHaveLength(2)
+    expect(r.hesitation_s[0]).toBeGreaterThanOrEqual(1.0)
+    expect(r.hesitation_s[0]).toBeLessThan(1.45)
+    expect(r.hesitation_s[1]).toBeGreaterThan(0.2)
+    expect(r.hesitation_s[1]).toBeLessThan(0.6)
+  })
+
+  it('a latch ends availability and drops the pending dwell', () => {
+    const { sim, tick } = armed({ world: CORRIDOR_WORLD })
+    sim.setDrive({ linear: 0.2, angular: 0 })
+    tick(300) // attempt running
+    sim.setDrive(null)
+    tick(300)
+    expect(sim.cueAvailable()).toBe(true)
+    sim.softwareEstop()
+    tick(20)
+    expect(sim.cueAvailable()).toBe(false)
+    sim.setDrive({ linear: 0.2, angular: 0 })
+    tick(500) // latched: motion is refused, so nothing commits
+    const r = sim.resetAttempt()
+    expect(r.hesitation_s).toHaveLength(1) // only the first start from rest
   })
 })

@@ -1064,7 +1064,8 @@ rotation lag.
 
 **T7.3 — Occlusion handling.** Sphere-cast the arm against the collision world
 each step; pull in on a hit. Inside the room, the arm shortens automatically
-because the room is 3.6 m deep. The camera must never clip through a wall and
+because the room is 4.2 m deep (3.6 m along the corridor × 4.2 m deep, per
+the Phase 3 table). The camera must never clip through a wall and
 must never end up outside the building — both read as broken software, and
 broken software is worse for the medical framing than almost anything else.
 

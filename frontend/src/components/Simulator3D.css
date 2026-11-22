@@ -1,0 +1,64 @@
+/* Phase 2 grey-box layout. The readout and the plan are DOM above the canvas, never in the scene. */
+
+.sim3d__stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 320px;
+  border-radius: calc(var(--radius) - 4px);
+  overflow: hidden;
+  background: var(--color-surface-raised);
+}
+
+.sim3d__stage:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.sim3d__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.sim3d__readout {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  margin: 0;
+  padding: 8px 10px;
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  color: #f2f3f5;
+  background: rgb(18 22 28 / 0.78);
+  border-radius: 6px;
+  white-space: pre;
+  pointer-events: none;
+}
+
+.sim3d__inset {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 240px;
+  padding: 6px;
+  background: rgb(18 22 28 / 0.78);
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+.sim3d__controls { margin-top: 0.75rem; flex-wrap: wrap; }
+
+/* Plan view (also the 2D fallback). */
+.plan { margin: 0; color: #f2f3f5; }
+.plan svg { display: block; width: 100%; height: auto; }
+.plan--large { width: 100%; height: 100%; padding: 16px; box-sizing: border-box; color: var(--color-text); }
+.plan--large svg { height: calc(100% - 1.5em); }
+.plan figcaption { font: 12px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; font-variant-numeric: tabular-nums; }
+.plan__room { fill: rgb(160 166 176 / 0.18); stroke: none; }
+.plan__wall { stroke: currentColor; stroke-width: 0.06; stroke-linecap: square; }
+.plan__face { stroke: currentColor; stroke-width: 0.02; opacity: 0.45; }
+.plan__rail { stroke: currentColor; stroke-width: 0.03; opacity: 0.8; }
+.plan__footprint { fill: rgb(200 80 30 / 0.35); stroke: #e0703a; stroke-width: 0.025; }
+.plan__heading { stroke: #e0703a; stroke-width: 0.03; }
+.plan__pivot { fill: #e0703a; }

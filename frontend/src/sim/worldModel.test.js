@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CORRIDOR_WORLD as W, createCorridorWorld, swingRadius } from './worldModel.js'
 import { checkPose } from './collision.js'
-import { NEAR_MISS_THRESHOLD_M } from './constants.js'
+import { DOORWAY_CLEARANCE_PER_SIDE_M, NEAR_MISS_THRESHOLD_M } from './constants.js'
 
 const byId = (id) => W.segments.find((s) => s.id === id)
 
@@ -15,6 +15,22 @@ describe('corridor world', () => {
   it('spawns at the origin facing +X, in a 12.00 m corridor', () => {
     expect(W.spawn).toEqual({ x: 0, y: 0, heading: 0 })
     expect(W.bounds.x1 - W.bounds.x0).toBeCloseTo(12, 12)
+    expect(W.bounds.x0).toBeCloseTo(-0.8, 12)
+    expect(W.bounds.x1).toBeCloseTo(11.2, 12)
+  })
+
+  it('a turn in place at spawn keeps every corner at least 0.25 m from the back wall (I-2)', () => {
+    // A full 360° at spawn: the swept footprint is the swing-radius circle. The margin must sit well
+    // clear of the 0.05 m near-miss threshold, or a reorientation at the start pollutes metric 2.
+    let min = Infinity
+    for (let k = 0; k < 360; k += 1) {
+      const r = checkPose({ x: 0, y: 0, heading: (k * Math.PI) / 180 }, W)
+      expect(r.penetration).toBe(0)
+      min = Math.min(min, r.clearance)
+    }
+    expect(min).toBeGreaterThan(0.25)
+    expect(min - NEAR_MISS_THRESHOLD_M).toBeGreaterThan(0.2)
+    expect(W.bounds.x0 + swingRadius()).toBeCloseTo(-0.267, 3)
   })
 
   it('puts the doorway 7.50 m from spawn in the right-hand wall, 0.815 m clear', () => {
@@ -42,11 +58,12 @@ describe('corridor world', () => {
     expect(byId('rail_right_far_return').a.x).toBe(j1.x)
   })
 
-  it('builds a 4.20 m × 3.60 m deep room behind the door', () => {
+  it('builds a room 3.60 m along the corridor and 4.20 m deep behind the door', () => {
     const xs = W.room.map((p) => p.x)
     const ys = W.room.map((p) => p.y)
-    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(4.2, 12)
-    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(3.6, 12)
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(3.6, 12)
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(4.2, 12)
+    expect((Math.max(...xs) + Math.min(...xs)) / 2).toBeCloseTo(7.5, 12)
     expect(Math.max(...ys)).toBeCloseTo(-1.22, 12)
   })
 
@@ -58,15 +75,36 @@ describe('corridor world', () => {
     }
   })
 
-  it('has an optimal path that ends with the whole footprint in the room and is itself legal', () => {
-    const [start, approach, goal] = W.optimalPath
+  it('the door aperture for the footprint centre is exactly 2 × 82.5 mm', () => {
+    expect(W.inscribedRadius).toBeCloseTo(0.325, 12)
+    expect(W.centreAperture.width).toBeCloseTo(0.165, 12)
+    expect(W.centreAperture.width).toBeCloseTo(2 * DOORWAY_CLEARANCE_PER_SIDE_M, 12)
+    expect(W.centreAperture.x1 - W.centreAperture.x0).toBeCloseTo(0.165, 12)
+  })
+
+  it('optimal path is the inscribed-circle taut path bending at the inflated near-jamb corner', () => {
+    const [start, bend, goal] = W.optimalPath
     expect(start).toEqual({ x: 0, y: 0 })
-    expect(approach.y).toBeCloseTo(-W.bounds.railY + swingRadius(), 12)
+    expect(bend.x).toBeCloseTo(7.4175, 12)
+    expect(bend.y).toBeCloseTo(-0.685, 12)
+    expect(goal.x).toBeCloseTo(7.5, 12)
     expect(goal.y).toBeCloseTo(-1.22 - 0.845 / 2, 12)
-    expect(W.optimalPathLength).toBeCloseTo(Math.hypot(7.5, approach.y) + (approach.y - goal.y), 12)
-    // Down the final leg, heading −Y, the footprint never penetrates anything.
-    for (let y = approach.y; y >= goal.y; y -= 0.01) {
-      expect(checkPose({ x: 7.5, y, heading: -Math.PI / 2 }, W).penetration).toBe(0)
-    }
+    expect(Math.hypot(bend.x, bend.y)).toBeCloseTo(7.4491, 4)
+    expect(Math.hypot(goal.x - bend.x, goal.y - bend.y)).toBeCloseTo(0.961, 4)
+    expect(W.optimalPathLength).toBeCloseTo(8.4101, 4)
+    expect(W.straightLineFloor).toBeCloseTo(7.6777, 4)
+    expect(W.optimalPathLength).toBeGreaterThan(W.straightLineFloor)
+    // The final leg passes through the centre aperture.
+    const tAtDoor = (-1.1 - bend.y) / (goal.y - bend.y)
+    const xAtDoor = bend.x + (goal.x - bend.x) * tAtDoor
+    expect(xAtDoor).toBeGreaterThanOrEqual(W.centreAperture.x0)
+    expect(xAtDoor).toBeLessThanOrEqual(W.centreAperture.x1)
+  })
+
+  it('the goal pose has the whole footprint in the room and is itself legal', () => {
+    const goal = W.optimalPath[2]
+    const c = checkPose({ x: goal.x, y: goal.y - 1e-6, heading: -Math.PI / 2 }, W)
+    expect(c.penetration).toBe(0)
+    expect(c.clearance).toBeGreaterThan(0.08)
   })
 })

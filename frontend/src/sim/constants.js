@@ -8,7 +8,7 @@
 // Frame: ROS REP-103 throughout. +X forward (down the corridor), +Y left, +Z up, yaw CCW positive.
 // Units: metres, seconds, radians, unless a name says otherwise.
 //
-// Sources: docs/handoff.md (rev 2, 22 Nov 2026) and docs/answers-for-davinas-claude.md
+// Sources: docs/handoff.md (rev 2, 22 Nov 2026) and docs/sim-decisions.md
 // (22 Nov 2026). Where they disagree, the answers file wins (doorway 0.815 m, handrails in the
 // collision world).
 
@@ -85,26 +85,68 @@ export const CORRIDOR_LENGTH_M = 12.0
 export const CEILING_HEIGHT_M = 2.7
 /** Doorway centre, measured along +X from spawn. Right-hand wall (−Y side). */
 export const DOORWAY_CENTRE_X_M = 7.5
+/**
+ * Door leaf. NOT in the collision world (ruled by Mridhul, 22 Nov 2026). Held flat against the
+ * corridor wall it would sit at y = −1.06, behind the handrail face at −1.01, so the rail already
+ * dominates — but leaf and rail would then physically interfere. So the door is hung to open INTO
+ * THE ROOM. Phase 3 visual model: hinge on the room side of the frame, leaf swung into the room.
+ */
 export const DOOR_LEAF_M = 0.9
+export const DOOR_OPENS_INTO = 'room'
 export const DOOR_HEAD_HEIGHT_M = 2.1
 /** Frame reveal depth = wall thickness. It is what a swinging corner catches. */
 export const FRAME_REVEAL_DEPTH_M = 0.12
 export const WALL_THICKNESS_M = 0.12
 export const THRESHOLD_HEIGHT_M = 0 // flush, level access
-/** Clinician room: 4.20 m along the corridor (X) × 3.60 m deep (−Y). The handoff's camera
- *  section calls the room "3.6 m deep", which fixes the orientation. */
-export const ROOM_WIDTH_ALONG_CORRIDOR_M = 4.2
-export const ROOM_DEPTH_M = 3.6
+/** Clinician room: 3.60 m along the corridor (X) × 4.20 m deep (−Y). The Phase 3 table
+ *  (3.60 × 4.20, corridor axis first) is authoritative; ruled by Mridhul, 22 Nov 2026. */
+export const ROOM_WIDTH_ALONG_CORRIDOR_M = 3.6
+export const ROOM_DEPTH_M = 4.2
 export const ROOM_CEILING_HEIGHT_M = 2.7
 
 /**
  * Spawn setback: distance from the corridor's back wall to the spawn pose (footprint centre).
  * The handoff puts spawn at 0.0 and the doorway 7.50 m from spawn, inside a 12.00 m corridor, but
- * does not say where spawn sits relative to the back wall. 0.60 m is the smallest round figure that
- * lets the avatar turn in place at spawn (swing radius 0.533 m) without breaching the 0.05 m
- * near-miss threshold. INTERPRETATION — CONFIRM with Mridhul.
+ * does not say where spawn sits relative to the back wall.
+ *
+ * 0.80 m (revised 22 Nov 2026, issue I-2; was 0.60 m). A turn in place at spawn sweeps the swing
+ * radius (0.533 m), so the back-wall margin while reorienting is 0.80 − 0.533 = 0.267 m. At 0.60 m
+ * it was 0.067 m — 17 mm above the 0.05 m near-miss threshold — so any attempt that opened with a
+ * reorientation risked logging a near-miss against a wall the driver never approached, which would
+ * contaminate metric 2. Spawn stays at the origin; the corridor extent becomes −0.80 → 11.20 and the
+ * doorway stays 7.50 m from spawn.
  */
-export const SPAWN_SETBACK_M = 0.6
+export const SPAWN_SETBACK_M = 0.8
+
+// ---------------------------------------------------------------------------------------------
+// Visual-only architecture (Phase 3 shell). NONE of these are in the collision world: worldModel
+// does not read them and no metric can depend on them. They live here so the renderer and its
+// geometry tests share one source of truth with the dimension table.
+// ---------------------------------------------------------------------------------------------
+
+/** End-of-corridor window, centred on the corridor axis in the end wall. Handoff Phase 3 table. */
+export const END_WINDOW_M = Object.freeze({ width: 1.6, height: 1.4, sill: 0.9 })
+/** Room window, centred in the room's far wall. Sill not given in the handoff; 0.90 m to match. */
+export const ROOM_WINDOW_M = Object.freeze({ width: 1.2, height: 1.4, sill: 0.9 })
+/** Suspended ceiling: 600 mm grid, 24 mm exposed tee. */
+export const CEILING_TILE_M = 0.6
+export const CEILING_TEE_M = Object.freeze({ width: 0.024, drop: 0.008 })
+/** Recessed ceiling troughs: 1.20 × 0.30 m, every 3.0 m along the corridor centreline. */
+export const TROUGH_M = Object.freeze({ length: 1.2, width: 0.3, depth: 0.1, spacing: 3.0, count: 4 })
+/** Room task light housing over the (Phase 4) couch position. Position is provisional. */
+export const ROOM_TASK_LIGHT = Object.freeze({ x: 6.6, y: -4.1, length: 1.2, width: 0.3 })
+/** Skirting: 0.10 m. Proud of the wall only where a handrail keeps the avatar off that wall. */
+export const SKIRTING_M = Object.freeze({ height: 0.1, proud: 0.015 })
+/** Dado / crash-rail band: 0.20 m tall, bottom edge at 0.80 m, so it is centred on the 0.90 m rail. */
+export const DADO_M = Object.freeze({ bottom: 0.8, height: 0.2, proud: 0.02 })
+/** Trim on a wall whose face IS a collision surface: a flush band, under the 1 mm tolerance. */
+export const FLUSH_TRIM_PROUD_M = 0.0008
+/** Door architrave on the corridor face (behind the rail line). */
+export const ARCHITRAVE_M = Object.freeze({ width: 0.07, proud: 0.02 })
+/** Door leaf: 0.90 m wide, 44 mm thick, opened ~180° flat against the room side of the door wall. */
+export const DOOR_LEAF_THICKNESS_M = 0.044
+export const DOOR_LEAF_HEIGHT_M = 2.08
+export const DOOR_STOP_GAP_M = 0.01
 
 // ---------------------------------------------------------------------------------------------
 // Chassis — Hiwonder 4WD Chassis Car Kit, SKU 21030025 (handoff Part B, answers §5)

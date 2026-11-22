@@ -1,0 +1,34 @@
+{
+  "schema_version": "1",
+  "world_id": "corridor-v1",
+  "frame": "REP-103",
+  "ended_by": "room_entry",
+  "provenance": {
+    "source": "synthetic",
+    "derived_from": "contracts.md §3",
+    "generated": "2026-11-22",
+    "generator": "test/artless/clean-traversal.timeline.json (durations frozen from the closed-loop traversal in src/sim/simulation.corridor.test.js)"
+  },
+  "near_miss_threshold_m": 0.05,
+  "contact_tolerance_m": 0.002,
+  "timestep_s": 0.008333333333333333,
+  "started_at_ms": 700,
+  "ended_at_ms": 43366.666666666664,
+  "cleared": true,
+  "time_to_clear_s": 42.666666666666664,
+  "collisions": 0,
+  "near_misses": 0,
+  "min_clearance_m": 0.07736793335963725,
+  "max_penetration_m": 0,
+  "distance_m": 9.145000000000799,
+  "optimal_path_m": 8.410110046486183,
+  "path_efficiency": 1.0873817285924408,
+  "cues": 7,
+  "cues_per_m": 0.7654455986877406,
+  "hesitation_s": [
+    0.3,
+    0.3,
+    0.3
+  ],
+  "hesitation_median_s": 0.3
+}
