@@ -30,11 +30,13 @@ from ml.dataset import (
     SessionSplit,
     SplitPlanError,
     assert_examples_may_fit,
+    fitting_scope,
     ingest_recording,
     normalization_candidates,
     parse_dataset_source,
     parse_gesture_annotation,
     parse_recording_identity,
+    validate_split_plan,
     validate_splits,
 )
 from ml.features import FEATURE_DIM, FEATURE_NAMES, extract_features, named_features
@@ -657,12 +659,17 @@ def test_valid_split_keeps_held_out_calibration_and_eval_in_different_sessions()
     assert report.eval_example_count == 1
     assert "eval examples are refused as normalization or selection inputs" in report.enforced
     assert "cross-validation folds" in report.not_enforced
-    candidates = normalization_candidates([train, evaluation, calibration])
-    assert candidates == (train, calibration)
-    assert_examples_may_fit(candidates)
+    # Fitting is scoped by purpose. See tests/test_ml_fitting_scope.py.
+    plan = validate_split_plan(*_plan([train, calibration, evaluation]), [train, calibration, evaluation])
+    population = fitting_scope(plan, "population")
+    personal = fitting_scope(plan, "personalization", "p02")
+    assert normalization_candidates([train, evaluation, calibration], population) == (train,)
+    assert normalization_candidates([train, evaluation, calibration], personal) == (calibration,)
+    assert assert_examples_may_fit([train], population).examples == (train,)
+    assert assert_examples_may_fit([calibration], personal).examples == (calibration,)
     with pytest.raises(SplitPlanError) as exc:
-        assert_examples_may_fit([train, evaluation])
-    assert exc.value.codes == ("eval_excluded_from_fitting",)
+        assert_examples_may_fit([train, evaluation], population)
+    assert "eval_excluded_from_fitting" in exc.value.codes
 
 
 def test_split_codes_are_sorted_and_deterministic():

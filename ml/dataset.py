@@ -21,7 +21,7 @@ import copy
 import json
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
@@ -85,13 +85,15 @@ ENFORCED_SPLIT_RULES = (
     "one identity and one split per recording id",
     "every example matches its session and its recording",
     "eval examples are refused as normalization or selection inputs",
+    "population fitting accepts only population participants' train examples",
+    "personalized fitting accepts only one held-out target's calibration examples",
 )
 NOT_ENFORCED_SPLIT_RULES = (
     "how many people are held out",
     "whether a held-out participant supplied calibration",
     "whether calibration is short enough",
     "whether eval was recorded after calibration",
-    "whether calibration is used for personalization only",
+    "whether a later trainer calls assert_examples_may_fit with the right scope",
     "which model or hyperparameters will be selected",
     "whether a human authorization was actually correct",
     "cross-validation folds",
@@ -500,6 +502,10 @@ def _loads_feature(line: str):
         value = json.loads(line, object_pairs_hook=pairs, parse_constant=reject_constant)
     except DatasetError:
         raise
+    except RecursionError:
+        # Raised inside the decoder for deeply nested arrays or objects, before
+        # ``_walk_finite`` can count nodes. Only the code is kept.
+        raise DatasetError("json_depth_exceeded") from None
     except (json.JSONDecodeError, ValueError, TypeError):
         raise DatasetError("invalid_json") from None
     _walk_finite(value)
@@ -525,13 +531,36 @@ def _walk_finite(value) -> None:
             stack.extend(node)
 
 
+def _physical_lines(handle):
+    """Yield raw lines split on ``\\n``, ``\\r\\n``, and ``\\r``, without terminators.
+
+    These are the same line breaks a text-mode file recognizes, so line numbers
+    match the earlier text reader. Neither byte occurs inside a multibyte UTF-8
+    sequence, so splitting before decoding is safe.
+    """
+    for chunk in handle:
+        body = chunk[:-1] if chunk.endswith(b"\n") else chunk
+        parts = body.split(b"\r")
+        if body.endswith(b"\r"):
+            # That ``\r`` ended the previous line. Nothing follows it in this chunk.
+            parts.pop()
+        yield from parts
+
+
 def _read_frames(path: Path):
     accepted: list[dict] = []
     rejections: list[RecordRejection] = []
     records_read = 0
     last_timestamp = None
-    with path.open(encoding="utf-8") as handle:
-        for line_number, line in enumerate(handle, start=1):
+    with path.open("rb") as handle:
+        for line_number, raw in enumerate(_physical_lines(handle), start=1):
+            try:
+                line = raw.decode("utf-8", errors="strict")
+            except UnicodeDecodeError:
+                # Not replaced, not skipped silently. The bytes are not kept.
+                records_read += 1
+                rejections.append(RecordRejection(line_number, "invalid_encoding"))
+                continue
             if not line.strip():
                 continue
             records_read += 1
@@ -689,6 +718,10 @@ def validate_splits(
     The sequences are copied before they are read. This function does not fit
     normalization, select parameters, or look at feature values.
     """
+    return _validate(roles, sessions, recordings, examples)[0]
+
+
+def _validate(roles, sessions, recordings, examples):
     roles = tuple(roles)
     sessions = tuple(sessions)
     recordings = tuple(recordings)
@@ -790,7 +823,7 @@ def validate_splits(
             codes.add("recording_split_conflict")
     if codes:
         raise SplitPlanError(tuple(sorted(codes)))
-    return SplitReport(
+    report = SplitReport(
         population_train_participants=tuple(
             sorted(pid for pid, role in role_by_participant.items() if role == "population_train")
         ),
@@ -802,32 +835,216 @@ def validate_splits(
         enforced=ENFORCED_SPLIT_RULES,
         not_enforced=NOT_ENFORCED_SPLIT_RULES,
     )
+    return report, role_by_participant, recording_by_id, examples
 
 
-def normalization_candidates(examples: Sequence[PreparedExample]) -> tuple[PreparedExample, ...]:
-    """Return train and calibration examples, in input order, with eval left out.
+# Fitting scopes.
+#
+# Three uses of a split plan are kept apart:
+#
+# 1. Population fitting (global normalization, a global model, or global
+#    parameter selection) may read only ``train`` examples of
+#    ``population_train`` participants. No held-out person contributes.
+# 2. Personalized fitting adapts to one named held-out participant and may read
+#    only that participant's ``calibration`` examples. It is never a source for
+#    population-level selection.
+# 3. Evaluation is never a fitting source for either purpose.
+#
+# Nothing below estimates a mean or a scale, fits a model, or selects a
+# parameter. These functions only decide which rows a later trainer may read.
 
-    This does not estimate a mean or a scale.
+FITTING_PURPOSES = ("population", "personalization")
+_PLAN_SEAL = object()
+
+
+@dataclass(frozen=True)
+class ValidatedSplitPlan:
+    """A split plan that passed ``validate_splits``. Build it with ``validate_split_plan``.
+
+    A plan built any other way is not validated, and ``FittingScope`` refuses it.
+
+    It keeps its own copies of the participant roles, the recording
+    assignments, and the examples that were checked. Changing the caller's
+    lists afterwards does not change it.
     """
-    kept: list[PreparedExample] = []
-    for item in examples:
+
+    report: SplitReport
+    participant_roles: tuple[tuple[str, str], ...]
+    recording_assignments: tuple[tuple[str, str, str, str], ...]
+    examples: tuple[PreparedExample, ...]
+    # Set only by ``validate_split_plan``. It is not an init field, so a plan
+    # built directly or copied with ``dataclasses.replace`` is unsealed.
+    _seal: object = field(default=None, init=False, repr=False, compare=False)
+
+    @property
+    def is_validated(self) -> bool:
+        return self._seal is _PLAN_SEAL
+
+    def role_of(self, participant_id: str) -> str | None:
+        return dict(self.participant_roles).get(participant_id)
+
+
+def validate_split_plan(
+    roles: Sequence[ParticipantRole],
+    sessions: Sequence[SessionSplit],
+    recordings: Sequence[RecordingAssignment],
+    examples: Sequence[PreparedExample],
+) -> ValidatedSplitPlan:
+    """Run ``validate_splits`` and keep the checked context for fitting scopes."""
+    report, role_by_participant, recording_by_id, copied = _validate(
+        roles, sessions, recordings, examples
+    )
+    plan = ValidatedSplitPlan(
+        report=report,
+        participant_roles=tuple(sorted(role_by_participant.items())),
+        recording_assignments=tuple(
+            sorted((rid,) + identity for rid, identity in recording_by_id.items())
+        ),
+        examples=copied,
+    )
+    object.__setattr__(plan, "_seal", _PLAN_SEAL)
+    return plan
+
+
+@dataclass(frozen=True)
+class FittingScope:
+    """One fitting purpose checked against a validated plan.
+
+    ``population`` takes no target. ``personalization`` needs a target whose
+    role in the plan is ``held_out``. Invalid requests raise ``DatasetError``.
+    """
+
+    plan: ValidatedSplitPlan
+    purpose: str
+    target_participant_id: str | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.plan, ValidatedSplitPlan) or not self.plan.is_validated:
+            raise DatasetError("unvalidated_split_plan")
+        if not isinstance(self.purpose, str) or self.purpose not in FITTING_PURPOSES:
+            raise DatasetError("invalid_fitting_purpose")
+        target = self.target_participant_id
+        if self.purpose == "population":
+            if target is not None:
+                raise DatasetError("population_fit_takes_no_target")
+            return
+        if target is None:
+            raise DatasetError("personalization_target_required")
+        _token(target, _TOKEN, "invalid_participant_id")
+        role = self.plan.role_of(target)
+        if role is None:
+            raise DatasetError("personalization_target_not_in_plan")
+        if role != "held_out":
+            raise DatasetError("personalization_target_not_held_out")
+
+
+def fitting_scope(
+    plan: ValidatedSplitPlan, purpose: str, target_participant_id: str | None = None
+) -> FittingScope:
+    return FittingScope(plan, purpose, target_participant_id)
+
+
+@dataclass(frozen=True)
+class FittingAuthorization:
+    """A record of rows approved for one purpose. It holds its own tuple.
+
+    A ``personalization`` record applies to its target only. It does not
+    approve population-level model or parameter selection.
+    """
+
+    purpose: str
+    target_participant_id: str | None
+    examples: tuple[PreparedExample, ...]
+
+
+def _fitting_rows(examples) -> tuple:
+    if isinstance(examples, (str, bytes, bytearray, dict)) or not isinstance(
+        examples, (Sequence, tuple, list)
+    ):
+        raise SplitPlanError(("invalid_fitting_request",))
+    rows = tuple(examples)
+    for item in rows:
         if not isinstance(item, PreparedExample):
             raise DatasetError("invalid_example")
-        if item.example.split != "eval":
-            kept.append(item)
-    return tuple(kept)
+    return rows
 
 
-def assert_examples_may_fit(examples: Sequence[PreparedExample]) -> None:
-    """Refuse a sequence that contains an eval example.
+def _refusals(item: PreparedExample, scope: FittingScope, plan_rows, recordings, roles) -> set[str]:
+    codes: set[str] = set()
+    labeled = item.example
+    if item not in plan_rows:
+        codes.add("example_not_in_plan")
+    identity = (labeled.participant_id, labeled.session_id, labeled.split)
+    if recordings.get(item.recording_id) != identity:
+        codes.add("example_recording_mismatch")
+    role = roles.get(labeled.participant_id)
+    if labeled.split == "eval":
+        codes.add("eval_excluded_from_fitting")
+    if scope.purpose == "population":
+        if role != "population_train":
+            codes.add("held_out_participant_excluded_from_population_fit")
+        if labeled.split == "calibration":
+            codes.add("calibration_excluded_from_population_fit")
+    else:
+        if labeled.participant_id != scope.target_participant_id:
+            codes.add("other_participant_excluded_from_personalization")
+        if labeled.split == "train":
+            codes.add("train_excluded_from_personalization")
+        if role != "held_out":
+            codes.add("population_participant_excluded_from_personalization")
+    return codes
 
-    A later trainer must call this on the rows it would use to fit
-    normalization or choose parameters. This function does not fit them.
-    Calibration rows are allowed through because ML-1 already treats
-    calibration as a fit source for personalization. Eval rows are not.
+
+def _scope_context(scope):
+    if scope is None:
+        raise SplitPlanError(("fitting_scope_required",))
+    if not isinstance(scope, FittingScope) or not isinstance(scope.plan, ValidatedSplitPlan):
+        raise SplitPlanError(("invalid_fitting_scope",))
+    if not scope.plan.is_validated:
+        raise SplitPlanError(("invalid_fitting_scope",))
+    plan = scope.plan
+    recordings = {rid: (pid, sid, split) for rid, pid, sid, split in plan.recording_assignments}
+    return frozenset(plan.examples), recordings, dict(plan.participant_roles)
+
+
+def normalization_candidates(
+    examples: Sequence[PreparedExample], scope: FittingScope | None = None
+) -> tuple[PreparedExample, ...]:
+    """Return, in input order, the examples ``scope`` would allow.
+
+    Without a scope this is only the population pre-filter: rows whose split
+    is ``train``. That uses the split string alone and approves nothing.
+    ``assert_examples_may_fit`` with a scope is still required, and it checks
+    the rows again on its own. This does not estimate a mean or a scale.
     """
-    for item in examples:
-        if not isinstance(item, PreparedExample):
-            raise DatasetError("invalid_example")
-        if item.example.split == "eval":
-            raise SplitPlanError(("eval_excluded_from_fitting",))
+    rows = _fitting_rows(examples)
+    if scope is None:
+        return tuple(item for item in rows if item.example.split == "train")
+    plan_rows, recordings, roles = _scope_context(scope)
+    return tuple(
+        item for item in rows if not _refusals(item, scope, plan_rows, recordings, roles)
+    )
+
+
+def assert_examples_may_fit(
+    examples: Sequence[PreparedExample], scope: FittingScope | None = None
+) -> FittingAuthorization:
+    """Refuse any row ``scope`` does not allow, then return an immutable record.
+
+    A later trainer must call this on exactly the rows it would use to fit
+    normalization, fit a model, or choose parameters. It does not fit them.
+    Every row is checked against the validated plan, not against the output
+    of ``normalization_candidates``. A missing scope, an empty request, or any
+    refused row raises ``SplitPlanError`` with sorted codes. A row that is not
+    a ``PreparedExample`` raises ``DatasetError("invalid_example")``.
+    """
+    plan_rows, recordings, roles = _scope_context(scope)
+    rows = _fitting_rows(examples)
+    if not rows:
+        raise SplitPlanError(("empty_fitting_request",))
+    codes: set[str] = set()
+    for item in rows:
+        codes |= _refusals(item, scope, plan_rows, recordings, roles)
+    if codes:
+        raise SplitPlanError(tuple(sorted(codes)))
+    return FittingAuthorization(scope.purpose, scope.target_participant_id, rows)
