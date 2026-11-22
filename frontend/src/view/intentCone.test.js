@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { CORRIDOR_WORLD as W } from '../sim/worldModel.js'
 import { checkPose } from '../sim/collision.js'
 import { AVATAR_WIDTH_M } from '../sim/constants.js'
-import { CONE_STEPS, SWEEP_EVERY_STEPS, coneVisible, createIntentCone, predictPath, ribbonEdges } from './intentCone.js'
+import { CONE_REFRESH_MS, CONE_STEPS, SWEEP_EVERY_STEPS, coneVisible, createConeScheduler, createIntentCone, predictPath, ribbonEdges } from './intentCone.js'
 
 // TEST DOUBLE ONLY, until Mridhul's stepPose (src/sim) is pushed: the handoff T1.3 equations.
 // The cone itself never contains kinematics; it takes the simulation's stepPose. When stepPose
@@ -87,5 +87,45 @@ describe('ribbon', () => {
     cone.setVisible(true)
     expect(cone.object.visible).toBe(true)
     cone.dispose()
+  })
+})
+
+describe('createConeScheduler (10 Hz)', () => {
+  const drive = { linear: 0.3, angular: 0 }
+  const counting = () => {
+    let calls = 0
+    return { compute: () => ({ n: ++calls }), get calls() { return calls } }
+  }
+
+  it('reuses the path for the same command within 100 ms of simulation time', () => {
+    const s = createConeScheduler()
+    const c = counting()
+    const first = s.pathAt(1000, drive, c.compute)
+    for (let t = 1000; t < 1100; t += 1000 / 60) expect(s.pathAt(t, drive, c.compute)).toBe(first)
+    expect(c.calls).toBe(1)
+    s.pathAt(1100, drive, c.compute)
+    expect(c.calls).toBe(2)
+  })
+
+  it('recomputes at once when the command changes', () => {
+    const s = createConeScheduler()
+    const c = counting()
+    s.pathAt(1000, drive, c.compute)
+    s.pathAt(1010, { linear: 0.3, angular: 0.6 }, c.compute)
+    expect(c.calls).toBe(2)
+  })
+
+  it('recomputes after reset, and if simulation time goes backwards (a new attempt)', () => {
+    const s = createConeScheduler()
+    const c = counting()
+    s.pathAt(1000, drive, c.compute)
+    s.reset()
+    s.pathAt(1010, drive, c.compute)
+    s.pathAt(0, drive, c.compute)
+    expect(c.calls).toBe(3)
+  })
+
+  it('refreshes at the status period', () => {
+    expect(CONE_REFRESH_MS).toBe(100)
   })
 })

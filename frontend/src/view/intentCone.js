@@ -13,6 +13,9 @@
 // - Walls: the existing collision sweep (sim/collision.js). The step is kept at 1/120 s, but the
 //   sweep may run every SWEEP_EVERY_STEPS steps to keep the cost down; the cost is measured.
 //
+// Cost: createConeScheduler recomputes at most every 100 ms of simulation time, or at once when the
+// command changes (see CONE_REFRESH_MS).
+//
 // PENDING: stepPose is not on mridhul/sim-3d yet. Until it is, predictPath takes it as a
 // parameter; once pushed, it is imported here and the parameter goes.
 //
@@ -22,6 +25,7 @@
 import { BufferAttribute, BufferGeometry, DoubleSide, Group, Mesh, MeshBasicMaterial } from 'three'
 import { sweep as collisionSweep } from '../sim/collision.js'
 import { SIM_STEP_S } from '../sim/constants.js'
+import { STATUS_PERIOD_MS } from '../sim/simulation.js'
 import { rosToThree } from './frame.js'
 
 // SOURCE: handoff T8.4, "forward-integrate the current command for 2.0 s".
@@ -36,6 +40,14 @@ export const RIBBON_EVERY_STEPS = 4
 // Just above the floor, so the ribbon never z-fights with it. Display only.
 export const RIBBON_LIFT_M = 0.004
 export const STOP_BAR_DEPTH_M = 0.04
+
+// How often the cone is recomputed while the command stays the same. SOURCE: STATUS_PERIOD_MS in
+// sim/simulation.js: the receiver publishes, and the drill sends a command, at most every 100 ms,
+// so the command cannot change faster than this. A new command is recomputed at once. Measured
+// cost of one prediction on an Apple M1: 1.3 to 5.9 ms, so about 0.1 to 0.4 ms per frame on average
+// at 60 fps. Between recomputes the ribbon stays where it was drawn; at 0.3 m/s its start lags the
+// avatar by at most 3 cm, under the avatar's own footprint.
+export const CONE_REFRESH_MS = STATUS_PERIOD_MS
 
 // Task states in which the cone may show: the ones that carry motion (contracts.md §3 MOVE_TASKS).
 export const CONE_TASKS = ['manual', 'shared']
@@ -77,6 +89,27 @@ export function predictPath(pose, command, world, { stepPose, sweep = collisionS
     if (i % ribbonEvery === 0 || i % sweepEvery === 0 || i === steps) poses.push(current)
   }
   return { poses, stopped: false, stopPose: null, segmentId: null, steps, sweeps }
+}
+
+/**
+ * Decides when to recompute the cone (the 10 Hz option, Mridhul's perf caveat). Holds the last
+ * path; recomputes when the command changed, or CONE_REFRESH_MS of simulation time has passed.
+ * pathAt(timeMs, command, compute) returns the path, calling compute() only when needed.
+ * reset() forgets it, for when the cone is hidden, so showing it again recomputes at once.
+ */
+export function createConeScheduler({ refreshMs = CONE_REFRESH_MS } = {}) {
+  let last = null // { timeMs, linear, angular, path }
+  return {
+    pathAt(timeMs, command, compute) {
+      const same = last && last.linear === command.linear && last.angular === command.angular
+      if (same && timeMs >= last.timeMs && timeMs - last.timeMs < refreshMs) return last.path
+      last = { timeMs, linear: command.linear, angular: command.angular, path: compute() }
+      return last.path
+    },
+    reset() {
+      last = null
+    },
+  }
 }
 
 // The two edges of the ribbon at one pose, in ROS ground coordinates: half the width each side,
