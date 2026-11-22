@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Perf harness output (scripts/perf/run.js)
+perf-results

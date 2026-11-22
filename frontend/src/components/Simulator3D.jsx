@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { Simulation } from '../sim/simulation.js'
 import { CORRIDOR_WORLD } from '../sim/worldModel.js'
 import { createSceneRoot } from '../view/sceneRoot.js'
+import { createFrameLoop } from '../view/frameLoop.js'
 import TopDownInset from '../ui/TopDownInset.jsx'
 import { KEYS, combine } from '../ui/driveKeys.js'
 import './Simulator3D.css'
@@ -11,9 +12,9 @@ import './Simulator3D.css'
 // time into the simulation's fixed-step clock, then draws the pose the simulation interpolates
 // between its last two steps. The view never integrates (invariant I3) and never writes back (I1).
 
-// A hidden tab pauses animation frames. A long pause must not reach the receiver as a multi-second
-// gap (that would fire the watchdog), so each frame advances simulated time by at most this.
-const MAX_FRAME_MS = 50
+// The frame loop (src/view/frameLoop.js) re-registers and ticks the simulation BEFORE rendering, and
+// catches render errors: a render error never stops the simulation (proposed invariant I8). It also
+// caps each frame's elapsed time (MAX_FRAME_MS) so a hidden tab cannot fire the watchdog.
 // The DOM readout refreshes at this period; the canvas draws every frame.
 const READOUT_MS = 33
 
@@ -75,23 +76,19 @@ export default function Simulator3D() {
       root.resize(stage.clientWidth, stage.clientHeight)
     }
 
-    let raf = 0
-    let last = performance.now()
     let lastReadout = -Infinity
-    const loop = (now) => {
-      sim.tick(Math.min(MAX_FRAME_MS, now - last))
-      last = now
-      const pose = sim.interpolatedPose()
-      if (root) root.frame(pose)
-      if (now - lastReadout >= READOUT_MS) {
+    const loop = createFrameLoop({
+      sim,
+      onFrame: (pose, now) => {
+        if (now - lastReadout < READOUT_MS) return
         lastReadout = now
         setSnapshot({ view: sim.view(), pose })
-      }
-      raf = requestAnimationFrame(loop)
-    }
-    raf = requestAnimationFrame(loop)
+      },
+      render: (pose) => { if (root) root.frame(pose) },
+    })
+    loop.start()
     return () => {
-      cancelAnimationFrame(raf)
+      loop.stop()
       observer?.disconnect()
       root?.dispose()
     }

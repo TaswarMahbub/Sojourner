@@ -19,6 +19,7 @@ import {
   PerspectiveCamera,
   SRGBColorSpace,
   Scene,
+  Vector2,
   WebGLRenderer,
 } from 'three'
 import { buildCorridor, disposeCorridor } from './corridor.js'
@@ -26,6 +27,8 @@ import { createAvatarProxy } from './chairView.js'
 import { FOV_DEG, NEAR_M, createFollowRig } from './cameraRig.js'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import { LIGHT_LEVELS, SHADOW, applyShadowFlags, buildLighting, diffuserMaterial, disposeLighting } from './lighting.js'
+import { EffectPass } from 'postprocessing'
+import { createLadder, createPostChain, postEnabledFromSearch } from './post.js'
 
 export const MAX_PIXEL_RATIO = 1.5
 export const cappedPixelRatio = (dpr = globalThis.devicePixelRatio || 1) => Math.min(dpr, MAX_PIXEL_RATIO)
@@ -72,7 +75,7 @@ export function buildScene(world) {
  * Create the renderer and scene on a canvas. Throws when WebGL 2 is unavailable; the caller falls
  * back to the 2D top-down view.
  */
-export function createSceneRoot({ canvas, world }) {
+export function createSceneRoot({ canvas, world, post = postEnabledFromSearch() }) {
   const renderer = new WebGLRenderer({ canvas, antialias: RENDERER_SETTINGS.antialias, powerPreference: 'high-performance' })
   renderer.outputColorSpace = RENDERER_SETTINGS.outputColorSpace
   renderer.toneMapping = RENDERER_SETTINGS.toneMapping
@@ -94,24 +97,79 @@ export function createSceneRoot({ canvas, world }) {
   avatar.setPose(world.spawn)
   rig.update(world.spawn)
 
+  // Phase 6 post chain (§6.4). `?post=0` → null, and the renderer draws straight to the canvas.
+  const chain = post ? createPostChain(renderer, scene, camera) : null
+  let maxPixelRatio = MAX_PIXEL_RATIO
+  const ratio = () => Math.min(cappedPixelRatio(), maxPixelRatio)
+  const sizeNow = () => { const v = renderer.getSize(new Vector2()); return [v.x, v.y] }
+
+  // Adaptive ladder: DOF off → AO quality down → AO off → shadow 1024 → pixel ratio 1.0. View only.
+  const rungs = []
+  if (chain) {
+    rungs.push({
+      name: 'dof-off',
+      apply() {
+        // Rebuild the pass without DOF so its blur passes stop running (SKIP would still render them).
+        const { composer, dofPass, toneMapping, grade, vignette, noise } = chain
+        const i = composer.passes.indexOf(dofPass)
+        composer.removePass(dofPass)
+        dofPass.dispose()
+        chain.dofPass = new EffectPass(camera, toneMapping, grade, vignette, noise)
+        composer.addPass(chain.dofPass, i)
+      },
+    })
+    rungs.push({ name: 'ao-quality-down', apply() { chain.ao.setQualityMode('Low') } })
+    rungs.push({ name: 'ao-off', apply() { chain.ao.enabled = false } })
+  }
+  rungs.push({
+    name: 'shadow-1024',
+    apply() {
+      lighting.sun.shadow.mapSize.set(1024, 1024)
+      lighting.sun.shadow.map?.dispose()
+      lighting.sun.shadow.map = null
+    },
+  })
+  rungs.push({
+    name: 'pixel-ratio-1',
+    apply() {
+      maxPixelRatio = 1
+      const [w, h] = sizeNow()
+      renderer.setPixelRatio(ratio())
+      if (chain) chain.composer.setSize(w, h, false)
+      else renderer.setSize(w, h, false)
+    },
+  })
+  const ladder = createLadder(rungs)
+  let lastFrameAt = null
+
   return {
     renderer,
     scene,
     camera,
+    postEnabled: Boolean(chain),
+    chain,
+    ladder,
     /** Draw one frame at the given (interpolated) ROS pose. */
-    frame(pose) {
+    frame(pose, now = performance.now()) {
+      const dt = lastFrameAt === null ? 0 : now - lastFrameAt
+      lastFrameAt = now
+      ladder.sample(dt)
       avatar.setPose(pose)
       rig.update(pose)
-      renderer.render(scene, camera)
+      if (chain) chain.composer.render(dt / 1000)
+      else renderer.render(scene, camera)
     },
     resize(width, height) {
       if (!(width > 0 && height > 0)) return
-      renderer.setPixelRatio(cappedPixelRatio())
-      renderer.setSize(width, height, false)
+      renderer.setPixelRatio(ratio())
+      if (chain) chain.composer.setSize(width, height, false)
+      else renderer.setSize(width, height, false)
       camera.aspect = width / height
       camera.updateProjectionMatrix()
     },
     dispose() {
+      chain?.composer.dispose()
+      chain?.lut.dispose()
       disposeCorridor(corridor)
       disposeLighting(lighting)
       envTarget.dispose()
