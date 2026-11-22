@@ -40,7 +40,9 @@ The output reports examples and intervals per class, the settings, the iteration
 - `.gitignore` containing `*`, so the directory stays out of git wherever it is placed.
 - `model.json`: classes, the 162 feature names, scaler mean and scale, coefficients, intercepts, settings, library versions, window settings, and the training recordings' opaque ids, SHA-256, and length. It contains no feature vector, timestamp, or annotation.
 
-It is JSON, not a pickle, so loading it runs no code. `load_model` reads it as strict JSON (no duplicate keys, `NaN`, or `Infinity`) and checks every field's shape before use. The model weights are still derived from participant data: keep the directory local, and do not commit, upload, or share it.
+The model is first written and fsynced as `.model.json.partial`, read back and compared byte for byte, then renamed to `model.json` and loaded once with `load_model`. If any step fails (open, write, flush, fsync, rename, or verification), every file the fit created is removed, then the directory, and the fit reports `output_write_failed`. A directory that still holds `.model.json.partial` is refused with `model_publication_incomplete`. These are process-level guarantees, not power-loss durability.
+
+It is JSON, not a pickle, so loading it runs no code. `load_model` reads it as strict JSON (no duplicate keys, `NaN`, or `Infinity`) and checks every field before use: class names, finite numbers (an integer too large for a float is refused), training recording ids, SHA-256, and lengths, timestamp provenance, class counts, and the window settings. Any problem is `invalid_model`. The model weights are still derived from participant data: keep the directory local, and do not commit, upload, or share it.
 
 ## Evaluation
 

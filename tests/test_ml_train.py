@@ -7,6 +7,7 @@ needs ``allow_constructed=True`` exactly as the CLI needs ``--allow-constructed`
 
 from __future__ import annotations
 
+import errno
 import json
 import math
 import os
@@ -463,3 +464,190 @@ def test_load_session_examples_matches_prepare_and_writes_nothing(tmp_path):
     assert [
         (e.example.window_start_timestamp_ms, e.example.label) for e in loaded.examples
     ] == [(start, label) for start, _end, label, _count in report.example_windows]
+
+
+class _FailingStream:
+    """A text stream that raises OSError(EIO) at one chosen operation."""
+
+    def __init__(self, stream, fail):
+        self._stream = stream
+        self._fail = fail
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self._stream.close()
+        return False
+
+    def _maybe(self, name):
+        if self._fail == name:
+            raise OSError(errno.EIO, "constructed failure")
+
+    def write(self, text):
+        self._maybe("write")
+        return self._stream.write(text)
+
+    def flush(self):
+        self._maybe("flush")
+        return self._stream.flush()
+
+    def fileno(self):
+        return self._stream.fileno()
+
+
+@pytest.mark.parametrize("fail", ["write", "flush", "fsync"])
+@pytest.mark.parametrize("target", [1, 2], ids=[".gitignore", "model"])
+def test_failed_artifact_write_leaves_nothing_loadable(tmp_path, monkeypatch, fail, target):
+    """Fail the Nth artifact file at one stage. File 1 is .gitignore, file 2 the model."""
+    a = _session(tmp_path, "a")
+    out = tmp_path / "model"
+    real_fdopen = os.fdopen
+    real_fsync = os.fsync
+    writes = []
+    syncs = []
+
+    def fdopen(handle, mode="r", *args, **kwargs):
+        stream = real_fdopen(handle, mode, *args, **kwargs)
+        if "w" not in mode:
+            return stream
+        writes.append(handle)
+        return _FailingStream(stream, fail) if len(writes) == target and fail != "fsync" else stream
+
+    def fsync(handle):
+        syncs.append(handle)
+        if fail == "fsync" and len(syncs) == target:
+            raise OSError(errno.EIO, "constructed fsync failure")
+        return real_fsync(handle)
+
+    real_write = train._write_artifact
+
+    def faulty_write(destination, artifact):
+        # Faults apply only while the artifact is written, not to the prepare snapshot.
+        with monkeypatch.context() as m:
+            m.setattr(train.os, "fdopen", fdopen)
+            m.setattr(train.os, "fsync", fsync)
+            return real_write(destination, artifact)
+
+    monkeypatch.setattr(train, "_write_artifact", faulty_write)
+    with pytest.raises(train.TrainingError) as exc:
+        _fit([a], out)
+    monkeypatch.undo()
+    assert exc.value.code == "output_write_failed"
+    assert len(writes) == target
+    assert not out.exists()
+    with pytest.raises(train.TrainingError) as exc:
+        train.load_model(out)
+    assert exc.value.code == "model_missing"
+
+
+def test_codex_model_fsync_reproduction_fails_safely(tmp_path, monkeypatch, capsys):
+    # Second fsync is the model file (the first is .gitignore), as in the audit.
+    a = _session(tmp_path, "a")
+    out = tmp_path / "model"
+    real = os.fsync
+    calls = []
+
+    def fail_second(handle):
+        calls.append(handle)
+        if len(calls) == 2:
+            raise OSError(errno.EIO, "constructed fsync failure")
+        return real(handle)
+
+    monkeypatch.setattr(train.os, "fsync", fail_second)
+    rc = train.main(["fit", "--session", str(a), "--out", str(out), "--allow-constructed"])
+    monkeypatch.undo()
+    captured = capsys.readouterr()
+    assert rc == 2 and captured.out == "" and captured.err == "output_write_failed\n"
+    assert not out.exists()
+    with pytest.raises(train.TrainingError):
+        train.load_model(out)
+
+
+@pytest.mark.parametrize("stage", ["rename", "verify"])
+def test_failed_publication_removes_the_published_name(tmp_path, monkeypatch, stage):
+    a = _session(tmp_path, "a")
+    out = tmp_path / "model"
+    if stage == "rename":
+        def fail(*_args):
+            raise OSError(errno.EIO, "constructed rename failure")
+
+        monkeypatch.setattr(train.os, "rename", fail)
+    else:
+        def fail(_directory):
+            raise train.TrainingError("invalid_model")
+
+        monkeypatch.setattr(train, "load_model", fail)
+    with pytest.raises(train.TrainingError) as exc:
+        _fit([a], out)
+    monkeypatch.undo()
+    assert exc.value.code == "output_write_failed"
+    assert not out.exists()
+
+
+def test_unpublished_or_partial_artifact_is_refused(tmp_path):
+    _a, _b, model = _trained(tmp_path)
+    (model / train.PARTIAL_FILE).write_text((model / "model.json").read_text())
+    with pytest.raises(train.TrainingError) as exc:
+        train.load_model(model)
+    assert exc.value.code == "model_publication_incomplete"
+    (model / "model.json").unlink()
+    with pytest.raises(train.TrainingError) as exc:
+        train.load_model(model)
+    assert exc.value.code == "model_publication_incomplete"
+    (model / train.PARTIAL_FILE).unlink()
+    with pytest.raises(train.TrainingError) as exc:
+        train.load_model(model)
+    assert exc.value.code == "model_missing"
+    # A truncated published file is refused, not partly read.
+    _a2, _b2, other = _trained(tmp_path / "second")
+    text = (other / "model.json").read_text()
+    (other / "model.json").write_text(text[: len(text) // 2])
+    with pytest.raises(train.TrainingError) as exc:
+        train.load_model(other)
+    assert exc.value.code == "invalid_model"
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        pytest.param(lambda d: d.update(classes=[[], {}, "neutral"]), id="unhashable_classes"),
+        pytest.param(lambda d: d.update(classes=["neutral", "bad label!", "mouth_open"]), id="bad_class_name"),
+        pytest.param(lambda d: d.update(classes=["neutral", "unknown", "mouth_open"]), id="unknown_class"),
+        pytest.param(lambda d: d["scaler_mean"].__setitem__(0, 10**1000), id="huge_integer_mean"),
+        pytest.param(lambda d: d["coef"][1].__setitem__(5, -(10**400)), id="huge_integer_coef"),
+        pytest.param(lambda d: d["intercept"].__setitem__(0, 10**500), id="huge_integer_intercept"),
+        pytest.param(lambda d: d["training"]["recordings"][0].update(participant_id=[]), id="participant_list"),
+        pytest.param(lambda d: d["training"]["recordings"][0].update(participant_id="bad id!"), id="participant_text"),
+        pytest.param(lambda d: d["training"]["recordings"][0].update(recording_id=""), id="recording_empty"),
+        pytest.param(lambda d: d["training"]["recordings"][0].update(sha256="xyz"), id="sha256"),
+        pytest.param(lambda d: d["training"]["recordings"][0].update(byte_length=-1), id="byte_length"),
+        pytest.param(lambda d: d["training"].update(timestamp_provenance="guess"), id="provenance"),
+        pytest.param(lambda d: d["training"].update(timestamp_provenance=[]), id="provenance_list"),
+        pytest.param(lambda d: d["training"].update(class_counts={"neutral": 1}), id="class_counts"),
+        pytest.param(lambda d: d["extraction"].update(length=-1), id="negative_length"),
+        pytest.param(lambda d: d["extraction"].update(length=0), id="zero_length"),
+        pytest.param(lambda d: d["extraction"].update(stride=True), id="bool_stride"),
+        pytest.param(lambda d: d["extraction"].update(version=7), id="version_type"),
+    ],
+)
+def test_invalid_model_fields_are_controlled_refusals(tmp_path, edit):
+    _a, _b, model = _trained(tmp_path)
+    data = json.loads((model / "model.json").read_text())
+    edit(data)
+    (model / "model.json").write_text(json.dumps(data))
+    with pytest.raises(train.TrainingError) as exc:
+        train.load_model(model)
+    assert exc.value.code == "invalid_model"
+
+
+def test_cli_unhashable_classes_has_no_traceback(tmp_path):
+    _a, _b, model = _trained(tmp_path)
+    data = json.loads((model / "model.json").read_text())
+    data["classes"] = [[], {}, "neutral"]
+    (model / "model.json").write_text(json.dumps(data))
+    result = subprocess.run(
+        [sys.executable, "-m", "ml.train", "evaluate", "--model", str(model), "--session", str(tmp_path / "unused")],
+        cwd=ROOT, capture_output=True, text=True,
+    )
+    assert result.returncode == 2 and result.stdout == "" and result.stderr == "invalid_model\n"

@@ -20,13 +20,18 @@ import argparse
 import json
 import math
 import os
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
 from ml.dataset import (
+    _LABEL,
+    _PROVENANCE,
+    _TOKEN,
     DatasetError,
+    ExtractionConfig,
     SplitPlanError,
     assert_examples_may_fit,
     fitting_scope,
@@ -39,12 +44,17 @@ from ml.labeling import (
     _output_dir,
     _read_regular,
     _strict_json,
+    _sync_directory,
     check_collection,
     load_session_examples,
 )
 
 MODEL_FORMAT = "sojourner-gesture-logreg-v1"
 MODEL_FILE = "model.json"
+# Written and fsynced under this name, then renamed to MODEL_FILE only after
+# its bytes are verified. Its presence means publication did not finish.
+PARTIAL_FILE = ".model.json.partial"
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 DEFAULT_CLASSES = ("neutral", "mouth_open", "brow_raise")
 # Fixed before any data is seen. Nothing here is tuned on a recording.
 # The penalty is L2, scikit-learn's default; it is not passed because 1.8
@@ -316,9 +326,15 @@ def _new_output(out_dir: Path) -> Path:
     return destination
 
 
-def _create_file(path: Path, text: str) -> None:
+def _create_file(path: Path, text: str, created: list[Path]) -> None:
+    """Create ``path`` exclusively (0600), write, flush, and fsync it.
+
+    The path is recorded in ``created`` as soon as it exists, so a failed
+    write, flush, fsync, or close still leaves it for the caller to remove.
+    """
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
     handle = os.open(path, flags, 0o600)
+    created.append(path)
     with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
         stream.write(text)
         stream.flush()
@@ -326,7 +342,14 @@ def _create_file(path: Path, text: str) -> None:
 
 
 def _write_artifact(destination: Path, artifact: dict) -> None:
-    """Create the directory (0700), a ``.gitignore`` that ignores everything, then ``model.json`` (0600)."""
+    """Create the directory (0700), a ``.gitignore`` that ignores everything, then ``model.json`` (0600).
+
+    The model is written to ``PARTIAL_FILE`` and fsynced, read back and
+    compared byte for byte, and only then renamed to ``model.json`` in this
+    new private directory. The published file is loaded once with
+    ``load_model``. On any failure every file this call created is removed,
+    then the directory, and the fit reports ``output_write_failed``.
+    """
     text = json.dumps(artifact, sort_keys=True, indent=1, allow_nan=False) + "\n"
     try:
         os.mkdir(destination, 0o700)
@@ -334,13 +357,20 @@ def _write_artifact(destination: Path, artifact: dict) -> None:
         raise TrainingError("output_exists") from None
     except OSError:
         raise TrainingError("output_write_failed") from None
-    written = []
+    created: list[Path] = []
     try:
-        for name, content in ((".gitignore", "*\n"), (MODEL_FILE, text)):
-            _create_file(destination / name, content)
-            written.append(destination / name)
-    except OSError:
-        for path in written:
+        _create_file(destination / ".gitignore", "*\n", created)
+        partial = destination / PARTIAL_FILE
+        _create_file(partial, text, created)
+        if _read_regular(partial, missing="output_write_failed") != text.encode("utf-8"):
+            raise TrainingError("output_write_failed")
+        final = destination / MODEL_FILE
+        os.rename(partial, final)
+        created[created.index(partial)] = final
+        _sync_directory(destination)
+        load_model(destination)
+    except (OSError, LabelingError, TrainingError):
+        for path in reversed(created):
             try:
                 os.unlink(path)
             except OSError:
@@ -355,14 +385,36 @@ def _write_artifact(destination: Path, artifact: dict) -> None:
 def _vector(value, length: int, code: str) -> list[float]:
     if not isinstance(value, list) or len(value) != length:
         raise TrainingError(code)
+    numbers = []
     for item in value:
-        if isinstance(item, bool) or not isinstance(item, (int, float)) or not math.isfinite(item):
+        if isinstance(item, bool) or not isinstance(item, (int, float)):
             raise TrainingError(code)
-    return [float(item) for item in value]
+        try:
+            number = float(item)
+        except OverflowError:
+            # An integer too large for a float.
+            raise TrainingError(code) from None
+        if not math.isfinite(number):
+            raise TrainingError(code)
+        numbers.append(number)
+    return numbers
+
+
+def _count(value) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise TrainingError("invalid_model")
+    return value
+
+
+def _check_token(value, pattern) -> None:
+    if not isinstance(value, str) or pattern.fullmatch(value) is None:
+        raise TrainingError("invalid_model")
 
 
 def load_model(model_dir: Path) -> dict:
     """Read ``model.json`` as strict JSON and check every field before use."""
+    if os.path.lexists(Path(model_dir) / PARTIAL_FILE):
+        raise TrainingError("model_publication_incomplete")
     path = Path(model_dir) / MODEL_FILE
     try:
         data = _strict_json(_read_regular(path, missing="model_missing"))
@@ -378,12 +430,13 @@ def load_model(model_dir: Path) -> dict:
     if data["feature_names"] != list(FEATURE_NAMES):
         raise TrainingError("feature_names_mismatch")
     classes = data["classes"]
-    if (
-        not isinstance(classes, list)
-        or len(classes) < 2
-        or len(set(classes)) != len(classes)
-        or not all(isinstance(name, str) and name for name in classes)
-    ):
+    if not isinstance(classes, list) or len(classes) < 2:
+        raise TrainingError("invalid_model")
+    for name in classes:
+        _check_token(name, _LABEL)
+        if name == "unknown":
+            raise TrainingError("invalid_model")
+    if len(set(classes)) != len(classes):
         raise TrainingError("invalid_model")
     rows = 1 if len(classes) == 2 else len(classes)
     _vector(data["scaler_mean"], FEATURE_DIM, "invalid_model")
@@ -403,9 +456,26 @@ def load_model(model_dir: Path) -> dict:
     for recording in training["recordings"]:
         if not isinstance(recording, dict) or set(recording) != _RECORDING_KEYS:
             raise TrainingError("invalid_model")
+        for key in ("dataset_id", "participant_id", "session_id", "recording_id"):
+            _check_token(recording[key], _TOKEN)
+        _check_token(recording["sha256"], _SHA256)
+        _count(recording["byte_length"])
+    provenance = training["timestamp_provenance"]
+    if not isinstance(provenance, str) or provenance not in _PROVENANCE:
+        raise TrainingError("invalid_model")
+    counts = training["class_counts"]
+    if not isinstance(counts, dict) or set(counts) != set(classes):
+        raise TrainingError("invalid_model")
+    for value in counts.values():
+        _count(value)
+    _count(training["examples"])
     extraction = data["extraction"]
     if not isinstance(extraction, dict) or set(extraction) != {"version", "length", "stride"}:
         raise TrainingError("invalid_model")
+    try:
+        ExtractionConfig(extraction["version"], extraction["length"], extraction["stride"])
+    except DatasetError:
+        raise TrainingError("invalid_model") from None
     return data
 
 
