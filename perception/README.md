@@ -312,3 +312,49 @@ One JSON file next to the recording, `<user>_<session>_profile.json`: `record_ty
 **This profile is not part of `docs/contracts.md` yet, and it needs to be:** the ML owner consumes the per-user ranges. Until it is added there, its fields can change with its own `schema_version`.
 
 `tests/test_calibration.py` covers scoring with synthetic recordings that have known answers, and drives the live engine with a synthetic stream that follows the prompts. Standard library and pytest only.
+
+## Targeted probe session
+
+`probe_session.py` tests a proposed cue mapping against measurements. Calibration (Phase 3) discovers which movements a person can make. This session takes a fixed set of gestures and asks whether they can be bound to cues without one gesture firing another gesture's cue.
+
+```
+python -m perception.probe_session --source camera --user ID
+python -m perception.probe_session --rescore PATH.jsonl
+```
+
+**Protocol.** Seven gestures, three repetitions each, then a 10 s rest baseline at the end. In order: jaw open, head lift, head down, head turn right, head turn left, head tilt right, head tilt left. There is no free exploration and no confirm step. Both directions of every head axis are prompted, so symmetric options are measured rather than assumed.
+
+**Timing.** Every interval is a flag, given in seconds:
+
+| Flag | Default | Segment |
+| --- | --- | --- |
+| `--lead-in` | 1.0 | "Ready... next: \<prompt\>" before every repetition; 0 disables it |
+| `--perform` | 2.0 | the GO prompt |
+| `--release` | 3.0 | "Relax." between repetitions |
+| `--rest` | 3.5 | after the last repetition; this is the held-out rest |
+| `--baseline` | 10.0 | final rest, the reference every threshold comes from |
+| `--repetitions` | 3 | repetitions per gesture |
+
+That is 18.5 s per gesture and 139.5 s in total, plus the warm-up. The expected duration is printed before the session starts. The Phase 3 discovery timing (0.9 s perform, 0.5 s release, 1.3 s rest) prompted the next gesture while the face was still relaxing from the last one; relaxation takes about 3 s. That corrupted latency, rest quality and cross-talk at once. The defaults are sized to give the face time to relax.
+
+**Latency is measured from the GO prompt, not from the lead-in.** The lead-in is its own segment (`probe_lead_in`). Latency runs from the GO prompt (the repetition marker's `prompt_issued_ms`) to the first sustained threshold crossing. A movement started during the lead-in is excluded rather than reported as fast. Because the lead-in is a fixed one-second warning, this is a *warned* reaction time. It is shorter than an unwarned stop and not comparable with the Phase 3 discovery latencies.
+
+**Recording.** The Phase 3 recording format plus one segment kind, `probe_lead_in`. The header records the timing that was actually used (`protocol.timing_ms`), the expected duration, and the latency reference. Every report prints that timing. Files are written to `captures/` as `<user>_<session>_probe.jsonl`.
+
+**Per gesture.** The Phase 3 metrics, unchanged: latency per repetition and its median, repeatability CV, false positives in held-out rest, and the peak excursion, plus the Phase 3 disqualifiers and rest-quality checks. `score_session` keys channels by name, but here one channel belongs to two gestures (pitch up and pitch down, for example). So `score_channel` is called once per (gesture, channel) pair, and each pair gets its own direction.
+
+**Thresholds.** Phase 3 sets a threshold from how still the person can sit: the larger of 5 sigma of rest and an absolute floor. When the rest is genuinely still, the floor decides, and it gives a head axis a threshold of about 2° against voluntary movements of tens of degrees. That threshold fires on incidental movement. This session adds a third term:
+
+```
+threshold = rest_mean +/- max(5 sigma, absolute floor, k * voluntary_range)
+```
+
+Here voluntary_range is that gesture's own measured range, so each side of a head axis gets its own threshold, and the deadband scales with the threshold. k = 0.33 is provisional. It comes from session 20261122T073621Z: the largest coupling a threshold can remove is at 0.282 of the target's range, and the weakest repetition must still clear its own threshold twice over, which caps k at 0.381. The full derivation is in `probe_session.py`. `--voluntary-k 0` restores the Phase 3 rule. Discovery (`calibrate.py`) still uses the Phase 3 rule (`ScoringConstants.voluntary_k = 0`).
+
+**Cross-talk.** For each gesture A and each other gesture B, the report gives the sustained level of B's channel on B's side while A was performed, as a fraction of B's threshold. A value of 1.0 or more means B's cue would have fired. The number is reported separately for the repetitions ("performing") and for the release and rest that follow ("releasing"), because an overshoot on return shows up in the second. A margin of 0.5 is flagged; it is provisional.
+
+**Overlap is not coupling.** A repetition of A counts towards B only if B's channel was back inside B's threshold at that repetition's GO prompt. This is the same check Phase 3 applies before it measures a latency. If B's channel was not back, what follows may be the tail of an earlier movement, so that repetition and its release are excluded. A cell with no measurable repetition is reported as `ovl` (unmeasurable) and has no number. A cell with some repetitions excluded is marked `~`.
+
+The report is written to `<stem>_probe_report.json`. It does not produce a cue mapping. `--rescore` also reads a Phase 3 discovery recording and reports the jaw and head gestures in it, one direction per axis.
+
+`tests/test_probe_session.py` checks the timing, the lead-in, the recorded header, latency from the GO prompt, and that injected coupling is measured back while injected tails are reported as overlap, not as coupling.
