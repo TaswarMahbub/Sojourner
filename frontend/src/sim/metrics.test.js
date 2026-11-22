@@ -90,17 +90,40 @@ describe('MetricsRecorder', () => {
     expect(s.time_to_clear_s).toBeNull()
   })
 
-  it('hesitation is the dwell from availability to the next committed cue', () => {
+  it('hesitation is the dwell from the start of availability to the next accepted motion command', () => {
     const m = new MetricsRecorder()
-    m.cueAvailable(0)
-    m.cueAvailable(500) // first signal wins
+    m.availability(true, 0)
+    m.availability(true, 500) // still available: the dwell started at 0
     m.command(cmd(1200, 0.2), true)
-    m.command(cmd(1300, 0.2), true) // repeat: not a cue
-    m.cueAvailable(2000)
-    m.command(cmd(2400, 0.1), true)
-    m.command(cmd(3000, 0.3), true) // cue with no availability mark: no dwell
+    m.availability(false, 1210) // output now non-zero
+    m.command(cmd(1300, 0.2), true) // repeat while moving: no availability, no dwell
+    m.availability(true, 2000) // back at rest
+    m.command(cmd(2400, 0, 0.5), true) // angular-only motion still commits
+    m.availability(false, 2410)
+    m.command(cmd(3000, 0.3), true) // never became available: no dwell
     const s = m.summary(1)
     expect(s.hesitation_s).toEqual([1.2, 0.4])
     expect(s.hesitation_median_s).toBeCloseTo(0.8, 12)
+  })
+
+  it('stops, rejections and pre-attempt commands do not commit a cue', () => {
+    const m = new MetricsRecorder()
+    m.availability(true, 0)
+    m.command(cmd(100, 0, 0, { stop: true, taskState: 'idle' }), true) // keep-alive stop
+    m.command({ ...cmd(200, 0.3), accepted: false }, true) // rejected
+    m.command(cmd(250, 0.3), false) // attempt not running
+    m.command(cmd(300, 0.3), true)
+    expect(m.summary(1).hesitation_s).toEqual([0.3])
+  })
+
+  it('availability that ends without a commit (e-stop, fault) drops the pending dwell', () => {
+    const m = new MetricsRecorder()
+    m.availability(true, 0)
+    m.availability(false, 400) // latched
+    m.command(cmd(900, 0.2), true) // accepted later, but no availability preceded it
+    m.availability(false, 910)
+    m.availability(true, 1500)
+    m.command(cmd(1700, 0.2), true)
+    expect(m.summary(1).hesitation_s).toEqual([0.2])
   })
 })

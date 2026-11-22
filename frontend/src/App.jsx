@@ -6,6 +6,7 @@ import TrackingStatusPanel from './components/TrackingStatusPanel.jsx'
 import HeadPosePanel from './components/HeadPosePanel.jsx'
 import GesturePanel from './components/GesturePanel.jsx'
 import SimulatorSection from './components/SimulatorSection.jsx'
+import Simulator3D from './components/Simulator3D.jsx'
 import EnvelopePanel from './components/EnvelopePanel.jsx'
 import { useCalibrationProfile } from './hooks/useCalibrationProfile.js'
 import { createRecordedProfileSource } from './sources/recordedProfileSource.js'
@@ -42,6 +43,7 @@ export default function App() {
         <HeadPosePanel {...camera} />
         <GesturePanel {...gesture} />
       </div>
+      <Simulator3D />
       <SimulatorSection />
     </main>
   )

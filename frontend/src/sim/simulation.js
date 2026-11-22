@@ -24,6 +24,7 @@ import { FixedClock, interpolatePose } from './clock.js'
 import { MAX_ANGULAR_RAD_S, MAX_LINEAR_MPS, SIM_STEP_S } from './constants.js'
 import { checkPose, sweep } from './collision.js'
 import { Attempt } from './attempt.js'
+import { REASONS, haltReason, rejectionReason } from './stopReason.js'
 
 // The drill key and controller. They are not rover secrets and must never be provisioned.
 export const DRILL_KEY = utf8('sojourner-simulator-drill-key-not-for-hardware')
@@ -93,6 +94,9 @@ export class Simulation {
     this.history = []
     this.clearance = world ? checkPose(this.pose, world) : null
     this.contact = null // id of the segment that blocked the last step, or null
+    this.taskState = 'idle' // task_state of the last accepted command
+    this.faultCause = null // why the receiver's fault latch was last set: 'watchdog' or 'fault latch'
+    this.lastRejection = null // { reason, outcome, source, timeMs } for the last datagram that did not move the rover
     this.attempt = world ? new Attempt({ world, provenance, onEmit: onAttemptEmit, stepS: SIM_STEP_S }) : null
     if (this.attempt) this.attempt.arm()
   }
@@ -164,9 +168,6 @@ export class Simulation {
 
   // ---- Attempts (corridor world only). ----
 
-  // The cue source signals that a cue can now be committed (feeds the hesitation metric).
-  markCueAvailable() { if (this.attempt) this.attempt.cueAvailable(this.timeMs) }
-
   // Emits the running attempt (if any), returns the rover to spawn, and re-arms. Receiver untouched.
   resetAttempt() {
     if (!this.attempt) return null
@@ -194,7 +195,10 @@ export class Simulation {
   step() {
     this.stepCount += 1
     this.timeMs = (this.stepCount * 1000) / STEPS_PER_S // exact at every 12-step (100 ms) boundary
+    const faultBefore = this.receiver.faultLatch
     this.receiver.setMonotonic(Math.floor(this.timeMs))
+    // A fault latch that appears on a clock advance, with no datagram in hand, is the watchdog.
+    if (!faultBefore && this.receiver.faultLatch) this.faultCause = REASONS.watchdog
     this.prevPose = this.pose
     this.integrate(SIM_STEP_S)
     if (this.timeMs - this.lastStatusMs >= STATUS_PERIOD_MS - TIME_EPSILON_MS) {
@@ -204,6 +208,14 @@ export class Simulation {
         if (out) this.send(out.message, 'drill', out.why)
       }
     }
+    if (this.attempt) this.attempt.availability(this.cueAvailable(), this.timeMs)
+  }
+
+  // Hesitation availability, from receiver state only: armed, no latch active, output at rest.
+  // Read-only access to the receiver's fields; the receiver decides, the simulation only observes.
+  cueAvailable() {
+    const rx = this.receiver
+    return rx.armed && !rx.physicalEstop && !rx.softwareEstopLatch && !rx.faultLatch && !rx.startupLatch && rx.linearMps === 0 && rx.angularRadS === 0
   }
 
   publishStatus() {
@@ -261,6 +273,7 @@ export class Simulation {
   }
 
   deliver(raw, source, why) {
+    const faultBefore = this.receiver.faultLatch
     const outcome = this.receiver.handleRaw(raw)
     if (source === 'drill') this.lastRaw = raw
     let label
@@ -271,17 +284,24 @@ export class Simulation {
     } catch {
       label = 'Unparseable datagram'
     }
+    if (!faultBefore && this.receiver.faultLatch) {
+      this.faultCause = m && m.task_state === 'fault' ? REASONS.faultLatch : REASONS.watchdog
+    }
+    const accepted = OUTCOMES[outcome]?.kind === 'accepted'
+    if (accepted && m) this.taskState = m.task_state
+    const reason = rejectionReason(outcome, m, this.receiver, this.faultCause)
+    if (reason) this.lastRejection = { reason, outcome, source, timeMs: this.timeMs }
     if (this.attempt && m && typeof m === 'object') {
       this.attempt.command({
         tMs: this.timeMs,
-        accepted: OUTCOMES[outcome]?.kind === 'accepted',
+        accepted,
         taskState: m.task_state,
         linear: Number(m.linear_mps) || 0,
         angular: Number(m.angular_rad_s) || 0,
         stop: Boolean(m.stop),
       })
     }
-    this.log({ label, source, why, outcome, ...OUTCOMES[outcome] })
+    this.log({ label, source, why, outcome, reason, ...OUTCOMES[outcome] })
     this.publishStatus()
     return outcome
   }
@@ -313,6 +333,9 @@ export class Simulation {
       attemptResult: this.attempt ? this.attempt.result : null,
       trail: this.trail,
       torque: rx.motorsHaveTorque(),
+      taskState: this.taskState,
+      haltReason: haltReason(rx, this.faultCause),
+      lastRejection: this.lastRejection,
       output: { linear: rx.linearMps, angular: rx.angularRadS },
       local: {
         startupFinished: !rx.startupLatch,

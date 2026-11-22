@@ -1,0 +1,22 @@
+{
+  "provenance": {
+    "source": "synthetic",
+    "derived_from": "contracts.md §3",
+    "generated": "2026-11-22",
+    "generator": "test/artless/clean-traversal.timeline.json (durations frozen from the closed-loop traversal in src/sim/simulation.corridor.test.js)"
+  },
+  "kind": "drill_drive_timeline",
+  "note": "Operator drive intents, not raw datagrams. The simulation's DrillSender turns each held drive into signed schema 4 commands on its 100 ms cadence; the MotorReceiver judges every one. Durations are multiples of the 100 ms command cycle. A null drive means no control held (the drill sends stops).",
+  "boot_nonce": 42,
+  "unix_t0_ms": 1795276800000,
+  "setup": ["finishStartup", "releaseEstop", "closeCutoff", "connect", "wait 300", "requestArm", "wait 300"],
+  "segments": [
+    { "ms": 24500, "drive": { "linear": 0.3, "angular": 0 } },
+    { "ms": 3000, "drive": { "linear": 0.05, "angular": 0 } },
+    { "ms": 300, "drive": null },
+    { "ms": 3100, "drive": { "linear": 0, "angular": -0.5 } },
+    { "ms": 500, "drive": { "linear": 0, "angular": -0.05 } },
+    { "ms": 300, "drive": null },
+    { "ms": 11100, "drive": { "linear": 0.15, "angular": 0 } }
+  ]
+}

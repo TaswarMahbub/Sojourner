@@ -58,8 +58,9 @@ export class Attempt {
     if (this.state === 'armed' || this.state === 'running') this.metrics.command(c, this.state === 'running')
   }
 
-  cueAvailable(tMs) {
-    if (this.state === 'running' || this.state === 'armed') this.metrics.cueAvailable(tMs)
+  /** Cue availability derived from receiver state, sampled once per fixed step (metrics.js, item 5). */
+  availability(available, tMs) {
+    if (this.state === 'running' || this.state === 'armed') this.metrics.availability(available, tMs)
   }
 
   /**
