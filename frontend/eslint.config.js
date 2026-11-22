@@ -33,6 +33,11 @@ export default defineConfig([
     },
   },
   {
+    // The perf harness CLI runs under Node (page.js beside it runs in the browser).
+    files: ['scripts/perf/run.js'],
+    languageOptions: { globals: { ...globals.node } },
+  },
+  {
     // Node-side test files read fixtures from disk.
     files: ['test/**/*.js'],
     languageOptions: { globals: { ...globals.browser, ...globals.node } },
