@@ -326,9 +326,11 @@ def test_sessions_stay_separate_and_collection_splits_are_enforced(tmp_path):
         split="calibration",
         participant_role="held_out",
     )
+    # Calibration and eval are separate recordings, so their bytes differ.
+    # Identical bytes are refused as a reused source by check_collection.
     _session(
         tmp_path,
-        shared,
+        [_frame(T0 + 6)],
         output=held_eval,
         recording_path=tmp_path / "eval.jsonl",
         participant_id="p02",

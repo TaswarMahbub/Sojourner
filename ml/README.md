@@ -130,7 +130,7 @@ Public research collections are notes in `ml/sources.md`. Their files are not Sc
 
 Annotations live in a session directory. Confirmed intervals use the half-open range `[start_ms, end_ms)` on accepted frame timestamps. A prompted mark stays a candidate until the operator confirms it, and confirmation is an operator claim, not proof of the movement. Uncertain intervals and clip-level labels do not become training examples. `neutral` is used only when the operator marks it. `unknown` is rejected. Gaps are not labeled `neutral`, and no timestamp is invented from a frame rate.
 
-`prepare` calls `ingest_recording` and `validate_split_plan`. It writes `quality-report.json` with counts only. Feature vectors are not stored. A split change requires `--reviewed` and still has to pass the ML-2A plan. The operator procedure is `ml/LABELING.md`.
+`prepare` copies the recording once into a private temporary snapshot, checks its SHA-256 against the session, and calls `ingest_recording` and `validate_split_plan` on that copy. It writes `quality-report.json` with counts only. Feature vectors are not stored. A split change requires `--reviewed` and still has to pass the ML-2A plan. `check` refuses one source recording used by several sessions. Session and annotation files are validated in full on every load. The operator procedure, the file-safety rules, and their limits are in `ml/LABELING.md`.
 
 ## Tests
 

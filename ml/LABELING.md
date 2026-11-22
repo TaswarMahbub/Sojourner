@@ -113,15 +113,31 @@ Changing a recording from `train` to `calibration` or `eval` requires an explici
 python -m ml.label reclassify captures/SESSION --split eval --reviewed
 ```
 
-A held-out participant's calibration session and evaluation session must be different sessions. Check several session directories together without reading their frames:
+A held-out participant's calibration session and evaluation session must be different sessions, and different recordings. Check several session directories together without reading their frames:
 
 ```text
 python -m ml.label check captures/CALIBRATION captures/EVAL
 ```
 
+`check` runs `validate_split_plan` on the declared ids, and it also compares the recordings themselves. Two sessions use the same source when their recording paths resolve to the same file, when the files share a device and inode (a hard link), or when the SHA-256 and length stored at `init` are equal (a copy). Any of these fails with `recording_source_reused` or `recording_content_duplicated`. Reuse across different splits adds `recording_source_reused_across_splits`, and calibration against eval adds `calibration_eval_source_leakage`. Byte-identical files are refused even if they really were recorded separately, because nothing in the file can show that. Unique recording ids do not prove separate collection. `check` does not re-hash the files, so it compares the fingerprints taken at `init`. A future trainer still has to audit the complete example set it fits on, with the ML-2A fitting scopes.
+
+Prepare reads the recording once. It copies the file into a private snapshot (a new 0400 file in a 0700 directory under the system temporary directory, never a hard link) and hashes the copy. The fingerprint check, the counts, `ingest_recording`, and the report all use that copy. After ingestion the copy and the original path are hashed again. If either changed, the report is blocked with `snapshot_changed` or `recording_changed_during_prepare` and no example is emitted. The snapshot is removed on every exit path. A crash can leave it behind in the temporary directory.
+
+A confirmed interval whose start is before the first accepted frame, or whose end is after `last_timestamp_ms + 1`, adds the review reason `interval_boundary_not_observed`. Its onset or offset there was not observed. The windows still contain only real accepted frames, and no frame period is assumed. This is a review reason, not a block. At the safe-integer ceiling `9007199254740991` an end cannot be later than `last + 1`, so the reason cannot appear on that side.
+
 ## Withdrawal
 
 Discard deletes the marker, `session.json`, `annotations.json`, and `quality-report.json`. It does not delete an unexpected file in that directory.
+
+Every target is checked before anything is deleted. A generated name that is a symlink or not a regular file stops the discard. With `--include-recording`, the recording is deleted only if all of these hold:
+
+- `session.json.recording_path` names a file directly inside the session directory.
+- That file is a regular file, not a symlink, has one hard link, and is not named like a generated file.
+- Its SHA-256 and byte length equal the values stored at `init`.
+
+Otherwise discard stops with a code (`recording_identity_mismatch`, `symlink_not_allowed`, `recording_has_other_links`, or `recording_unreadable`) and deletes nothing. A missing recording is treated as already deleted. A byte-identical copy at another path inside the directory would pass the fingerprint check, because the fingerprint is the only identity stored.
+
+The recording is deleted first. If that fails, the session is left as it was (`recording_delete_failed`) and the same command can be retried. The generated files go in the order `quality-report.json`, `annotations.json`, `session.json`, marker. If one of those fails (`discard_incomplete`), a retry accepts the partial session and finishes. A marker left without `session.json` can be removed with plain `discard`. With `--include-recording` it fails with `recording_identity_unavailable`, because the recording can no longer be identified.
 
 ```text
 python -m ml.label discard captures/SESSION
@@ -134,3 +150,25 @@ python -m ml.label discard captures/SESSION --include-recording
 ```
 
 Do not commit the recording, the session directory, or the quality report.
+
+## File safety and metadata
+
+**Writes.** Each file is written to a new temporary file with a unique name, created exclusively with mode 0600 in the same directory, then flushed, synced, closed, and renamed over the destination with `os.replace`. A planted file or symlink at a predictable temporary name is never opened. A destination that is a symlink or not a regular file is refused. On failure only that call's temporary file is removed and the old file stays.
+
+**Replacing a session.** `init --replace` writes the new marker, `session.json`, and `annotations.json` into a private `.label-stage-*` directory inside the session directory, reads them back, and validates them. Only then are the existing files moved into a `.label-backup-*` directory and the new ones moved in, with the marker last. If any step fails, the files moved in are moved back out, the previous files are moved back, and both private directories are removed. The old `quality-report.json` is kept on failure and dropped on success. Codes:
+
+- `output_write_failed`: the replacement failed and the previous session is back.
+- `replacement_cleanup_incomplete`: the outcome is complete (the previous session after a failure, or the new one after success), and a private directory is left over. Remove it by hand. Until then `init` reports `directory_not_empty`.
+- `replacement_rollback_incomplete`: a rename back failed. The previous files are still in the `.label-backup-*` directory. Move them back by hand. Nothing was deleted.
+
+These are process-level guarantees. A power loss or a killed process during the swap can leave a mix of files or a private directory behind. Each rename is atomic on a local file system and the marker goes in last, so an interrupted first `init` does not load as a session. The tool does not claim full crash durability.
+
+**Source collisions.** The recording cannot be a generated file. `init` refuses a recording in the session directory whose name, compared case-insensitively, is a generated name, a `.label-stage-` or `.label-backup-` name, or a dot-name ending in `.tmp` (`recording_collides_with_session_file`). It also compares device and inode with every existing generated file, which catches a hard link or a symlinked directory alias. The check runs before any file is created or moved.
+
+**Loading.** The marker must be exactly `sojourner-label-session-v1` and a newline. `session.json` and `annotations.json` are read as strict UTF-8 JSON: duplicate keys at any depth, `NaN`, `Infinity`, nesting deep enough to exhaust the decoder, and files over 4 MiB are refused. Every field is then checked for its exact type and value before it is used: ids and decision ids, the recording path (absolute), enumerated values (checked as strings first), reviewed labels, window length and stride, conditions, the recording summary, the SHA-256, the split history, and every interval row. The capture claim, category, authorization status, and timestamp provenance must agree. A constructed fixture goes only with `constructed` for all three, and an operator camera claim goes only with `consented_local`, `human_authorized`, and a measured or reconstructed timeline. Annotation ids must equal the session's. This happens before every command, including discard, so a hand-edited file cannot turn a candidate into a confirmed example.
+
+Kept as before: a split or role that the ML-2A plan rejects still produces a blocked report, and an annotation provenance that differs from the session still blocks prepare. `source_format` and `source_version` are checked for type and shape only, because ingestion always uses the Schema 4 feature format.
+
+These checks are internal consistency, not proof. A person who can rewrite every local file, including the stored SHA-256, can make a consistent false session. Split history is a local record that can be edited, not a tamper-evident log. Parent directories that are symlinks are still followed.
+
+**CLI errors.** Rejected input prints one code to stderr and exits 2, with nothing on stdout. No traceback, recording content, or private string is printed. A programming error is not caught and still raises.

@@ -19,9 +19,12 @@ import hashlib
 import json
 import os
 import re
+import stat
+import tempfile
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Iterator, Sequence
 
 from ml.dataset import (
     FEATURE_JSONL_FORMAT,
@@ -36,6 +39,8 @@ from ml.dataset import (
     RecordingIdentity,
     SessionSplit,
     SplitPlanError,
+    _DECISION,
+    _TOKEN,
     _local_file,
     _loads_feature,
     _physical_lines,
@@ -65,10 +70,22 @@ _LABEL = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
 _CONDITIONS = re.compile(r"[A-Za-z0-9 ,./-]{0,120}")
 _CLAIMS = frozenset({"constructed_fixture", "operator_claims_camera"})
 _STATUSES = frozenset({"candidate", "confirmed", "uncertain"})
+_CATEGORIES = frozenset({"consented_local", "authorized_public", "constructed_fixture"})
+_PROVENANCE = frozenset({"measured_capture", "constructed", "reconstructed_offline"})
+_AUTH_STATUS = frozenset({"human_authorized", "not_authorized", "constructed"})
+_SPLITS = frozenset({"train", "calibration", "eval"})
+_ROLES = frozenset({"population_train", "held_out"})
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _PRIVATE_DIRS = frozenset({"captures", "datasets"})
-_GENERATED = frozenset(
-    {MARKER_NAME, "session.json", "annotations.json", "quality-report.json", ".quality-report.json.tmp", ".session.json.tmp", ".annotations.json.tmp"}
-)
+# Files this tool owns in a session directory. Temporary files are created
+# with unique names by ``_atomic_write`` and are never listed here.
+_GENERATED = frozenset({MARKER_NAME, "session.json", "annotations.json", "quality-report.json"})
+_MARKER_BYTES = (SESSION_FORMAT + "\n").encode("ascii")
+# Prefixes of private directories a replacement creates inside the session
+# directory, so every rename stays on one file system.
+_STAGE_PREFIX = ".label-stage-"
+_BACKUP_PREFIX = ".label-backup-"
+_METADATA_LIMIT = 4 * 1024 * 1024
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 _SESSION_KEYS = frozenset(
@@ -351,46 +368,244 @@ def _output_dir(path: Path) -> Path:
     return resolved
 
 
-def _atomic_write(path: Path, text: str, *, allow_replace: bool) -> None:
-    if path.is_symlink():
-        raise LabelingError("symlink_not_allowed")
-    if path.exists() and not allow_replace:
-        raise LabelingError("output_exists")
-    temporary = path.with_name("." + path.name + ".tmp")
+def _existing_kind(path: Path) -> str | None:
+    """``None`` when absent, else ``"file"``, ``"symlink"``, or ``"other"``. Never follows a link."""
     try:
-        temporary.write_text(text, encoding="utf-8", newline="\n")
+        info = os.lstat(path)
+    except FileNotFoundError:
+        return None
+    except OSError:
+        raise LabelingError("output_write_failed") from None
+    if stat.S_ISLNK(info.st_mode):
+        return "symlink"
+    if stat.S_ISREG(info.st_mode):
+        return "file"
+    return "other"
+
+
+def _check_destination(path: Path, allow_replace: bool) -> None:
+    kind = _existing_kind(path)
+    if kind == "symlink":
+        raise LabelingError("symlink_not_allowed")
+    if kind == "other":
+        raise LabelingError("unsafe_output_type")
+    if kind == "file" and not allow_replace:
+        raise LabelingError("output_exists")
+
+
+def _unlink_owned(path: Path) -> bool:
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def _sync_directory(path: Path) -> None:
+    # Best effort. Some platforms cannot open a directory for fsync.
+    try:
+        handle = os.open(path, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(handle)
+    except OSError:
+        pass
+    finally:
+        os.close(handle)
+
+
+def _atomic_write(path: Path, text: str, *, allow_replace: bool) -> None:
+    """Replace one file through a uniquely named temporary file in the same directory.
+
+    ``mkstemp`` creates the temporary file exclusively with mode 0600, so an
+    existing file or symlink at a predictable name is never opened. The data is
+    written, flushed, and closed before ``os.replace``. A failure removes only
+    that temporary file and leaves the previous destination in place.
+    """
+    data = text.encode("utf-8")
+    _check_destination(path, allow_replace)
+    try:
+        handle, name = tempfile.mkstemp(prefix="." + path.name + ".", suffix=".tmp", dir=path.parent)
+    except OSError:
+        raise LabelingError("output_write_failed") from None
+    temporary = Path(name)
+    committed = False
+    try:
+        with os.fdopen(handle, "wb") as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        _check_destination(path, allow_replace)
         os.replace(temporary, path)
+        committed = True
     except LabelingError:
         raise
     except Exception:
-        temporary.unlink(missing_ok=True)
         raise LabelingError("output_write_failed") from None
+    finally:
+        if not committed:
+            _unlink_owned(temporary)
+    _sync_directory(path.parent)
+
+
+def _read_regular(path: Path, *, missing: str, limit: int = _METADATA_LIMIT) -> bytes:
+    """Read a regular file without following a final symlink. Errors are codes only."""
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        handle = os.open(path, flags)
+    except FileNotFoundError:
+        raise LabelingError(missing) from None
+    except OSError:
+        raise LabelingError(missing if missing == "not_a_label_session" else "metadata_unreadable") from None
+    try:
+        with os.fdopen(handle, "rb") as stream:
+            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                raise LabelingError(missing if missing == "not_a_label_session" else "metadata_unreadable")
+            data = stream.read(limit + 1)
+    except LabelingError:
+        raise
+    except OSError:
+        raise LabelingError("metadata_unreadable") from None
+    if len(data) > limit:
+        raise LabelingError("metadata_too_large")
+    return data
+
+
+def _strict_json(raw: bytes):
+    """Strict UTF-8 JSON. Duplicate keys at any depth, NaN, and Infinity are refused."""
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        raise LabelingError("metadata_invalid_utf8") from None
+
+    def pairs(items):
+        document = {}
+        for key, value in items:
+            if key in document:
+                raise LabelingError("duplicate_metadata_key")
+            document[key] = value
+        return document
+
+    def constant(_name):
+        raise LabelingError("metadata_non_finite_number")
+
+    try:
+        return json.loads(text, object_pairs_hook=pairs, parse_constant=constant)
+    except LabelingError:
+        raise
+    except RecursionError:
+        raise LabelingError("metadata_too_deep") from None
+    except ValueError:
+        raise LabelingError("metadata_unreadable") from None
 
 
 def _read_json(path: Path, allowed: frozenset[str]):
-    try:
-        text = path.read_text(encoding="utf-8")
-        data = json.loads(text)
-    except (OSError, UnicodeError, json.JSONDecodeError):
-        raise LabelingError("metadata_unreadable") from None
+    data = _strict_json(_read_regular(path, missing="metadata_unreadable"))
     _exact(data, allowed)
     return data
 
 
-def _fingerprint(path: Path):
-    local = _local_file(path)
+@dataclass(frozen=True)
+class _Snapshot:
+    path: Path
+    source: Path
+    sha256: str
+    byte_length: int
+
+
+def _hash_file(path: Path) -> tuple[str, int]:
     digest = hashlib.sha256()
     size = 0
-    with local.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    handle = os.open(path, flags)
+    with os.fdopen(handle, "rb") as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise OSError("not a regular file")
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             size += len(chunk)
             digest.update(chunk)
-    _reject_calibration(local)
-    _read_count, accepted, rejections = _read_frames(local)
+    return digest.hexdigest(), size
+
+
+@contextmanager
+def _snapshot(path: Path) -> Iterator[_Snapshot]:
+    """Copy the recording once into a private temporary file and hash that copy.
+
+    Everything that reads frames afterwards reads the copy, so the counts,
+    the fingerprint, and the ingested values all come from the same bytes.
+    The copy is a new file (not a hard link) in a 0700 directory under the
+    system temporary directory, outside the repository. It is removed on
+    every exit path.
+    """
+    local = _local_file(path)
+    workdir = Path(tempfile.mkdtemp(prefix="sojourner-label-snapshot-"))
+    target = workdir / "recording.jsonl"
+    try:
+        digest = hashlib.sha256()
+        size = 0
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            source_handle = os.open(local, flags)
+            with os.fdopen(source_handle, "rb") as source:
+                if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
+                    raise LabelingError("recording_unreadable")
+                out_flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+                with os.fdopen(os.open(target, out_flags, 0o600), "wb") as out:
+                    for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                        size += len(chunk)
+                        digest.update(chunk)
+                        out.write(chunk)
+            os.chmod(target, 0o400)
+        except LabelingError:
+            raise
+        except OSError:
+            raise LabelingError("recording_unreadable") from None
+        snap = _Snapshot(target, local, digest.hexdigest(), size)
+        yield snap
+    finally:
+        try:
+            os.chmod(target, 0o600)
+        except OSError:
+            pass
+        _unlink_owned(target)
+        try:
+            os.rmdir(workdir)
+        except OSError:
+            pass
+
+
+def _snapshot_unchanged(snap: _Snapshot) -> bool:
+    try:
+        return _hash_file(snap.path) == (snap.sha256, snap.byte_length)
+    except OSError:
+        return False
+
+
+def _live_matches(snap: _Snapshot) -> bool:
+    """Whether the recording path still holds exactly the snapshot bytes."""
+    try:
+        if Path(snap.source).is_symlink():
+            return False
+        return _hash_file(snap.source) == (snap.sha256, snap.byte_length)
+    except OSError:
+        return False
+
+
+def _summarize(snap: _Snapshot):
+    _reject_calibration(snap.path)
+    _read_count, accepted, rejections = _read_frames(snap.path)
     timestamps = tuple(frame["timestamp_ms"] for frame in accepted)
     states = tuple(frame["tracking_state"] for frame in accepted)
-    overview = _overview(timestamps, states, rejections)
-    return local, digest.hexdigest(), size, overview, timestamps, states
+    return _overview(timestamps, states, rejections), timestamps, states
+
+
+def _fingerprint(path: Path):
+    with _snapshot(path) as snap:
+        overview, timestamps, states = _summarize(snap)
+        return snap.source, snap.sha256, snap.byte_length, overview, timestamps, states
 
 
 def _reject_calibration(path: Path) -> None:
@@ -463,9 +678,37 @@ def _reviewed(labels: Sequence[str] | None, extra: Sequence[str]) -> tuple[str, 
     return tuple(ordered)
 
 
-def _claim_pair(claim: str, category: str, provenance: str, authorization: str) -> None:
-    if claim not in _CLAIMS:
-        raise LabelingError("invalid_capture_claim")
+def _choice(value, allowed: frozenset[str], code: str) -> str:
+    # Type first, so an unhashable value cannot raise TypeError on membership.
+    if not isinstance(value, str) or value not in allowed:
+        raise LabelingError(code)
+    return value
+
+
+def _text_token(value, pattern: re.Pattern[str], code: str) -> str:
+    if not isinstance(value, str) or pattern.fullmatch(value) is None:
+        raise LabelingError(code)
+    return value
+
+
+def _count(value, code: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise LabelingError(code)
+    return value
+
+
+def _claim_pair(claim, category, provenance, authorization) -> None:
+    """The capture claim, category, provenance, and authorization must agree.
+
+    ``constructed_fixture`` goes only with category, provenance, and
+    authorization ``constructed``. ``operator_claims_camera`` goes only with
+    ``consented_local``, ``human_authorized``, and a measured or reconstructed
+    timeline. This is a consistency rule on recorded claims, not proof.
+    """
+    _choice(claim, _CLAIMS, "invalid_capture_claim")
+    _choice(category, _CATEGORIES, "invalid_source_category")
+    _choice(provenance, _PROVENANCE, "invalid_timestamp_provenance")
+    _choice(authorization, _AUTH_STATUS, "invalid_authorization_status")
     if claim == "constructed_fixture":
         if category != "constructed_fixture" or provenance != "constructed" or authorization != "constructed":
             raise LabelingError("constructed_data_is_not_a_measurement")
@@ -474,6 +717,91 @@ def _claim_pair(claim: str, category: str, provenance: str, authorization: str) 
         raise LabelingError("capture_claim_mismatch")
     if provenance not in {"measured_capture", "reconstructed_offline"}:
         raise LabelingError("capture_claim_mismatch")
+
+
+def _check_labels(value) -> tuple[str, ...]:
+    if not isinstance(value, list) or not value:
+        raise LabelingError("invalid_reviewed_labels")
+    seen: set[str] = set()
+    for name in value:
+        checked = _label_name(name, allow_none=False)
+        if checked in seen:
+            raise LabelingError("duplicate_label")
+        seen.add(checked)
+    return tuple(value)
+
+
+def _check_session(data) -> dict:
+    """Validate every field of ``session.json``. Raise ``LabelingError`` with a code only."""
+    _exact(data, _SESSION_KEYS)
+    if data["session_format"] != SESSION_FORMAT:
+        raise LabelingError("metadata_unreadable")
+    _text_token(data["dataset_id"], _TOKEN, "invalid_dataset_id")
+    _text_token(data["participant_id"], _TOKEN, "invalid_participant_id")
+    _text_token(data["session_id"], _TOKEN, "invalid_session_id")
+    _text_token(data["recording_id"], _TOKEN, "invalid_recording_id")
+    path = data["recording_path"]
+    if not isinstance(path, str) or not path or "\x00" in path or not os.path.isabs(path):
+        raise LabelingError("invalid_recording_path")
+    # Stored for the record. Ingestion always uses the Schema 4 feature format.
+    _text_token(data["source_format"], _DECISION, "invalid_source_format")
+    _text_token(data["source_version"], _DECISION, "invalid_source_version")
+    _text_token(data["extraction_version"], _DECISION, "invalid_extraction_version")
+    _choice(data["split"], _SPLITS, "invalid_split")
+    _choice(data["participant_role"], _ROLES, "invalid_participant_role")
+    _text_token(data["authorization_decision_id"], _DECISION, "invalid_decision_id")
+    _claim_pair(
+        data["capture_claim"],
+        data["source_category"],
+        data["timestamp_provenance"],
+        data["authorization_status"],
+    )
+    _check_labels(data["reviewed_labels"])
+    for key in ("window_length", "window_stride"):
+        value = data[key]
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise LabelingError("invalid_extraction_parameters")
+    _conditions(data["conditions"])
+    frames = _count(data["accepted_frames"], "invalid_recording_summary")
+    first, last = data["first_timestamp_ms"], data["last_timestamp_ms"]
+    if frames == 0:
+        if first is not None or last is not None:
+            raise LabelingError("invalid_recording_summary")
+    else:
+        if not is_timestamp(first) or not is_timestamp(last):
+            raise LabelingError("invalid_recording_summary")
+        if (frames == 1 and first != last) or (frames > 1 and first >= last):
+            raise LabelingError("invalid_recording_summary")
+    _count(data["byte_length"], "invalid_recording_summary")
+    if not isinstance(data["sha256"], str) or _SHA256.fullmatch(data["sha256"]) is None:
+        raise LabelingError("invalid_recording_summary")
+    history = data["split_history"]
+    if not isinstance(history, list):
+        raise LabelingError("invalid_split_history")
+    for entry in history:
+        _exact(entry, frozenset({"from_split", "to_split", "reviewed"}))
+        before = _choice(entry["from_split"], _SPLITS, "invalid_split_history")
+        after = _choice(entry["to_split"], _SPLITS, "invalid_split_history")
+        if before == after or entry["reviewed"] is not True:
+            raise LabelingError("invalid_split_history")
+    return data
+
+
+def _check_annotations(data, session) -> dict:
+    """Validate ``annotations.json`` against its session. A bad row is refused, not skipped."""
+    _exact(data, _ANNOTATION_KEYS)
+    if data["annotation_format"] != ANNOTATION_FORMAT:
+        raise LabelingError("metadata_unreadable")
+    for key in ("participant_id", "session_id", "recording_id"):
+        _text_token(data[key], _TOKEN, f"invalid_{key}")
+        if data[key] != session[key]:
+            raise LabelingError("annotation_session_mismatch")
+    # A provenance that differs from the session is a prepare block, kept below.
+    _choice(data["timestamp_provenance"], _PROVENANCE, "invalid_timestamp_provenance")
+    _intervals(data)
+    if data["clip_label"] is not None:
+        _label_name(data["clip_label"], allow_none=False)
+    return data
 
 
 def _idents(session_fields):
@@ -512,6 +840,13 @@ def _idents(session_fields):
     return source, recording, extraction, role, session, assignment
 
 
+def _check_create_inputs(**values) -> None:
+    # Wrong types become stable codes before any ML-2A constructor sees them.
+    for name, value in values.items():
+        if not isinstance(value, str):
+            raise LabelingError(f"invalid_{name}")
+
+
 def create_session(
     recording: Path,
     output: Path,
@@ -534,7 +869,31 @@ def create_session(
     conditions: str = "",
     replace: bool = False,
 ) -> Path:
-    """Create a session directory of metadata. The recording file is not copied or modified."""
+    """Create a session directory of metadata. The recording file is not copied or modified.
+
+    With ``replace=True`` an existing session is replaced as one unit. The new
+    files are written and checked in a private staging directory first. The
+    previous files are moved aside, not deleted, until the new ones are in
+    place. If any step fails in this process, the previous files are moved
+    back. See ``ml/LABELING.md`` for what this does not cover.
+    """
+    if not isinstance(replace, bool):
+        raise LabelingError("operator_input_invalid")
+    _check_create_inputs(
+        dataset_id=dataset_id,
+        participant_id=participant_id,
+        session_id=session_id,
+        recording_id=recording_id,
+        split=split,
+        participant_role=participant_role,
+        source_category=source_category,
+        timestamp_provenance=timestamp_provenance,
+        capture_claim=capture_claim,
+        decision_id=decision_id,
+        extraction_version=extraction_version,
+    )
+    if isinstance(reviewed_labels, (str, bytes)) or isinstance(extra_labels, (str, bytes)):
+        raise LabelingError("invalid_reviewed_labels")
     authorization = "constructed" if capture_claim == "constructed_fixture" else "human_authorized"
     _claim_pair(capture_claim, source_category, timestamp_provenance, authorization)
     labels = _reviewed(reviewed_labels, extra_labels)
@@ -556,9 +915,10 @@ def create_session(
     }
     source, identity, extraction, role, bound, assignment = _idents(fields)
     validate_split_plan((role,), (bound,), (assignment,), ())
-    local, digest, size, overview, _timestamps, _states = _fingerprint(recording)
+    local = _local_file(recording)
     destination = _output_dir(output)
-    _prepare_directory(destination, local, replace)
+    _reject_collision(local, destination)
+    local, digest, size, overview, _timestamps, _states = _fingerprint(local)
     payload = {
         "session_format": SESSION_FORMAT,
         "dataset_id": source.dataset_id,
@@ -596,74 +956,199 @@ def create_session(
         "intervals": [],
         "clip_label": None,
     }
-    try:
-        _atomic_write(destination / MARKER_NAME, SESSION_FORMAT + "\n", allow_replace=replace)
-        _atomic_write(
-            destination / "session.json",
-            json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n",
-            allow_replace=replace,
-        )
-        _atomic_write(
-            destination / "annotations.json",
-            json.dumps(annotations, sort_keys=True, separators=(",", ":")) + "\n",
-            allow_replace=replace,
-        )
-    except Exception:
-        _cleanup_partial(destination, local)
-        raise
+    documents = {
+        "session.json": json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n",
+        "annotations.json": json.dumps(annotations, sort_keys=True, separators=(",", ":")) + "\n",
+        MARKER_NAME: SESSION_FORMAT + "\n",
+    }
+    created, existing = _preflight_directory(destination, local, replace)
+    _commit_generation(destination, documents, existing, created)
     return destination
 
 
-def _prepare_directory(destination: Path, recording: Path, replace: bool) -> None:
-    if destination.exists() and not destination.is_dir():
-        raise LabelingError("output_not_a_directory")
-    destination.mkdir(parents=True, exist_ok=True)
-    present = {item.name for item in destination.iterdir()}
-    allowed = set(_GENERATED)
-    if recording.parent == destination:
-        allowed.add(recording.name)
-    unexpected = present - allowed
-    if unexpected:
-        raise LabelingError("directory_not_empty")
-    if present.intersection(_GENERATED) and not replace:
-        raise LabelingError("output_exists")
-    if replace:
-        for name in present.intersection(_GENERATED):
-            target = destination / name
-            if target.is_symlink():
-                raise LabelingError("symlink_not_allowed")
-            target.unlink()
+def _reserved_name(name: str) -> bool:
+    folded = name.casefold()
+    if folded in {item.casefold() for item in _GENERATED}:
+        return True
+    if folded.startswith((_STAGE_PREFIX, _BACKUP_PREFIX)):
+        return True
+    return folded.startswith(".") and folded.endswith(".tmp")
 
 
-def _cleanup_partial(destination: Path, recording: Path) -> None:
+def _same_directory(left: Path, right: Path) -> bool:
+    if left == right:
+        return True
+    try:
+        return os.path.samefile(left, right)
+    except OSError:
+        return False
+
+
+def _reject_collision(source: Path, destination: Path) -> None:
+    """Refuse a recording that is, or could become, one of this tool's own files.
+
+    Names are compared case-insensitively, because macOS and Windows file
+    systems often are. Existing generated files are also compared by device
+    and inode, which catches a hard link or another alias of the recording.
+    """
+    if _same_directory(source.parent, destination) and _reserved_name(source.name):
+        raise LabelingError("recording_collides_with_session_file")
     if not destination.is_dir():
         return
+    try:
+        identity = os.stat(source)
+    except OSError:
+        raise LabelingError("recording_unreadable") from None
     for name in _GENERATED:
-        candidate = destination / name
-        if candidate.is_symlink():
+        try:
+            other = os.lstat(destination / name)
+        except FileNotFoundError:
             continue
-        if candidate.exists():
-            candidate.unlink()
-    remaining = list(destination.iterdir())
-    if not remaining or (len(remaining) == 1 and remaining[0].resolve() == recording.resolve()):
-        if not remaining:
-            destination.rmdir()
+        except OSError:
+            raise LabelingError("output_write_failed") from None
+        if (other.st_dev, other.st_ino) == (identity.st_dev, identity.st_ino):
+            raise LabelingError("recording_collides_with_session_file")
+
+
+def _preflight_directory(destination: Path, recording: Path, replace: bool) -> tuple[bool, tuple[str, ...]]:
+    """Check the output directory without deleting anything. Return (created, existing generated names)."""
+    if destination.is_symlink():
+        raise LabelingError("symlink_not_allowed")
+    created = False
+    if destination.exists():
+        if not destination.is_dir():
+            raise LabelingError("output_not_a_directory")
+    else:
+        try:
+            destination.mkdir(parents=True)
+        except OSError:
+            raise LabelingError("output_write_failed") from None
+        created = True
+    try:
+        present = {item.name for item in destination.iterdir()}
+    except OSError:
+        raise LabelingError("output_write_failed") from None
+    allowed = set(_GENERATED)
+    if _same_directory(recording.parent, destination):
+        allowed.add(recording.name)
+    if present - allowed:
+        raise LabelingError("directory_not_empty")
+    existing = tuple(sorted(present & _GENERATED))
+    if existing and not replace:
+        raise LabelingError("output_exists")
+    for name in existing:
+        kind = _existing_kind(destination / name)
+        if kind == "symlink":
+            raise LabelingError("symlink_not_allowed")
+        if kind != "file":
+            raise LabelingError("unsafe_output_type")
+    return created, existing
+
+
+# Commit order. The marker goes in last, so an interrupted commit never leaves
+# a directory that loads as a session with only some of its new files.
+_COMMIT_ORDER = ("session.json", "annotations.json", MARKER_NAME)
+# Backup order. The marker leaves first, for the same reason.
+_BACKUP_ORDER = (MARKER_NAME, "quality-report.json", "annotations.json", "session.json")
+
+
+def _remove_owned_dir(path: Path | None) -> bool:
+    """Remove a staging or backup directory this call created. Only regular files are expected in it."""
+    if path is None:
+        return True
+    try:
+        for entry in os.scandir(path):
+            if entry.is_dir(follow_symlinks=False):
+                return False
+            os.unlink(entry.path)
+        os.rmdir(path)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def _verify_staged(stage: Path, documents: dict[str, str]) -> None:
+    for name, text in documents.items():
+        if _read_regular(stage / name, missing="output_write_failed") != text.encode("utf-8"):
+            raise LabelingError("output_write_failed")
+    if _read_regular(stage / MARKER_NAME, missing="output_write_failed") != _MARKER_BYTES:
+        raise LabelingError("output_write_failed")
+    session = _check_session(_read_json(stage / "session.json", _SESSION_KEYS))
+    _check_annotations(_read_json(stage / "annotations.json", _ANNOTATION_KEYS), session)
+
+
+def _commit_generation(
+    destination: Path, documents: dict[str, str], existing: Sequence[str], created: bool
+) -> None:
+    """Stage, verify, then swap in a complete new set of session files.
+
+    On any failure the files placed by this call are moved back out and the
+    previous files are moved back in, then the staging and backup directories
+    are removed. If a rollback rename fails, the backup directory is kept and
+    ``replacement_rollback_incomplete`` is raised so nothing is lost silently.
+    """
+    try:
+        stage = Path(tempfile.mkdtemp(prefix=_STAGE_PREFIX, dir=destination))
+    except OSError:
+        raise LabelingError("output_write_failed") from None
+    backup: Path | None = None
+    moved_out: list[str] = []
+    placed: list[str] = []
+    try:
+        for name in _COMMIT_ORDER:
+            _atomic_write(stage / name, documents[name], allow_replace=False)
+        _verify_staged(stage, documents)
+        if existing:
+            backup = Path(tempfile.mkdtemp(prefix=_BACKUP_PREFIX, dir=destination))
+            for name in _BACKUP_ORDER:
+                if name in existing:
+                    os.replace(destination / name, backup / name)
+                    moved_out.append(name)
+        for name in _COMMIT_ORDER:
+            os.replace(stage / name, destination / name)
+            placed.append(name)
+    except BaseException as failure:
+        restored = True
+        for name in reversed(placed):
+            try:
+                os.replace(destination / name, stage / name)
+            except OSError:
+                restored = False
+        for name in reversed(moved_out):
+            try:
+                os.replace(backup / name, destination / name)
+            except OSError:
+                restored = False
+        clean = _remove_owned_dir(stage)
+        if restored:
+            clean = _remove_owned_dir(backup) and clean
+        if created and clean and restored:
+            try:
+                destination.rmdir()
+            except OSError:
+                pass
+        if not restored:
+            raise LabelingError("replacement_rollback_incomplete") from None
+        if not clean:
+            raise LabelingError("replacement_cleanup_incomplete") from None
+        if isinstance(failure, LabelingError) or not isinstance(failure, Exception):
+            raise
+        raise LabelingError("output_write_failed") from None
+    _sync_directory(destination)
+    if not (_remove_owned_dir(stage) and _remove_owned_dir(backup)):
+        # The new session is complete and in place. Only an old copy is left over.
+        raise LabelingError("replacement_cleanup_incomplete")
 
 
 def _load(directory: Path):
+    """Load and fully validate a session. Any problem raises ``LabelingError``."""
     destination = _output_dir(directory)
-    marker = destination / MARKER_NAME
-    if not marker.is_file() or marker.is_symlink():
+    if _read_regular(destination / MARKER_NAME, missing="not_a_label_session") != _MARKER_BYTES:
         raise LabelingError("not_a_label_session")
-    if marker.read_text(encoding="utf-8") != SESSION_FORMAT + "\n":
-        raise LabelingError("not_a_label_session")
-    session = _read_json(destination / "session.json", _SESSION_KEYS)
-    annotations = _read_json(destination / "annotations.json", _ANNOTATION_KEYS)
-    if session["session_format"] != SESSION_FORMAT or annotations["annotation_format"] != ANNOTATION_FORMAT:
-        raise LabelingError("metadata_unreadable")
-    for key in ("participant_id", "session_id", "recording_id"):
-        if annotations[key] != session[key]:
-            raise LabelingError("annotation_session_mismatch")
+    session = _check_session(_read_json(destination / "session.json", _SESSION_KEYS))
+    annotations = _check_annotations(_read_json(destination / "annotations.json", _ANNOTATION_KEYS), session)
     return destination, session, annotations
 
 
@@ -674,9 +1159,7 @@ def _intervals(data) -> tuple[MarkedInterval, ...]:
     parsed = []
     for row in rows:
         _exact(row, _INTERVAL_KEYS)
-        status = row["status"]
-        if status not in _STATUSES:
-            raise LabelingError("invalid_annotation_status")
+        status = _choice(row["status"], _STATUSES, "invalid_annotation_status")
         label = _label_name(row["label"], allow_none=True)
         if status != "uncertain" and label is None:
             raise LabelingError("label_required")
@@ -973,8 +1456,21 @@ def prepare_session(directory: Path) -> QualityReport:
     values, and the examples themselves are not written to disk.
     """
     destination, session, annotations = _load(directory)
-    recording_path = Path(session["recording_path"])
-    local, digest, size, overview, timestamps, states = _fingerprint(recording_path)
+    with _snapshot(Path(session["recording_path"])) as snap:
+        report = _prepare_snapshot(session, annotations, snap)
+    _atomic_write(destination / "quality-report.json", report.to_json(), allow_replace=True)
+    return report
+
+
+def _prepare_snapshot(session, annotations, snap: _Snapshot) -> QualityReport:
+    """Build the report from one private copy of the recording.
+
+    The fingerprint, the counts, and ``ingest_recording`` all read ``snap.path``.
+    After ingestion the copy is hashed again, and so is the original path. If
+    either differs, the examples are withheld and the report is blocked.
+    """
+    overview, timestamps, states = _summarize(snap)
+    digest, size = snap.sha256, snap.byte_length
     stored = (
         session["byte_length"],
         session["sha256"],
@@ -1037,6 +1533,12 @@ def prepare_session(directory: Path) -> QualityReport:
                 empty += 1
         if empty:
             reviews.append("intervals_without_frames")
+        if timestamps and any(
+            item.start_ms < timestamps[0] or item.end_ms > timestamps[-1] + 1 for item in confirmed
+        ):
+            # The interval reaches past the first or last accepted frame. Its
+            # onset or offset there was not observed. Windows still use real frames only.
+            reviews.append("interval_boundary_not_observed")
         if non_actionable_in:
             reviews.append("tracking_loss_in_intervals")
     split_errors: tuple[str, ...] = ()
@@ -1050,7 +1552,7 @@ def prepare_session(directory: Path) -> QualityReport:
         source, identity, extraction, role, bound, assignment = _idents(session)
         gesture = _gesture_annotations(session, confirmed, clip)
         try:
-            ingested = ingest_recording(local, source, identity, gesture, session["split"], extraction)
+            ingested = ingest_recording(snap.path, source, identity, gesture, session["split"], extraction)
         except (DatasetError, SplitPlanError) as exc:
             code = getattr(exc, "code", None)
             blocks.add(code or "ingest_rejected")
@@ -1077,6 +1579,15 @@ def prepare_session(directory: Path) -> QualityReport:
                     )
                     for item in ingested.examples
                 )
+            integrity = set()
+            if not _snapshot_unchanged(snap):
+                integrity.add("snapshot_changed")
+            if not _live_matches(snap):
+                integrity.add("recording_changed_during_prepare")
+            if integrity:
+                blocks.update(integrity)
+                examples_emitted = 0
+                windows = ()
     else:
         try:
             _source, _identity, _extraction, role, bound, assignment = _idents(session)
@@ -1132,7 +1643,6 @@ def prepare_session(directory: Path) -> QualityReport:
     )
     if report.authorization_is_proof is not False:
         raise LabelingError("authorization_is_not_proof")
-    _atomic_write(destination / "quality-report.json", report.to_json(), allow_replace=True)
     return report
 
 
@@ -1166,12 +1676,32 @@ def _gesture_annotations(session, confirmed: Sequence[MarkedInterval], clip: str
     )
 
 
+def _source_identity(session) -> tuple[str, tuple[int, int] | None, tuple[str, int]]:
+    path = session["recording_path"]
+    try:
+        info = os.stat(path)
+        inode = (info.st_dev, info.st_ino)
+    except OSError:
+        inode = None
+    return os.path.realpath(path), inode, (session["sha256"], session["byte_length"])
+
+
 def check_collection(directories: Sequence[Path]):
-    """Check session assignments together. This does not read feature frames."""
+    """Check session assignments together, including reuse of one source recording.
+
+    Declared ids are checked by ``validate_split_plan``. Sources are compared
+    by canonical path, by device and inode when the file exists, and by the
+    SHA-256 and length stored when each session was created. Any reuse is
+    refused, and reuse across different splits adds a second code. This does
+    not read feature frames, and it does not re-hash the recordings.
+    """
+    if isinstance(directories, (str, bytes, Path)) or not isinstance(directories, Sequence):
+        raise LabelingError("operator_input_invalid")
     roles = []
     sessions = []
     recordings = []
     seen_roles = {}
+    sources = []
     for directory in directories:
         _destination, session, _annotations = _load(directory)
         _source, _identity, _extraction, role, bound, assignment = _idents(session)
@@ -1183,41 +1713,135 @@ def check_collection(directories: Sequence[Path]):
             roles.append(role)
         sessions.append(bound)
         recordings.append(assignment)
-    return validate_split_plan(roles, sessions, recordings, ())
+        sources.append((session["split"], _source_identity(session)))
+    reuse: set[str] = set()
+    for index, (split, (path, inode, content)) in enumerate(sources):
+        for other_split, (other_path, other_inode, other_content) in sources[index + 1 :]:
+            same_file = path == other_path or (inode is not None and inode == other_inode)
+            if not (same_file or content == other_content):
+                continue
+            reuse.add("recording_source_reused" if same_file else "recording_content_duplicated")
+            if split != other_split:
+                reuse.add("recording_source_reused_across_splits")
+                if {split, other_split} == {"calibration", "eval"}:
+                    reuse.add("calibration_eval_source_leakage")
+    try:
+        plan = validate_split_plan(roles, sessions, recordings, ())
+    except SplitPlanError as exc:
+        raise SplitPlanError(tuple(sorted(set(exc.codes) | reuse))) from None
+    if reuse:
+        raise SplitPlanError(tuple(sorted(reuse)))
+    return plan
+
+
+def _discard_state(destination: Path):
+    """Load for discard. Accept only the partial states an interrupted discard leaves.
+
+    Discard deletes ``quality-report.json``, then ``annotations.json``, then
+    ``session.json``, then the marker. A retry may therefore find the marker
+    with ``session.json`` and no ``annotations.json``, or the marker alone.
+    Every file that is present is still validated in full.
+    """
+    if _read_regular(destination / MARKER_NAME, missing="not_a_label_session") != _MARKER_BYTES:
+        raise LabelingError("not_a_label_session")
+    has_session = _existing_kind(destination / "session.json") is not None
+    has_annotations = _existing_kind(destination / "annotations.json") is not None
+    if not has_session:
+        if has_annotations:
+            raise LabelingError("metadata_unreadable")
+        return None
+    session = _check_session(_read_json(destination / "session.json", _SESSION_KEYS))
+    if has_annotations:
+        _check_annotations(_read_json(destination / "annotations.json", _ANNOTATION_KEYS), session)
+    return session
+
+
+def _verified_recording(destination: Path, session) -> Path | None:
+    """Return the recording path only if it is provably this session's own recording.
+
+    Policy: the file must be a direct child of the session directory, a
+    regular file that is not a symlink, not one of this tool's file names,
+    with one hard link, and its SHA-256 and length must equal the values
+    stored when the session was created. A missing file returns ``None``.
+    Anything else raises before any file is deleted.
+    """
+    recording = Path(session["recording_path"])
+    if not _same_directory(recording.parent, destination):
+        return None
+    try:
+        info = os.lstat(recording)
+    except FileNotFoundError:
+        return None
+    except OSError:
+        raise LabelingError("recording_unreadable") from None
+    if stat.S_ISLNK(info.st_mode):
+        raise LabelingError("symlink_not_allowed")
+    if not stat.S_ISREG(info.st_mode):
+        raise LabelingError("unsafe_output_type")
+    if _reserved_name(recording.name):
+        raise LabelingError("recording_collides_with_session_file")
+    if info.st_nlink != 1:
+        raise LabelingError("recording_has_other_links")
+    try:
+        fingerprint = _hash_file(recording)
+    except OSError:
+        raise LabelingError("recording_unreadable") from None
+    if fingerprint != (session["sha256"], session["byte_length"]):
+        raise LabelingError("recording_identity_mismatch")
+    return recording
 
 
 def discard_session(directory: Path, *, include_recording: bool = False) -> DiscardResult:
-    """Delete files this tool wrote. A recording is deleted only when asked, and only from inside the session directory."""
+    """Delete files this tool wrote, and the recording only when asked and verified.
+
+    Every deletion target is checked before anything is deleted. The recording
+    is deleted first, so a failure there leaves the session intact for a retry.
+    A failure while deleting generated files raises ``discard_incomplete`` and
+    a retry finishes the job.
+    """
     if not isinstance(include_recording, bool):
         raise LabelingError("operator_input_invalid")
-    destination, session, _annotations = _load(directory)
-    recording = Path(session["recording_path"])
-    deleted = 0
-    for name in sorted(_GENERATED):
-        candidate = destination / name
-        if not candidate.exists():
+    destination = _output_dir(directory)
+    session = _discard_state(destination)
+    present = []
+    for name in _BACKUP_ORDER:
+        kind = _existing_kind(destination / name)
+        if kind is None:
             continue
-        if candidate.is_symlink():
+        if kind == "symlink":
             raise LabelingError("symlink_not_allowed")
-        candidate.unlink()
-        deleted += 1
+        if kind != "file":
+            raise LabelingError("unsafe_output_type")
+        present.append(name)
+    outside = False
+    target = None
+    if session is not None:
+        outside = not _same_directory(Path(session["recording_path"]).parent, destination)
+        if include_recording:
+            target = _verified_recording(destination, session)
+    elif include_recording:
+        raise LabelingError("recording_identity_unavailable")
     deleted_recording = False
-    try:
-        recording.resolve().relative_to(destination.resolve())
-        inside = True
-    except ValueError:
-        inside = False
-    outside = not inside
-    if include_recording:
-        if recording.is_symlink():
-            raise LabelingError("symlink_not_allowed")
-        if inside and recording.is_file():
-            recording.unlink()
-            deleted_recording = True
+    if target is not None:
+        try:
+            target.unlink()
+        except OSError:
+            raise LabelingError("recording_delete_failed") from None
+        deleted_recording = True
+    deleted = 0
+    # Marker last, so an interrupted discard is still a session a retry can load.
+    for name in ("quality-report.json", "annotations.json", "session.json", MARKER_NAME):
+        if name not in present:
+            continue
+        try:
+            (destination / name).unlink()
+        except OSError:
+            raise LabelingError("discard_incomplete") from None
+        deleted += 1
     unexpected = 0
+    removed = False
     if destination.exists():
         unexpected = sum(1 for _item in destination.iterdir())
-        removed = False
         if unexpected == 0:
             destination.rmdir()
             removed = True
