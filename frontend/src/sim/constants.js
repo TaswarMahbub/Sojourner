@@ -8,7 +8,7 @@
 // Frame: ROS REP-103 throughout. +X forward (down the corridor), +Y left, +Z up, yaw CCW positive.
 // Units: metres, seconds, radians, unless a name says otherwise.
 //
-// Sources: docs/handoff.md (rev 2, 22 Nov 2026) and docs/answers-for-davinas-claude.md
+// Sources: docs/handoff.md (rev 2, 22 Nov 2026) and docs/sim-decisions.md
 // (22 Nov 2026). Where they disagree, the answers file wins (doorway 0.815 m, handrails in the
 // collision world).
 
@@ -85,16 +85,23 @@ export const CORRIDOR_LENGTH_M = 12.0
 export const CEILING_HEIGHT_M = 2.7
 /** Doorway centre, measured along +X from spawn. Right-hand wall (−Y side). */
 export const DOORWAY_CENTRE_X_M = 7.5
+/**
+ * Door leaf. NOT in the collision world (ruled by Mridhul, 22 Nov 2026). Held flat against the
+ * corridor wall it would sit at y = −1.06, behind the handrail face at −1.01, so the rail already
+ * dominates — but leaf and rail would then physically interfere. So the door is hung to open INTO
+ * THE ROOM. Phase 3 visual model: hinge on the room side of the frame, leaf swung into the room.
+ */
 export const DOOR_LEAF_M = 0.9
+export const DOOR_OPENS_INTO = 'room'
 export const DOOR_HEAD_HEIGHT_M = 2.1
 /** Frame reveal depth = wall thickness. It is what a swinging corner catches. */
 export const FRAME_REVEAL_DEPTH_M = 0.12
 export const WALL_THICKNESS_M = 0.12
 export const THRESHOLD_HEIGHT_M = 0 // flush, level access
-/** Clinician room: 4.20 m along the corridor (X) × 3.60 m deep (−Y). The handoff's camera
- *  section calls the room "3.6 m deep", which fixes the orientation. */
-export const ROOM_WIDTH_ALONG_CORRIDOR_M = 4.2
-export const ROOM_DEPTH_M = 3.6
+/** Clinician room: 3.60 m along the corridor (X) × 4.20 m deep (−Y). The Phase 3 table
+ *  (3.60 × 4.20, corridor axis first) is authoritative; ruled by Mridhul, 22 Nov 2026. */
+export const ROOM_WIDTH_ALONG_CORRIDOR_M = 3.6
+export const ROOM_DEPTH_M = 4.2
 export const ROOM_CEILING_HEIGHT_M = 2.7
 
 /**
@@ -102,7 +109,7 @@ export const ROOM_CEILING_HEIGHT_M = 2.7
  * The handoff puts spawn at 0.0 and the doorway 7.50 m from spawn, inside a 12.00 m corridor, but
  * does not say where spawn sits relative to the back wall. 0.60 m is the smallest round figure that
  * lets the avatar turn in place at spawn (swing radius 0.533 m) without breaching the 0.05 m
- * near-miss threshold. INTERPRETATION — CONFIRM with Mridhul.
+ * near-miss threshold. Accepted by Mridhul, 22 Nov 2026.
  */
 export const SPAWN_SETBACK_M = 0.6
 

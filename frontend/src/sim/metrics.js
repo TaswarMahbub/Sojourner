@@ -12,8 +12,17 @@
 //  4. Cues per metre: accepted command transitions ÷ distance travelled. A transition is an accepted
 //     command whose (task_state, linear, angular, stop) differs from the previous accepted one, so
 //     keep-alive repeats are not cues.
-//  5. Hesitation: per committed cue, the dwell since a cue last became available; list plus median.
-//     What "available" means belongs to the cue source, which signals it via cueAvailable().
+//  5. Hesitation: per committed cue, the dwell since a cue became available; list plus median.
+//     Derived from receiver state, not signalled by any UI (ruled by Mridhul, 22 Nov 2026):
+//       available = receiver armed, no latch active, output velocities both zero (at rest,
+//                   awaiting the next cue). The caller samples this every fixed step.
+//       committed = the next ACCEPTED command with a non-zero velocity.
+//       dwell     = committed time − the step at which availability last began.
+//     If availability ends without a commit (an e-stop, a fault, a disarm), the pending mark is
+//     dropped and the next availability starts a fresh one.
+//     This is exact for discrete cueing, where every cue starts from rest. It is DEGENERATE in
+//     continuous manual mode: while a control is held the output never returns to zero, so few or
+//     no dwells are recorded and the median is dominated by the first start from rest.
 
 import { CONTACT_TOLERANCE_M, NEAR_MISS_THRESHOLD_M } from './constants.js'
 
@@ -48,6 +57,7 @@ export class MetricsRecorder {
     this.nearTouched = false
     this.cues = 0
     this.lastAcceptedKey = null
+    this.wasAvailable = false
     this.cueAvailableMs = null
     this.hesitationsS = []
   }
@@ -59,23 +69,27 @@ export class MetricsRecorder {
    */
   command(c, counting) {
     if (!c.accepted) return
-    if (counting && this.firstMotionMs === null && isMotionCommand(c)) this.firstMotionMs = c.tMs
+    const motion = isMotionCommand(c)
+    if (counting && this.firstMotionMs === null && motion) this.firstMotionMs = c.tMs
+    if (counting && motion && this.cueAvailableMs !== null) {
+      this.hesitationsS.push((c.tMs - this.cueAvailableMs) / 1000)
+      this.cueAvailableMs = null
+    }
     const key = commandKey(c)
     if (key !== this.lastAcceptedKey) {
       this.lastAcceptedKey = key
-      if (counting) {
-        this.cues += 1
-        if (this.cueAvailableMs !== null) {
-          this.hesitationsS.push((c.tMs - this.cueAvailableMs) / 1000)
-          this.cueAvailableMs = null
-        }
-      }
+      if (counting) this.cues += 1
     }
   }
 
-  /** The cue source signals that a cue can now be committed. The first signal since the last cue wins. */
-  cueAvailable(tMs) {
-    if (this.cueAvailableMs === null) this.cueAvailableMs = tMs
+  /**
+   * Cue availability, sampled from receiver state once per fixed step (see header, item 5).
+   * A rising edge opens a dwell; a falling edge with no commit in between drops it.
+   */
+  availability(available, tMs) {
+    if (available && !this.wasAvailable) this.cueAvailableMs = tMs
+    else if (!available && this.wasAvailable) this.cueAvailableMs = null
+    this.wasAvailable = available
   }
 
   /**

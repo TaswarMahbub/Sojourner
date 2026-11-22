@@ -18,4 +18,23 @@ export default defineConfig([
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
   },
+  {
+    // Invariant I1: the simulation never imports three.js and never reads the view layer.
+    // Data flows one way, simulation → view. Enforced here and by src/sim/importBoundary.test.js.
+    files: ['src/sim/**/*.{js,jsx}'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        paths: [{ name: 'three', message: 'Invariant I1: src/sim/ must not import three.' }],
+        patterns: [
+          { group: ['three/*', 'three/**'], message: 'Invariant I1: src/sim/ must not import three.' },
+          { group: ['**/view', '**/view/**'], message: 'Invariant I1: src/sim/ must not import from src/view/.' },
+        ],
+      }],
+    },
+  },
+  {
+    // Node-side test files read fixtures from disk.
+    files: ['test/**/*.js'],
+    languageOptions: { globals: { ...globals.browser, ...globals.node } },
+  },
 ])
