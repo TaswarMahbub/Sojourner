@@ -316,6 +316,12 @@ class ScoringConstants:
         fraction of min_excursion for the unit. 0.5 keeps the guarantee that
         a channel clearing min_excursion reaches twice its threshold, the
         same ratio snr_floor / threshold_k gives. See "Threshold floor".
+    voluntary_k: fraction of the gesture's own voluntary range that the
+        activation threshold must reach, in addition to the noise and floor
+        terms (see "Voluntary term" under threshold_offsets). 0 disables the
+        term and gives the Phase 3 rule exactly; discovery (calibrate.py)
+        runs with 0. The targeted probe session sets it; its value and
+        derivation are in perception/probe_session.py. PROVISIONAL.
     min_stop_latency_reps: a channel can be bound to Stop only with at
         least this many valid latency repetitions. Stop goes to the
         lowest-latency channel because a late stop is unsafe, and a median
@@ -358,6 +364,7 @@ class ScoringConstants:
     threshold_floor_fraction: float = 0.5
     lighting_max_ratio: float = 1.2
     min_stop_latency_reps: int = 2
+    voluntary_k: float = 0.0
     weights: dict = field(default_factory=lambda: {
         "snr": 0.40,
         "repeatability": 0.20,
@@ -785,21 +792,41 @@ def rest_reference(series: Series, name: str, rest: Window | None, c: ScoringCon
     return result
 
 
-def threshold_offsets(effective_std: float, unit: str, c: ScoringConstants) -> dict:
+def threshold_offsets(effective_std: float, unit: str, c: ScoringConstants,
+                      voluntary_range: float | None = None) -> dict:
     """Activation and deadband offsets from rest_mean, with the floor applied.
 
     threshold = max(threshold_k * effective_std, threshold_floor_fraction *
-    min_excursion[unit]); deadband = max(deadband_k * effective_std, the
-    same floor scaled by deadband_k / threshold_k). floored says whether the
-    floor, not the measured noise, set the threshold.
+    min_excursion[unit], voluntary_k * voluntary_range); deadband = the
+    same three terms each scaled by deadband_k / threshold_k (the first is
+    deadband_k * effective_std). floored says whether the floor, not the
+    measured noise or the voluntary term, set the threshold; set_by names
+    the term that did.
+
+    Voluntary term. The first two terms only say how still the person can
+    sit. With a genuinely still rest, 5 sigma is almost nothing and the
+    floor decides, so a head axis gets a threshold of a couple of degrees
+    against voluntary movements of tens of degrees, and incidental
+    movement (breathing, one axis dragging another) crosses it. A threshold
+    that separates intentional from incidental movement must also be a
+    fraction of what the person can voluntarily produce. voluntary_range is
+    the gesture's usable_range (median sustained repetition peak);
+    voluntary_k is 0 unless set, which is the Phase 3 rule.
     """
     floor = c.threshold_floor_fraction * c.min_excursion[unit]
     measured = c.threshold_k * effective_std
+    voluntary = c.voluntary_k * voluntary_range if c.voluntary_k > 0 and voluntary_range is not None else 0.0
+    threshold = max(measured, floor, voluntary)
+    scale = c.deadband_k / c.threshold_k
+    set_by = "voluntary" if voluntary >= max(measured, floor) and voluntary > 0 else (
+        "floor" if floor > measured else "noise")
     return {
-        "threshold": max(measured, floor),
-        "deadband": max(c.deadband_k * effective_std, floor * c.deadband_k / c.threshold_k),
+        "threshold": threshold,
+        "deadband": max(c.deadband_k * effective_std, floor * scale, voluntary * scale),
         "floor_offset": floor,
-        "floored": floor > measured,
+        "floored": set_by == "floor",
+        "voluntary_offset": voluntary,
+        "set_by": set_by,
     }
 
 
@@ -996,6 +1023,14 @@ def score_channel(series: Series, name: str, probe: str | None, sw: SessionWindo
     if mean is None or rest["frames"] < c.min_rest_frames:
         return metrics
     offsets = threshold_offsets(eff, metrics["unit"], c)
+    if c.voluntary_k > 0:
+        # Peaks and missed-rep marking do not depend on the threshold, so the
+        # voluntary range is measured first and the threshold set from it.
+        first_pass = repetition_metrics(series, name, mean, offsets["threshold"], sw.reps.get(probe, []), c)
+        mark_missed(first_pass, c)
+        voluntary = [r["peak"] for r in first_pass if r["counted"] and r["peak"] is not None]
+        if len(voluntary) >= 2:
+            offsets = threshold_offsets(eff, metrics["unit"], c, statistics.median(voluntary))
     offset, deadband = offsets["threshold"], offsets["deadband"]
     metrics["deadband"] = {"k": c.deadband_k, "offset": deadband, "lower": mean - deadband, "upper": mean + deadband}
     eligible, excluded = rest_windows_for(series, name, probe, mean, offset, sw.held_out, c)
@@ -1030,6 +1065,9 @@ def score_channel(series: Series, name: str, probe: str | None, sw: SessionWindo
     metrics["threshold"] = {"k": c.threshold_k, "offset": offset, "lower": mean - offset, "upper": mean + offset,
                             "active": mean + direction * offset, "floor_offset": offsets["floor_offset"],
                             "floored": offsets["floored"]}
+    if c.voluntary_k > 0:
+        metrics["threshold"].update(voluntary_k=c.voluntary_k, voluntary_offset=offsets["voluntary_offset"],
+                                    set_by=offsets["set_by"])
     if len(peaks) < 2:
         return metrics
     usable = statistics.median(peaks)
