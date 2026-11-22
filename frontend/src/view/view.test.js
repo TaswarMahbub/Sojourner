@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { AgXToneMapping, Box3, Mesh, MeshStandardMaterial, Object3D, SRGBColorSpace, Vector3 } from 'three'
+import { AgXToneMapping, Box3, Mesh, MeshStandardMaterial, Object3D, PerspectiveCamera, SRGBColorSpace, Vector3 } from 'three'
 import { CORRIDOR_WORLD as W } from '../sim/worldModel.js'
 import { AVATAR_HEIGHT_M, AVATAR_LENGTH_M, AVATAR_WIDTH_M, HANDRAIL_DIAMETER_M, HANDRAIL_HEIGHT_M } from '../sim/constants.js'
 import { applyPose, rosToThree } from './frame.js'
 import { buildCorridor, makeFreeSpace } from './corridor.js'
 import { createAvatarProxy } from './chairView.js'
-import { followCamera } from './cameraRig.js'
+import { ARM_MIN_M, createFollowRig, followCamera, wallsBetween } from './cameraRig.js'
+import { SWING_RADIUS_M } from '../sim/constants.js'
 import { RENDERER_SETTINGS, buildScene, cappedPixelRatio } from './sceneRoot.js'
 
 const MM = 0.001
@@ -71,7 +72,8 @@ const inside = (p, r) => {
 describe('grey-box geometry is built from worldModel', () => {
   const group = buildCorridor(W, new MeshStandardMaterial())
   group.updateMatrixWorld(true)
-  const boxes = group.children.filter((m) => m instanceof Mesh && m.geometry.type === 'BoxGeometry')
+  const boxes = []
+  group.traverse((m) => { if (m instanceof Mesh && m.userData.solid) boxes.push(m) })
   const rects = boxes.map((m) => ({ id: m.name, rect: groundRect(m) }))
   const isFree = makeFreeSpace(W)
 
@@ -155,19 +157,69 @@ describe('renderer settings and camera', () => {
     expect(cappedPixelRatio(1)).toBe(1)
   })
 
-  it('builds the scene headless with exactly one hemisphere and one directional light', () => {
+  it('builds the scene headless with the Phase 5a rig: one directional light, nine area lights', () => {
     const { scene } = buildScene(W)
     const lights = []
     scene.traverse((o) => { if (o.isLight) lights.push(o.type) })
-    expect(lights.sort()).toEqual(['DirectionalLight', 'HemisphereLight'])
+    expect(lights.filter((t) => t === 'DirectionalLight')).toHaveLength(1)
+    expect(lights.filter((t) => t === 'RectAreaLight')).toHaveLength(9)
+    expect(lights).toHaveLength(10)
   })
 
   it('the follow camera never sits outside the building, including at spawn', () => {
     const isFree = makeFreeSpace(W)
-    const poses = [W.spawn, { x: 5, y: 0, heading: 0 }, { x: 7.5, y: -0.7, heading: -Math.PI / 2 }, { x: 7.5, y: -1.7, heading: -Math.PI / 2 }, { x: 11, y: 0.5, heading: Math.PI }]
+    const poses = [W.spawn, { x: 5, y: 0, heading: 0 }, { x: 7.5, y: -0.7, heading: -Math.PI / 2 }, { x: 7.5, y: -1.7, heading: -Math.PI / 2 }, { x: 10.2, y: 0.5, heading: Math.PI }] // end wall at 11.20; nearer than ~0.8 m the min arm deliberately goes behind it
     for (const p of poses) {
       const { position } = followCamera(p, isFree)
       expect(isFree(toRos(position)), JSON.stringify(p)).toBe(true)
     }
+  })
+
+  it('I-1: the arm never shortens to inside the avatar, at any heading or pose', () => {
+    const isFree = makeFreeSpace(W)
+    expect(ARM_MIN_M).toBeGreaterThan(SWING_RADIUS_M + 0.1)
+    for (let k = 0; k < 36; k += 1) {
+      const heading = (k * Math.PI) / 18
+      for (const p of [W.spawn, { x: -0.8 + 0.4225 + 0.005, y: 0, heading: 0 }, { x: 7.5, y: -1.7, heading }, { x: 3, y: 0.6, heading }]) {
+        const { arm } = followCamera({ ...p, heading }, isFree)
+        expect(arm).toBeGreaterThanOrEqual(ARM_MIN_M)
+      }
+    }
+  })
+
+  it('I-1: at spawn the camera is inside the corridor and outside the avatar', () => {
+    const { arm, position } = followCamera(W.spawn, makeFreeSpace(W))
+    expect(arm).toBeGreaterThan(SWING_RADIUS_M)
+    expect(makeFreeSpace(W)(toRos(position))).toBe(true)
+  })
+
+  it('I-1: backed against the back wall, the camera goes behind the wall and names it to hide', () => {
+    const isFree = makeFreeSpace(W)
+    const pose = { x: W.bounds.x0 + 0.4225 + 0.005, y: 0, heading: 0 }
+    const cam = followCamera(pose, isFree)
+    expect(cam.arm).toBeCloseTo(ARM_MIN_M, 9)
+    expect(isFree(cam.ground)).toBe(false)
+    expect(wallsBetween(W, pose, cam.ground)).toEqual(['back_wall'])
+    // …and the hidden id really is a mesh in the built scene.
+    expect(buildCorridor(W, new MeshStandardMaterial()).getObjectByName('back_wall')).toBeTruthy()
+  })
+
+  it('I-1: hiding a wall also hides the trim hosted on it, and restores both when clear', () => {
+    const corridor = buildCorridor(W, new MeshStandardMaterial())
+    const cam = new PerspectiveCamera()
+    const rig = createFollowRig(cam, W, corridor)
+    const hostedOnBack = []
+    corridor.traverse((o) => { if (o.isMesh && (o.userData.segmentId === 'back_wall' || o.userData.host === 'back_wall')) hostedOnBack.push(o) })
+    expect(hostedOnBack.length).toBeGreaterThanOrEqual(3) // wall, skirting, dado
+    rig.update({ x: W.bounds.x0 + 0.4225 + 0.005, y: 0, heading: 0 })
+    expect(hostedOnBack.every((o) => !o.visible)).toBe(true)
+    rig.update({ x: 5, y: 0, heading: 0 })
+    expect(hostedOnBack.every((o) => o.visible)).toBe(true)
+  })
+
+  it('mid-corridor the arm crosses no wall', () => {
+    const pose = { x: 5, y: 0, heading: 0 }
+    const cam = followCamera(pose, makeFreeSpace(W))
+    expect(wallsBetween(W, pose, cam.ground)).toEqual([])
   })
 })

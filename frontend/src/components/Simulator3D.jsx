@@ -66,6 +66,8 @@ export default function Simulator3D() {
       console.warn('3D view unavailable; showing the 2D plan instead.', err)
       setWebglError(String(err?.message ?? err)) // eslint-disable-line react-hooks/set-state-in-effect -- one-time capability probe
     }
+    // Dev-only inspection hook (pose the view, read pixels for histograms). Stripped from builds.
+    if (import.meta.env.DEV && root) window.__sim3d = { sim, root }
     const stage = stageRef.current
     const observer = root ? new ResizeObserver(() => root.resize(stage.clientWidth, stage.clientHeight)) : null
     if (observer) {
