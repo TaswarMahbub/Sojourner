@@ -11,8 +11,12 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "n8ao": "2.1.0",
+    "postprocessing": "6.39.6",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "three": "0.187.0",
+    "three-mesh-bvh": "0.9.18"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
