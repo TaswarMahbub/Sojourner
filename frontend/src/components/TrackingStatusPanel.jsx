@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { CONTROL_EXCLUDED_FEATURES, SCHEMA_VERSION } from '../contracts/cameraFrame.js'
 import { RERANK_MS, orderFeatures, rankFeatures } from './featureRanking.js'
+import { useSettled } from '../hooks/useSettled.js'
 import './TrackingStatusPanel.css'
 
 const TOP_N = 8
@@ -47,6 +48,8 @@ export default function TrackingStatusPanel({ latest, isStale, sourceKind }) {
 
   const key = statusKey(latest, isStale)
   const status = STATUS[key]
+  // Announced only once it has held for a second, so a flickering face is not read out repeatedly.
+  const announced = useSettled(status.label)
   // Stale data is not shown as current: no values, no features.
   const frame = key === 'stale' || !latest?.validation.valid ? null : latest.message
 
@@ -74,10 +77,11 @@ export default function TrackingStatusPanel({ latest, isStale, sourceKind }) {
         <SourceBadge kind={sourceKind} />
       </header>
 
-      <p className={`status status--${status.tone}`} role="status" aria-live="polite">
-        <span className="status__symbol" aria-hidden="true">{status.symbol}</span>
+      <p className={`status status--${status.tone}`} aria-hidden="true">
+        <span className="status__symbol">{status.symbol}</span>
         {status.label}
       </p>
+      <p className="visually-hidden" role="status">Facial tracking: {announced}</p>
 
       {key === 'rejected' && (
         <div className="rejected">
