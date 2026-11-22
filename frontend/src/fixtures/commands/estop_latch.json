@@ -1,0 +1,1075 @@
+{
+ "record_type": "motor_command_recording",
+ "format_version": 1,
+ "scenario": "estop_latch",
+ "description": "Drive 0.30 m/s down the corridor; at x = 5 m the sender issues a software e-stop. The operator keeps asking to drive for 3 s. The latch holds and the rover stays stopped.",
+ "provenance": {
+  "source": "synthetic",
+  "derived_from": "contracts.md §3",
+  "generated": "2026-11-22",
+  "generator": "frontend/scripts/record_commands.js",
+  "signed_with": "simulator drill key (not a rover secret)"
+ },
+ "rover": {
+  "boot_nonce": 42,
+  "controller_id": "sim-drill",
+  "setup": [
+   "startup_complete",
+   "estop_sensor_released",
+   "cutoff_acknowledged"
+  ]
+ },
+ "end_ms": 20900,
+ "datagrams": [
+  {
+   "sequence": 1,
+   "receive_ms": 100,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":1,\"freshness_id\":2,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":1,\"issued_at_ms\":1795276800300,\"expires_at_ms\":1795276800550,\"mac\":\"77853f458b55df0a345242e95ff7db31b74f884b67f012181a83524123e3d033\"}"
+  },
+  {
+   "sequence": 2,
+   "receive_ms": 200,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":2,\"freshness_id\":3,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":2,\"issued_at_ms\":1795276800300,\"expires_at_ms\":1795276800550,\"mac\":\"6760591f1b4af6629599b9cabd116177930c8726c99b1d3a38b32aeb21dc2883\"}"
+  },
+  {
+   "sequence": 3,
+   "receive_ms": 300,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":3,\"freshness_id\":4,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":3,\"issued_at_ms\":1795276800300,\"expires_at_ms\":1795276800550,\"mac\":\"18de95bc5e53737a84833b8062221b0ae03fc8a7bce4852d34fa2b1e068fed75\"}"
+  },
+  {
+   "sequence": 4,
+   "receive_ms": 400,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":4,\"freshness_id\":5,\"rearm_generation\":1,\"task_state\":\"rearm\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":4,\"issued_at_ms\":1795276800600,\"expires_at_ms\":1795276800850,\"mac\":\"cb68ac0716788ae35333f7cc6dc8662193cdf54ba77d6aaa4ac4720ce34a1d74\"}"
+  },
+  {
+   "sequence": 5,
+   "receive_ms": 500,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":5,\"freshness_id\":6,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":5,\"issued_at_ms\":1795276800600,\"expires_at_ms\":1795276800850,\"mac\":\"0439c0f125b1bd4d02a2064bb5aaac03c9ae14e351babe8207513031db0bbc94\"}"
+  },
+  {
+   "sequence": 6,
+   "receive_ms": 600,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":6,\"freshness_id\":7,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":6,\"issued_at_ms\":1795276800600,\"expires_at_ms\":1795276800850,\"mac\":\"89491f7ddb78b7fe55517280f41a982aeb5f8c1dd6d7563b8ddc2222ee82a489\"}"
+  },
+  {
+   "sequence": 7,
+   "receive_ms": 700,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":7,\"freshness_id\":8,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":7,\"issued_at_ms\":1795276800700,\"expires_at_ms\":1795276800950,\"mac\":\"2d24279ea841a58f87e4574f0bd522a764e67ff50594732adcbc590ba8144f75\"}"
+  },
+  {
+   "sequence": 8,
+   "receive_ms": 800,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":8,\"freshness_id\":9,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":8,\"issued_at_ms\":1795276800800,\"expires_at_ms\":1795276801050,\"mac\":\"e0ff2bf18f6f9ead205c1e954a86499b132d975632d2adc05dd4fbfbda9a315a\"}"
+  },
+  {
+   "sequence": 9,
+   "receive_ms": 900,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":9,\"freshness_id\":10,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":9,\"issued_at_ms\":1795276800900,\"expires_at_ms\":1795276801150,\"mac\":\"c6b12de6a14e97cff10f61a0b8af552128796483c9ce848431d35dcb092a2d95\"}"
+  },
+  {
+   "sequence": 10,
+   "receive_ms": 1000,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":10,\"freshness_id\":11,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":10,\"issued_at_ms\":1795276801000,\"expires_at_ms\":1795276801250,\"mac\":\"e92e634d4e6bd4c6dc8b597807427b26b1e0078a3114be60e7a0f21e2a25ce1e\"}"
+  },
+  {
+   "sequence": 11,
+   "receive_ms": 1100,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":11,\"freshness_id\":12,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":11,\"issued_at_ms\":1795276801100,\"expires_at_ms\":1795276801350,\"mac\":\"202c252dbc4b07f5636880c43ccad17bfd6cd759fc2ae8ff76ccf43fd9ed5529\"}"
+  },
+  {
+   "sequence": 12,
+   "receive_ms": 1200,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":12,\"freshness_id\":13,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":12,\"issued_at_ms\":1795276801200,\"expires_at_ms\":1795276801450,\"mac\":\"565ad5fa55891d8fd2433a61066d8d94dc7cc23895466bb2b57b48a67d31952f\"}"
+  },
+  {
+   "sequence": 13,
+   "receive_ms": 1300,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":13,\"freshness_id\":14,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":13,\"issued_at_ms\":1795276801300,\"expires_at_ms\":1795276801550,\"mac\":\"76f739e8742ab815787ffb5868e2221052ba49638557b18025939176b1f59130\"}"
+  },
+  {
+   "sequence": 14,
+   "receive_ms": 1400,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":14,\"freshness_id\":15,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":14,\"issued_at_ms\":1795276801400,\"expires_at_ms\":1795276801650,\"mac\":\"3f0d1f34258ebdc37222612ae18cb72aa2197d3a7caa5b800c5456c78673ce21\"}"
+  },
+  {
+   "sequence": 15,
+   "receive_ms": 1500,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":15,\"freshness_id\":16,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":15,\"issued_at_ms\":1795276801500,\"expires_at_ms\":1795276801750,\"mac\":\"965f2ea8e3e73da7def1a8294fb2e55af3c953c8d9a0c891c62caeebdc7bff6c\"}"
+  },
+  {
+   "sequence": 16,
+   "receive_ms": 1600,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":16,\"freshness_id\":17,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":16,\"issued_at_ms\":1795276801600,\"expires_at_ms\":1795276801850,\"mac\":\"931eb6b966c8b3861fff48cf7b57b5c890f300cb19c05fc86be8e3257f215f99\"}"
+  },
+  {
+   "sequence": 17,
+   "receive_ms": 1700,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":17,\"freshness_id\":18,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":17,\"issued_at_ms\":1795276801700,\"expires_at_ms\":1795276801950,\"mac\":\"aede8493601f7199cb2acf6d38cc1c118c514b7cdebf2fd9534ae8e89018883c\"}"
+  },
+  {
+   "sequence": 18,
+   "receive_ms": 1800,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":18,\"freshness_id\":19,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":18,\"issued_at_ms\":1795276801800,\"expires_at_ms\":1795276802050,\"mac\":\"a3af1c2a44d037a62a559f93e087b7ea5c9c55a10590d1b60bccae617c7b4541\"}"
+  },
+  {
+   "sequence": 19,
+   "receive_ms": 1900,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":19,\"freshness_id\":20,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":19,\"issued_at_ms\":1795276801900,\"expires_at_ms\":1795276802150,\"mac\":\"6e847780829a13c02b75811da5ebe0716f16117955f14c95c449db404b14cb79\"}"
+  },
+  {
+   "sequence": 20,
+   "receive_ms": 2000,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":20,\"freshness_id\":21,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":20,\"issued_at_ms\":1795276802000,\"expires_at_ms\":1795276802250,\"mac\":\"1f10b10d69b1654acc87d33e9024a11531531fe6b697868ce1132d1d20f4adca\"}"
+  },
+  {
+   "sequence": 21,
+   "receive_ms": 2100,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":21,\"freshness_id\":22,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":21,\"issued_at_ms\":1795276802100,\"expires_at_ms\":1795276802350,\"mac\":\"a4c723fa95b4de3fc96183a5ac6635866556a2e592ecd9e9ac7950345bf73417\"}"
+  },
+  {
+   "sequence": 22,
+   "receive_ms": 2200,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":22,\"freshness_id\":23,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":22,\"issued_at_ms\":1795276802200,\"expires_at_ms\":1795276802450,\"mac\":\"0c76623919da982df44ee4970667692ce5ce0ea299da1949fed91313a83a07b5\"}"
+  },
+  {
+   "sequence": 23,
+   "receive_ms": 2300,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":23,\"freshness_id\":24,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":23,\"issued_at_ms\":1795276802300,\"expires_at_ms\":1795276802550,\"mac\":\"d66b1025f8dd6db7e7f66cfff65665901357093b114e9cb21fa7e2d352474046\"}"
+  },
+  {
+   "sequence": 24,
+   "receive_ms": 2400,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":24,\"freshness_id\":25,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":24,\"issued_at_ms\":1795276802400,\"expires_at_ms\":1795276802650,\"mac\":\"3618f64bbad7c6b9798bfd42461f968e7e674e1262b328579206c69f9991a0df\"}"
+  },
+  {
+   "sequence": 25,
+   "receive_ms": 2500,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":25,\"freshness_id\":26,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":25,\"issued_at_ms\":1795276802500,\"expires_at_ms\":1795276802750,\"mac\":\"463c44c66674ccef9964f156b172f705231a47c74daea80aa0931b1878c60924\"}"
+  },
+  {
+   "sequence": 26,
+   "receive_ms": 2600,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":26,\"freshness_id\":27,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":26,\"issued_at_ms\":1795276802600,\"expires_at_ms\":1795276802850,\"mac\":\"90f7c955020536a468e6d3f3d86324bf0ad5b44c6fd738d88c9dddc174c978b0\"}"
+  },
+  {
+   "sequence": 27,
+   "receive_ms": 2700,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":27,\"freshness_id\":28,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":27,\"issued_at_ms\":1795276802700,\"expires_at_ms\":1795276802950,\"mac\":\"c7ff7e684797aa8ca469b53eb91584e6f320ec191985b6075357cc450f5d8e7c\"}"
+  },
+  {
+   "sequence": 28,
+   "receive_ms": 2800,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":28,\"freshness_id\":29,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":28,\"issued_at_ms\":1795276802800,\"expires_at_ms\":1795276803050,\"mac\":\"fd9379309fd8ebb828384fc27299eb2385e3a0b80965f6dd2d77621d28c825da\"}"
+  },
+  {
+   "sequence": 29,
+   "receive_ms": 2900,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":29,\"freshness_id\":30,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":29,\"issued_at_ms\":1795276802900,\"expires_at_ms\":1795276803150,\"mac\":\"eca5f15aa3436e4e068b06629fc00fb7b3bd462b5990a89d2914fc4f8fa8c81d\"}"
+  },
+  {
+   "sequence": 30,
+   "receive_ms": 3000,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":30,\"freshness_id\":31,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":30,\"issued_at_ms\":1795276803000,\"expires_at_ms\":1795276803250,\"mac\":\"14a1bc21e19a54452636b2a31375ded3805e09bf05fc7532cd4b3d13bcb22d41\"}"
+  },
+  {
+   "sequence": 31,
+   "receive_ms": 3100,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":31,\"freshness_id\":32,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":31,\"issued_at_ms\":1795276803100,\"expires_at_ms\":1795276803350,\"mac\":\"782c52a70fa520ba4423c015014f1e7ea8066e7ba79e4f47dcfab1e67a933980\"}"
+  },
+  {
+   "sequence": 32,
+   "receive_ms": 3200,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":32,\"freshness_id\":33,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":32,\"issued_at_ms\":1795276803200,\"expires_at_ms\":1795276803450,\"mac\":\"fbc9f40b50f40d649904e87314d4d8074c8045f1cb6aea25e65706fb2dcbf170\"}"
+  },
+  {
+   "sequence": 33,
+   "receive_ms": 3300,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":33,\"freshness_id\":34,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":33,\"issued_at_ms\":1795276803300,\"expires_at_ms\":1795276803550,\"mac\":\"e49f44562f0956135ccaa1d2d563072585c3bb92596e1b903d8392d7be96415a\"}"
+  },
+  {
+   "sequence": 34,
+   "receive_ms": 3400,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":34,\"freshness_id\":35,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":34,\"issued_at_ms\":1795276803400,\"expires_at_ms\":1795276803650,\"mac\":\"3c15114afd9e4cbdecb913fc1ad5599b1e5dbc06f0c585b71abca197716f72e0\"}"
+  },
+  {
+   "sequence": 35,
+   "receive_ms": 3500,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":35,\"freshness_id\":36,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":35,\"issued_at_ms\":1795276803500,\"expires_at_ms\":1795276803750,\"mac\":\"6b300514496103af85fcd1ea281fc9e3a33caf4743413a2898fce8a131c4001e\"}"
+  },
+  {
+   "sequence": 36,
+   "receive_ms": 3600,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":36,\"freshness_id\":37,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":36,\"issued_at_ms\":1795276803600,\"expires_at_ms\":1795276803850,\"mac\":\"4f855541b431659b91d5d4cbc82fda5b3269c4e927a93fe43b12a19ef871e519\"}"
+  },
+  {
+   "sequence": 37,
+   "receive_ms": 3700,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":37,\"freshness_id\":38,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":37,\"issued_at_ms\":1795276803700,\"expires_at_ms\":1795276803950,\"mac\":\"23eec7386a8a110ed44e60745d47ea19ef5ec855fc17cb0318b87c412a447b87\"}"
+  },
+  {
+   "sequence": 38,
+   "receive_ms": 3800,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":38,\"freshness_id\":39,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":38,\"issued_at_ms\":1795276803800,\"expires_at_ms\":1795276804050,\"mac\":\"312ae3deebef521fdc7dc0978177c731a9711ded5cd7541e26fcbc35d695b8a1\"}"
+  },
+  {
+   "sequence": 39,
+   "receive_ms": 3900,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":39,\"freshness_id\":40,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":39,\"issued_at_ms\":1795276803900,\"expires_at_ms\":1795276804150,\"mac\":\"c6e49aca780def38f5045accb5c788757e1d0fccbca634d7b1284625d5621f86\"}"
+  },
+  {
+   "sequence": 40,
+   "receive_ms": 4000,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":40,\"freshness_id\":41,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":40,\"issued_at_ms\":1795276804000,\"expires_at_ms\":1795276804250,\"mac\":\"aef864a68da1d92d21453f4db73df738eb403cb6243ad5fcfbe9be2782906e08\"}"
+  },
+  {
+   "sequence": 41,
+   "receive_ms": 4100,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":41,\"freshness_id\":42,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":41,\"issued_at_ms\":1795276804100,\"expires_at_ms\":1795276804350,\"mac\":\"4a50dbaaeee155dc1f12f19468adb7e367723f479b9b40e9124f3407a6b4a861\"}"
+  },
+  {
+   "sequence": 42,
+   "receive_ms": 4200,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":42,\"freshness_id\":43,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":42,\"issued_at_ms\":1795276804200,\"expires_at_ms\":1795276804450,\"mac\":\"7a20561df5934c02a9bdc911531bdb0ac606b6a8aaca466e0ca0490be4eeb2dd\"}"
+  },
+  {
+   "sequence": 43,
+   "receive_ms": 4300,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":43,\"freshness_id\":44,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":43,\"issued_at_ms\":1795276804300,\"expires_at_ms\":1795276804550,\"mac\":\"298899fdb89779796723d741a954b01c51d9aa79a6ef988894bd4a4f2e44296b\"}"
+  },
+  {
+   "sequence": 44,
+   "receive_ms": 4400,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":44,\"freshness_id\":45,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":44,\"issued_at_ms\":1795276804400,\"expires_at_ms\":1795276804650,\"mac\":\"73ddde7c036b803096bc4d53c793b952f251e2578bbe86062a7c8eeb90fc663a\"}"
+  },
+  {
+   "sequence": 45,
+   "receive_ms": 4500,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":45,\"freshness_id\":46,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":45,\"issued_at_ms\":1795276804500,\"expires_at_ms\":1795276804750,\"mac\":\"7de623753e0a5ede477256a2657152ba803293fa1d0b5f9952b78dbf5ed5c079\"}"
+  },
+  {
+   "sequence": 46,
+   "receive_ms": 4600,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":46,\"freshness_id\":47,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":46,\"issued_at_ms\":1795276804600,\"expires_at_ms\":1795276804850,\"mac\":\"eb48b1a7a7cffc34228f25fdec6adc0ffa48aa002aed698b4f517ff1ba8138ee\"}"
+  },
+  {
+   "sequence": 47,
+   "receive_ms": 4700,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":47,\"freshness_id\":48,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":47,\"issued_at_ms\":1795276804700,\"expires_at_ms\":1795276804950,\"mac\":\"d715925182cdba79c048987d0bc39bef2abeac336c3fc37db63229a1de380071\"}"
+  },
+  {
+   "sequence": 48,
+   "receive_ms": 4800,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":48,\"freshness_id\":49,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":48,\"issued_at_ms\":1795276804800,\"expires_at_ms\":1795276805050,\"mac\":\"65d5b2d6c5fbefe602cbdc412da23e105d4e1369b97b4b62c3bbd62b14ee6f09\"}"
+  },
+  {
+   "sequence": 49,
+   "receive_ms": 4900,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":49,\"freshness_id\":50,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":49,\"issued_at_ms\":1795276804900,\"expires_at_ms\":1795276805150,\"mac\":\"b43b5045ee9cd3c42a323fafcf969d9f72669c6a18f08e0207c59dfd8529d9b1\"}"
+  },
+  {
+   "sequence": 50,
+   "receive_ms": 5000,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":50,\"freshness_id\":51,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":50,\"issued_at_ms\":1795276805000,\"expires_at_ms\":1795276805250,\"mac\":\"b1dcba88d171c6c126fdbe4359e58c5faa81dda625f977da32f5e8e1daea12b0\"}"
+  },
+  {
+   "sequence": 51,
+   "receive_ms": 5100,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":51,\"freshness_id\":52,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":51,\"issued_at_ms\":1795276805100,\"expires_at_ms\":1795276805350,\"mac\":\"afebb9c6e1c42de7869d73f4017cc31fa736091d9f80d9fe31139b5e025b90fa\"}"
+  },
+  {
+   "sequence": 52,
+   "receive_ms": 5200,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":52,\"freshness_id\":53,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":52,\"issued_at_ms\":1795276805200,\"expires_at_ms\":1795276805450,\"mac\":\"f75a11b3b3b9e905053aab5b47b67d0bf4c6fe5c19fe7cc7c05d6df8d8c3afc7\"}"
+  },
+  {
+   "sequence": 53,
+   "receive_ms": 5300,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":53,\"freshness_id\":54,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":53,\"issued_at_ms\":1795276805300,\"expires_at_ms\":1795276805550,\"mac\":\"bc8c8c8d36260bf7c8ef8cb46e4b34c2b3ea1bce158fe745c0f907070e0e03ce\"}"
+  },
+  {
+   "sequence": 54,
+   "receive_ms": 5400,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":54,\"freshness_id\":55,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":54,\"issued_at_ms\":1795276805400,\"expires_at_ms\":1795276805650,\"mac\":\"dad2fe899e262b5b2b4f052cd5ef5a7214d827047ca4b1bd451fff6d3b4a7dba\"}"
+  },
+  {
+   "sequence": 55,
+   "receive_ms": 5500,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":55,\"freshness_id\":56,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":55,\"issued_at_ms\":1795276805500,\"expires_at_ms\":1795276805750,\"mac\":\"b44de89c19469d763c0cf842626c7058dca690d699759d137069fdaacce416cd\"}"
+  },
+  {
+   "sequence": 56,
+   "receive_ms": 5600,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":56,\"freshness_id\":57,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":56,\"issued_at_ms\":1795276805600,\"expires_at_ms\":1795276805850,\"mac\":\"345b1383233cdc63362561b72fc18e1d041d9a2442d2d4093ed5ec350c089dbe\"}"
+  },
+  {
+   "sequence": 57,
+   "receive_ms": 5700,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":57,\"freshness_id\":58,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":57,\"issued_at_ms\":1795276805700,\"expires_at_ms\":1795276805950,\"mac\":\"78782f810d56d7155169b042bc5a6df1ba3c1f7efad4db5fca9a3d5377c3b123\"}"
+  },
+  {
+   "sequence": 58,
+   "receive_ms": 5800,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":58,\"freshness_id\":59,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":58,\"issued_at_ms\":1795276805800,\"expires_at_ms\":1795276806050,\"mac\":\"77e740de83ea22df7a0e8c69af862df27d9c6a2e2a49598b85c5f7deacdaced2\"}"
+  },
+  {
+   "sequence": 59,
+   "receive_ms": 5900,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":59,\"freshness_id\":60,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":59,\"issued_at_ms\":1795276805900,\"expires_at_ms\":1795276806150,\"mac\":\"41a95421fc87f0843cad50fe4cc81d5de4c60200b6f29c29b305d2e65e4ce383\"}"
+  },
+  {
+   "sequence": 60,
+   "receive_ms": 6000,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":60,\"freshness_id\":61,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":60,\"issued_at_ms\":1795276806000,\"expires_at_ms\":1795276806250,\"mac\":\"39138bb44207e5163f3cedf5e4e84f114d76a879f66dbd1455ec84d06d3b1c52\"}"
+  },
+  {
+   "sequence": 61,
+   "receive_ms": 6100,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":61,\"freshness_id\":62,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":61,\"issued_at_ms\":1795276806100,\"expires_at_ms\":1795276806350,\"mac\":\"fb99011945af83a2872374f3fb866b2feb66d0c5a6cf4c7f9514a5a28278fa4e\"}"
+  },
+  {
+   "sequence": 62,
+   "receive_ms": 6200,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":62,\"freshness_id\":63,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":62,\"issued_at_ms\":1795276806200,\"expires_at_ms\":1795276806450,\"mac\":\"5dc9956db44a29cd3ea7f0a1f42452e45aa6fe19ad27885ab45f2c8f53c5cb51\"}"
+  },
+  {
+   "sequence": 63,
+   "receive_ms": 6300,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":63,\"freshness_id\":64,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":63,\"issued_at_ms\":1795276806300,\"expires_at_ms\":1795276806550,\"mac\":\"906172d18eba0fb8da465737c3f5e4ecc17add50e794401f76cfc9861ac85a2f\"}"
+  },
+  {
+   "sequence": 64,
+   "receive_ms": 6400,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":64,\"freshness_id\":65,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":64,\"issued_at_ms\":1795276806400,\"expires_at_ms\":1795276806650,\"mac\":\"f9c1e53acfb6ad8615a3f150879d3238141d26b7a27b1c4a6b0029aeb461497c\"}"
+  },
+  {
+   "sequence": 65,
+   "receive_ms": 6500,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":65,\"freshness_id\":66,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":65,\"issued_at_ms\":1795276806500,\"expires_at_ms\":1795276806750,\"mac\":\"a14858bf5e08e553100ad19049f62a2b2188220d4655af8965fc669c503ce796\"}"
+  },
+  {
+   "sequence": 66,
+   "receive_ms": 6600,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":66,\"freshness_id\":67,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":66,\"issued_at_ms\":1795276806600,\"expires_at_ms\":1795276806850,\"mac\":\"386142229a0c56bba231121f476d0e8fe6d462ef6469f5647962d119bac72731\"}"
+  },
+  {
+   "sequence": 67,
+   "receive_ms": 6700,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":67,\"freshness_id\":68,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":67,\"issued_at_ms\":1795276806700,\"expires_at_ms\":1795276806950,\"mac\":\"33a37db35feb2d718f42669a5c0e2198f472c3944669d4d0daf08142ee460bfb\"}"
+  },
+  {
+   "sequence": 68,
+   "receive_ms": 6800,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":68,\"freshness_id\":69,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":68,\"issued_at_ms\":1795276806800,\"expires_at_ms\":1795276807050,\"mac\":\"16b753c19e1e561d156ae2492584bbfef1c086885fea24e5b0941a5b6216f991\"}"
+  },
+  {
+   "sequence": 69,
+   "receive_ms": 6900,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":69,\"freshness_id\":70,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":69,\"issued_at_ms\":1795276806900,\"expires_at_ms\":1795276807150,\"mac\":\"f480289e37dc3597dc55983d3c55f38a53c58198138d54fd581ed5d9bc806696\"}"
+  },
+  {
+   "sequence": 70,
+   "receive_ms": 7000,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":70,\"freshness_id\":71,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":70,\"issued_at_ms\":1795276807000,\"expires_at_ms\":1795276807250,\"mac\":\"5d4863aaa944f351f6ca6f46653191278946e36eeeea3685ad7dcd5d5282a175\"}"
+  },
+  {
+   "sequence": 71,
+   "receive_ms": 7100,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":71,\"freshness_id\":72,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":71,\"issued_at_ms\":1795276807100,\"expires_at_ms\":1795276807350,\"mac\":\"8684a88a979dbcf22d7176b02da3275f3e8d624926d43ca4a9a739c6e5b42776\"}"
+  },
+  {
+   "sequence": 72,
+   "receive_ms": 7200,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":72,\"freshness_id\":73,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":72,\"issued_at_ms\":1795276807200,\"expires_at_ms\":1795276807450,\"mac\":\"d0d49ce86c2e493459de8c84cc158ae9946a73ab6262bcda1ec6d45412946f54\"}"
+  },
+  {
+   "sequence": 73,
+   "receive_ms": 7300,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":73,\"freshness_id\":74,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":73,\"issued_at_ms\":1795276807300,\"expires_at_ms\":1795276807550,\"mac\":\"d8f40bb8ba59dc658de2f344b2b209d961ab5764c3711a7e776087d229bdeaeb\"}"
+  },
+  {
+   "sequence": 74,
+   "receive_ms": 7400,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":74,\"freshness_id\":75,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":74,\"issued_at_ms\":1795276807400,\"expires_at_ms\":1795276807650,\"mac\":\"f02f1ee921ef90e1479d55e75c5ae92817e0f7eb7022b5eeaae312249e9754be\"}"
+  },
+  {
+   "sequence": 75,
+   "receive_ms": 7500,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":75,\"freshness_id\":76,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":75,\"issued_at_ms\":1795276807500,\"expires_at_ms\":1795276807750,\"mac\":\"31e9db5ec8818774b58dcb601273989763576d8b5737eb6578ca0ab3788c1d40\"}"
+  },
+  {
+   "sequence": 76,
+   "receive_ms": 7600,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":76,\"freshness_id\":77,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":76,\"issued_at_ms\":1795276807600,\"expires_at_ms\":1795276807850,\"mac\":\"c386f402c0750746bf21ba6356dcc7f0505bbed00d53360904cd0a7e64a2d101\"}"
+  },
+  {
+   "sequence": 77,
+   "receive_ms": 7700,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":77,\"freshness_id\":78,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":77,\"issued_at_ms\":1795276807700,\"expires_at_ms\":1795276807950,\"mac\":\"24fcee30db59669c71496c261152a9683fc036eccaab62d4e032486559c33ffd\"}"
+  },
+  {
+   "sequence": 78,
+   "receive_ms": 7800,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":78,\"freshness_id\":79,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":78,\"issued_at_ms\":1795276807800,\"expires_at_ms\":1795276808050,\"mac\":\"608f23247c8f9f1d04d141612af4a8427fd9dbd6e0801d369bea951fd8f80a4e\"}"
+  },
+  {
+   "sequence": 79,
+   "receive_ms": 7900,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":79,\"freshness_id\":80,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":79,\"issued_at_ms\":1795276807900,\"expires_at_ms\":1795276808150,\"mac\":\"1a10203139467692015117662bc9b075680ba1ed9c83a537bc26a15c6208c3bc\"}"
+  },
+  {
+   "sequence": 80,
+   "receive_ms": 8000,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":80,\"freshness_id\":81,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":80,\"issued_at_ms\":1795276808000,\"expires_at_ms\":1795276808250,\"mac\":\"c030ae5897744c9b872ff95178a298367cbcb0fed433ac63a963d61263e4336c\"}"
+  },
+  {
+   "sequence": 81,
+   "receive_ms": 8100,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":81,\"freshness_id\":82,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":81,\"issued_at_ms\":1795276808100,\"expires_at_ms\":1795276808350,\"mac\":\"280804222e7aaa1fad592e1a4bb1bbbdd7f66121ea366b8877994afe52c53762\"}"
+  },
+  {
+   "sequence": 82,
+   "receive_ms": 8200,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":82,\"freshness_id\":83,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":82,\"issued_at_ms\":1795276808200,\"expires_at_ms\":1795276808450,\"mac\":\"29855f9309b5873ed2ce13e123b5afb1247672f0f47617a9ef5bc1ee2e412a7f\"}"
+  },
+  {
+   "sequence": 83,
+   "receive_ms": 8300,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":83,\"freshness_id\":84,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":83,\"issued_at_ms\":1795276808300,\"expires_at_ms\":1795276808550,\"mac\":\"f07bebf87696c92618ae64316e4cefc34b502062140226413cee4604f6a7ef11\"}"
+  },
+  {
+   "sequence": 84,
+   "receive_ms": 8400,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":84,\"freshness_id\":85,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":84,\"issued_at_ms\":1795276808400,\"expires_at_ms\":1795276808650,\"mac\":\"f1038e27b4654a44ddcd8d20c42cf121089e2c05b3a6db8fbc10d3302d89c416\"}"
+  },
+  {
+   "sequence": 85,
+   "receive_ms": 8500,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":85,\"freshness_id\":86,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":85,\"issued_at_ms\":1795276808500,\"expires_at_ms\":1795276808750,\"mac\":\"446c36a65889143577649d93b420d4dbefd5676208cfb2eb6a5d9ea4700ec2ec\"}"
+  },
+  {
+   "sequence": 86,
+   "receive_ms": 8600,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":86,\"freshness_id\":87,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":86,\"issued_at_ms\":1795276808600,\"expires_at_ms\":1795276808850,\"mac\":\"c7626a2fc41df4d15ab32848633a8b91757f1361f18ef055f845b33646ac9e39\"}"
+  },
+  {
+   "sequence": 87,
+   "receive_ms": 8700,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":87,\"freshness_id\":88,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":87,\"issued_at_ms\":1795276808700,\"expires_at_ms\":1795276808950,\"mac\":\"ca96264344d915ad700a2feefa1957dcfb64ef8c7736bdc1add47e303079ef22\"}"
+  },
+  {
+   "sequence": 88,
+   "receive_ms": 8800,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":88,\"freshness_id\":89,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":88,\"issued_at_ms\":1795276808800,\"expires_at_ms\":1795276809050,\"mac\":\"ac188db2f8d1036840c20a7bdaafd427bcb960d4aee35303d038347a8130e1d4\"}"
+  },
+  {
+   "sequence": 89,
+   "receive_ms": 8900,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":89,\"freshness_id\":90,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":89,\"issued_at_ms\":1795276808900,\"expires_at_ms\":1795276809150,\"mac\":\"481852e800b3e0a2f8cb8cbac6de800f63a32c47c25df500759f4c86a768e631\"}"
+  },
+  {
+   "sequence": 90,
+   "receive_ms": 9000,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":90,\"freshness_id\":91,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":90,\"issued_at_ms\":1795276809000,\"expires_at_ms\":1795276809250,\"mac\":\"4431ba561e6d5485921bc02b8113ea418c79abbd57a15b04c7baf69dc243537b\"}"
+  },
+  {
+   "sequence": 91,
+   "receive_ms": 9100,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":91,\"freshness_id\":92,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":91,\"issued_at_ms\":1795276809100,\"expires_at_ms\":1795276809350,\"mac\":\"cd8407bfa7340da639be7bf1b2f947b8cc2cc2911c00bcefb2416732320333ad\"}"
+  },
+  {
+   "sequence": 92,
+   "receive_ms": 9200,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":92,\"freshness_id\":93,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":92,\"issued_at_ms\":1795276809200,\"expires_at_ms\":1795276809450,\"mac\":\"c6cd04fe48f1279421a8b230a416029b404c6e5dc618306affafe83c88364b85\"}"
+  },
+  {
+   "sequence": 93,
+   "receive_ms": 9300,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":93,\"freshness_id\":94,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":93,\"issued_at_ms\":1795276809300,\"expires_at_ms\":1795276809550,\"mac\":\"a55f0aef543b44a99d6a62895eca361755a0d862ee8eb3b63b0d1670d48ee43b\"}"
+  },
+  {
+   "sequence": 94,
+   "receive_ms": 9400,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":94,\"freshness_id\":95,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":94,\"issued_at_ms\":1795276809400,\"expires_at_ms\":1795276809650,\"mac\":\"5d661b4b36d733eaacf12c1b5dee95dff2f30a7c667899fc6c2cadca84b14397\"}"
+  },
+  {
+   "sequence": 95,
+   "receive_ms": 9500,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":95,\"freshness_id\":96,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":95,\"issued_at_ms\":1795276809500,\"expires_at_ms\":1795276809750,\"mac\":\"16c00383016604f50bb0d12ddad2b07f89183712e53ea5d5d275daed03fda04e\"}"
+  },
+  {
+   "sequence": 96,
+   "receive_ms": 9600,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":96,\"freshness_id\":97,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":96,\"issued_at_ms\":1795276809600,\"expires_at_ms\":1795276809850,\"mac\":\"68c636351f0967000b06811bf1ab88ac9159a95cb6c5f82087d13ab4607312cb\"}"
+  },
+  {
+   "sequence": 97,
+   "receive_ms": 9700,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":97,\"freshness_id\":98,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":97,\"issued_at_ms\":1795276809700,\"expires_at_ms\":1795276809950,\"mac\":\"4e42148f00ecb29fb065bf5f2f85431e20e9b49bbd9900980433dc6e7b0e7643\"}"
+  },
+  {
+   "sequence": 98,
+   "receive_ms": 9800,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":98,\"freshness_id\":99,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":98,\"issued_at_ms\":1795276809800,\"expires_at_ms\":1795276810050,\"mac\":\"0fd17b9b6b789b86023fa17a688b128b05e56ff07e41ad348fa135bec8ba32ad\"}"
+  },
+  {
+   "sequence": 99,
+   "receive_ms": 9900,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":99,\"freshness_id\":100,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":99,\"issued_at_ms\":1795276809900,\"expires_at_ms\":1795276810150,\"mac\":\"5b9fa2d5505ac38161903923afcf97e0decb75bd57b743eabaaae7605b2c718a\"}"
+  },
+  {
+   "sequence": 100,
+   "receive_ms": 10000,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":100,\"freshness_id\":101,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":100,\"issued_at_ms\":1795276810000,\"expires_at_ms\":1795276810250,\"mac\":\"778949497c323e7e32d5213d8f0d05b01c5abab3a42d09c3f0e4295ab6db2934\"}"
+  },
+  {
+   "sequence": 101,
+   "receive_ms": 10100,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":101,\"freshness_id\":102,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":101,\"issued_at_ms\":1795276810100,\"expires_at_ms\":1795276810350,\"mac\":\"9d60f7ee91777ce74c4099c64b114696bfc44d7323477e3e5454492ca22e37f0\"}"
+  },
+  {
+   "sequence": 102,
+   "receive_ms": 10200,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":102,\"freshness_id\":103,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":102,\"issued_at_ms\":1795276810200,\"expires_at_ms\":1795276810450,\"mac\":\"fe82d277a7467dcc377aab7cb56632299f3e2fb2bc4556a7360591d3f6c39323\"}"
+  },
+  {
+   "sequence": 103,
+   "receive_ms": 10300,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":103,\"freshness_id\":104,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":103,\"issued_at_ms\":1795276810300,\"expires_at_ms\":1795276810550,\"mac\":\"0812de389d0d71696e2c652808e20f5f79ff30adf9bfaf74994f6628cb0a3c1a\"}"
+  },
+  {
+   "sequence": 104,
+   "receive_ms": 10400,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":104,\"freshness_id\":105,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":104,\"issued_at_ms\":1795276810400,\"expires_at_ms\":1795276810650,\"mac\":\"4b0d89ade0071786022f7e189a6b94ebf4009c6f93c715858e64489392e0dcff\"}"
+  },
+  {
+   "sequence": 105,
+   "receive_ms": 10500,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":105,\"freshness_id\":106,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":105,\"issued_at_ms\":1795276810500,\"expires_at_ms\":1795276810750,\"mac\":\"01d5e532efb7070c31d9bc2da5cf08c526f2cdc44e6a25fcba9407ef8cb3d393\"}"
+  },
+  {
+   "sequence": 106,
+   "receive_ms": 10600,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":106,\"freshness_id\":107,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":106,\"issued_at_ms\":1795276810600,\"expires_at_ms\":1795276810850,\"mac\":\"706464f2ee5ef16c47f76cecebe0b780535a333598a9774390de2d056dec9f75\"}"
+  },
+  {
+   "sequence": 107,
+   "receive_ms": 10700,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":107,\"freshness_id\":108,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":107,\"issued_at_ms\":1795276810700,\"expires_at_ms\":1795276810950,\"mac\":\"7976418cbbbc7563520fbb99bdaf7f36bf80560d38e42abed9d3c608578a75d4\"}"
+  },
+  {
+   "sequence": 108,
+   "receive_ms": 10800,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":108,\"freshness_id\":109,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":108,\"issued_at_ms\":1795276810800,\"expires_at_ms\":1795276811050,\"mac\":\"e242492e8d95cbcc5f1d278869a2ffb65a58c30ff787a2862412bf27d981c1d7\"}"
+  },
+  {
+   "sequence": 109,
+   "receive_ms": 10900,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":109,\"freshness_id\":110,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":109,\"issued_at_ms\":1795276810900,\"expires_at_ms\":1795276811150,\"mac\":\"562eb27816b1ba763f44febfb902d21023fc3b3735bb9aeff905e7b9c33f4ab6\"}"
+  },
+  {
+   "sequence": 110,
+   "receive_ms": 11000,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":110,\"freshness_id\":111,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":110,\"issued_at_ms\":1795276811000,\"expires_at_ms\":1795276811250,\"mac\":\"5d40cc926bacd4def96af7f000af85f82fbaaa7a1e3e3865355e22971eb6e2f0\"}"
+  },
+  {
+   "sequence": 111,
+   "receive_ms": 11100,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":111,\"freshness_id\":112,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":111,\"issued_at_ms\":1795276811100,\"expires_at_ms\":1795276811350,\"mac\":\"390b073a68eb724e615ab90befa57d5fa0681c1df9329f01b8708681ec5729e6\"}"
+  },
+  {
+   "sequence": 112,
+   "receive_ms": 11200,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":112,\"freshness_id\":113,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":112,\"issued_at_ms\":1795276811200,\"expires_at_ms\":1795276811450,\"mac\":\"8b8e6f8a9dd815b82171b7913dffa135373ae40ffc8f5a364143e2fec32bb697\"}"
+  },
+  {
+   "sequence": 113,
+   "receive_ms": 11300,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":113,\"freshness_id\":114,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":113,\"issued_at_ms\":1795276811300,\"expires_at_ms\":1795276811550,\"mac\":\"16cafcc37b110878e1de78da564a89f1f5197b240a53a23643272f00a2872449\"}"
+  },
+  {
+   "sequence": 114,
+   "receive_ms": 11400,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":114,\"freshness_id\":115,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":114,\"issued_at_ms\":1795276811400,\"expires_at_ms\":1795276811650,\"mac\":\"c615157a1aed5adeef6bc71bda9cecc6a7d4b4d83796e503403ca2580b2af79d\"}"
+  },
+  {
+   "sequence": 115,
+   "receive_ms": 11500,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":115,\"freshness_id\":116,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":115,\"issued_at_ms\":1795276811500,\"expires_at_ms\":1795276811750,\"mac\":\"0852301f572a75fad1f8ca2f6569071c8babacade3bf2f6aa273ec0575c96111\"}"
+  },
+  {
+   "sequence": 116,
+   "receive_ms": 11600,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":116,\"freshness_id\":117,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":116,\"issued_at_ms\":1795276811600,\"expires_at_ms\":1795276811850,\"mac\":\"9f2c30af67da8a27a4f543371c83622c9b56439acc5a98b530009d92f5a50cd8\"}"
+  },
+  {
+   "sequence": 117,
+   "receive_ms": 11700,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":117,\"freshness_id\":118,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":117,\"issued_at_ms\":1795276811700,\"expires_at_ms\":1795276811950,\"mac\":\"475a8cfe23d66c4bbcad4fd548570fbe27eb0f9985139bcd01db49ab67746328\"}"
+  },
+  {
+   "sequence": 118,
+   "receive_ms": 11800,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":118,\"freshness_id\":119,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":118,\"issued_at_ms\":1795276811800,\"expires_at_ms\":1795276812050,\"mac\":\"89dc3ee47bd6ad0bbadc8fe6a3aed16154e0fa9137a2f893243ce08f19d9c22f\"}"
+  },
+  {
+   "sequence": 119,
+   "receive_ms": 11900,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":119,\"freshness_id\":120,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":119,\"issued_at_ms\":1795276811900,\"expires_at_ms\":1795276812150,\"mac\":\"31208e981f7d9b36c8c9f38b498e888a86cb783b723ce3d4f182949df8223ff3\"}"
+  },
+  {
+   "sequence": 120,
+   "receive_ms": 12000,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":120,\"freshness_id\":121,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":120,\"issued_at_ms\":1795276812000,\"expires_at_ms\":1795276812250,\"mac\":\"fd108a3ea6e65363a071635edca5d7b969435e51e9d4817232b10ae55f04147d\"}"
+  },
+  {
+   "sequence": 121,
+   "receive_ms": 12100,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":121,\"freshness_id\":122,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":121,\"issued_at_ms\":1795276812100,\"expires_at_ms\":1795276812350,\"mac\":\"0e7ac911a353b2bac4572c45ec151407d19f745a35b4ac22581e3644f734052a\"}"
+  },
+  {
+   "sequence": 122,
+   "receive_ms": 12200,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":122,\"freshness_id\":123,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":122,\"issued_at_ms\":1795276812200,\"expires_at_ms\":1795276812450,\"mac\":\"997123966bee1fab8fbee86250c42360a3326983f87f9ff6d6a52092b007bf57\"}"
+  },
+  {
+   "sequence": 123,
+   "receive_ms": 12300,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":123,\"freshness_id\":124,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":123,\"issued_at_ms\":1795276812300,\"expires_at_ms\":1795276812550,\"mac\":\"b092cf66e53a9922084095566a3e9085ea815e7133673e88ac323ad901648a52\"}"
+  },
+  {
+   "sequence": 124,
+   "receive_ms": 12400,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":124,\"freshness_id\":125,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":124,\"issued_at_ms\":1795276812400,\"expires_at_ms\":1795276812650,\"mac\":\"9ff506676fc38e90bb6614f5fb7d969e8a9082163ae45973f5f479bb5d59fadc\"}"
+  },
+  {
+   "sequence": 125,
+   "receive_ms": 12500,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":125,\"freshness_id\":126,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":125,\"issued_at_ms\":1795276812500,\"expires_at_ms\":1795276812750,\"mac\":\"0148f9f9e3f824aa2dadfc31dbd63bfa52347a1874e1436607ecf9a162d47323\"}"
+  },
+  {
+   "sequence": 126,
+   "receive_ms": 12600,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":126,\"freshness_id\":127,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":126,\"issued_at_ms\":1795276812600,\"expires_at_ms\":1795276812850,\"mac\":\"0c57001676261a12c68b35d0c696434caeecd5c86f82a8f08a9cf903caf2c286\"}"
+  },
+  {
+   "sequence": 127,
+   "receive_ms": 12700,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":127,\"freshness_id\":128,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":127,\"issued_at_ms\":1795276812700,\"expires_at_ms\":1795276812950,\"mac\":\"5fda106535dcbf037f5e8c1daf43a5f133e26d6668faaadefdcceb5f47f689cf\"}"
+  },
+  {
+   "sequence": 128,
+   "receive_ms": 12800,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":128,\"freshness_id\":129,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":128,\"issued_at_ms\":1795276812800,\"expires_at_ms\":1795276813050,\"mac\":\"81e52e85d77e0414bac1e9c48526e6c8371b4f5c0acc478c0330766eadd685c8\"}"
+  },
+  {
+   "sequence": 129,
+   "receive_ms": 12900,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":129,\"freshness_id\":130,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":129,\"issued_at_ms\":1795276812900,\"expires_at_ms\":1795276813150,\"mac\":\"089622b81c3d4c527f7f55f4e7cb24953fc8e58c814355574555762382d7bb50\"}"
+  },
+  {
+   "sequence": 130,
+   "receive_ms": 13000,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":130,\"freshness_id\":131,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":130,\"issued_at_ms\":1795276813000,\"expires_at_ms\":1795276813250,\"mac\":\"afc8db4f7b4a10bb061312bbf15f1619722ba2a0403ff7c5b49f823592b82973\"}"
+  },
+  {
+   "sequence": 131,
+   "receive_ms": 13100,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":131,\"freshness_id\":132,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":131,\"issued_at_ms\":1795276813100,\"expires_at_ms\":1795276813350,\"mac\":\"f7a738890d63e643050921454f990ad7cc18240fce0464e99c65926ff917a35b\"}"
+  },
+  {
+   "sequence": 132,
+   "receive_ms": 13200,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":132,\"freshness_id\":133,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":132,\"issued_at_ms\":1795276813200,\"expires_at_ms\":1795276813450,\"mac\":\"5ac026e7e0d80e5ce49310ef465f2ff2cb31a6afc65276da98b5c339986ab8aa\"}"
+  },
+  {
+   "sequence": 133,
+   "receive_ms": 13300,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":133,\"freshness_id\":134,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":133,\"issued_at_ms\":1795276813300,\"expires_at_ms\":1795276813550,\"mac\":\"7b7de3b572291b8a96b5500bb14feb87d9d18037ae5a99bd135bca42b0f6aab9\"}"
+  },
+  {
+   "sequence": 134,
+   "receive_ms": 13400,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":134,\"freshness_id\":135,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":134,\"issued_at_ms\":1795276813400,\"expires_at_ms\":1795276813650,\"mac\":\"7466c495b0f26b9274006f1639fe360e7b52e2ac4264ed153e84ceb7211f370f\"}"
+  },
+  {
+   "sequence": 135,
+   "receive_ms": 13500,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":135,\"freshness_id\":136,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":135,\"issued_at_ms\":1795276813500,\"expires_at_ms\":1795276813750,\"mac\":\"9c0905ec8741b4bc8defd2b4c1e643bb2656c43fbe843aa8b3be2fa7112731a0\"}"
+  },
+  {
+   "sequence": 136,
+   "receive_ms": 13600,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":136,\"freshness_id\":137,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":136,\"issued_at_ms\":1795276813600,\"expires_at_ms\":1795276813850,\"mac\":\"38c9f94c2b530ab475652e5406e43bf97bda25c8e83442041fb9d31aa0428f4a\"}"
+  },
+  {
+   "sequence": 137,
+   "receive_ms": 13700,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":137,\"freshness_id\":138,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":137,\"issued_at_ms\":1795276813700,\"expires_at_ms\":1795276813950,\"mac\":\"a845fed98a3e079b11b5e8e9c1f9ab74bd082844505312cfdf0f92a7829e9063\"}"
+  },
+  {
+   "sequence": 138,
+   "receive_ms": 13800,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":138,\"freshness_id\":139,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":138,\"issued_at_ms\":1795276813800,\"expires_at_ms\":1795276814050,\"mac\":\"ac017c2ec8e13e8740a138265e63028ea0a38f037a6ef20cc03319d927b0cc95\"}"
+  },
+  {
+   "sequence": 139,
+   "receive_ms": 13900,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":139,\"freshness_id\":140,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":139,\"issued_at_ms\":1795276813900,\"expires_at_ms\":1795276814150,\"mac\":\"7b3d6a7b0bb32750b99474fd41b07ae6272d0a619d29ea31dc19c8cab1dd83ae\"}"
+  },
+  {
+   "sequence": 140,
+   "receive_ms": 14000,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":140,\"freshness_id\":141,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":140,\"issued_at_ms\":1795276814000,\"expires_at_ms\":1795276814250,\"mac\":\"e2e57cf28992c923157df802b0430aea7c5654c950f321b9c3f99d119b63cc49\"}"
+  },
+  {
+   "sequence": 141,
+   "receive_ms": 14100,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":141,\"freshness_id\":142,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":141,\"issued_at_ms\":1795276814100,\"expires_at_ms\":1795276814350,\"mac\":\"4c99fc483235de3f2b8c17506405cc69ba12eb4f4a7d0059e01467b7c5ad0d0f\"}"
+  },
+  {
+   "sequence": 142,
+   "receive_ms": 14200,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":142,\"freshness_id\":143,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":142,\"issued_at_ms\":1795276814200,\"expires_at_ms\":1795276814450,\"mac\":\"166da65331e1d09f3a8004d9a3440e56cc1131d51f9825763f70856438425557\"}"
+  },
+  {
+   "sequence": 143,
+   "receive_ms": 14300,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":143,\"freshness_id\":144,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":143,\"issued_at_ms\":1795276814300,\"expires_at_ms\":1795276814550,\"mac\":\"82f4a1ddf9be920b208bc28f837b1aa4d56c27b4f1723615b627af784909812d\"}"
+  },
+  {
+   "sequence": 144,
+   "receive_ms": 14400,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":144,\"freshness_id\":145,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":144,\"issued_at_ms\":1795276814400,\"expires_at_ms\":1795276814650,\"mac\":\"8adeff8e1866587d8c751977cf7d72c44998a75ea42e98fdb0cc8eb7e792f656\"}"
+  },
+  {
+   "sequence": 145,
+   "receive_ms": 14500,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":145,\"freshness_id\":146,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":145,\"issued_at_ms\":1795276814500,\"expires_at_ms\":1795276814750,\"mac\":\"9f0aa24b79f2a73092df61d8ee2a0ec3d12915f921e831669a08bff07cc461fb\"}"
+  },
+  {
+   "sequence": 146,
+   "receive_ms": 14600,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":146,\"freshness_id\":147,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":146,\"issued_at_ms\":1795276814600,\"expires_at_ms\":1795276814850,\"mac\":\"2a8a0d9ae7dea49ada40d57341810e19933ebdbcd4d325b4cc61f8249b7b1d27\"}"
+  },
+  {
+   "sequence": 147,
+   "receive_ms": 14700,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":147,\"freshness_id\":148,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":147,\"issued_at_ms\":1795276814700,\"expires_at_ms\":1795276814950,\"mac\":\"275c74f394e5dcd61dbd80ee1cc1f2b7ea6a3a170d34198460fe0ffaebb3b702\"}"
+  },
+  {
+   "sequence": 148,
+   "receive_ms": 14800,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":148,\"freshness_id\":149,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":148,\"issued_at_ms\":1795276814800,\"expires_at_ms\":1795276815050,\"mac\":\"e87345527f8ae07b8600acb6369bac00e0c26df3589f389dbcc9cc9904290c21\"}"
+  },
+  {
+   "sequence": 149,
+   "receive_ms": 14900,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":149,\"freshness_id\":150,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":149,\"issued_at_ms\":1795276814900,\"expires_at_ms\":1795276815150,\"mac\":\"07c47acccd6e0025ec2498ff2cab53aaef0deb7980dd929f1ba772903a1bc675\"}"
+  },
+  {
+   "sequence": 150,
+   "receive_ms": 15000,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":150,\"freshness_id\":151,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":150,\"issued_at_ms\":1795276815000,\"expires_at_ms\":1795276815250,\"mac\":\"ef120fc8f0336cded25b1f94e95962f04eaa680a5ca8a5c99ffca572a221a9b7\"}"
+  },
+  {
+   "sequence": 151,
+   "receive_ms": 15100,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":151,\"freshness_id\":152,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":151,\"issued_at_ms\":1795276815100,\"expires_at_ms\":1795276815350,\"mac\":\"7f1b4b6971ee6da97b9f41dc1269f83d6d960ef3b3d2ee3f6b88acc9cf06c151\"}"
+  },
+  {
+   "sequence": 152,
+   "receive_ms": 15200,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":152,\"freshness_id\":153,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":152,\"issued_at_ms\":1795276815200,\"expires_at_ms\":1795276815450,\"mac\":\"6cf06db671902f59bd723e0f05eaed51a155f3b55a35d87b1da8c59c1c5ac15b\"}"
+  },
+  {
+   "sequence": 153,
+   "receive_ms": 15300,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":153,\"freshness_id\":154,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":153,\"issued_at_ms\":1795276815300,\"expires_at_ms\":1795276815550,\"mac\":\"76c70701b4a2bdec54cc0aece6df6a7c744556c9bfab2498082aedfdbd5f4a44\"}"
+  },
+  {
+   "sequence": 154,
+   "receive_ms": 15400,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":154,\"freshness_id\":155,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":154,\"issued_at_ms\":1795276815400,\"expires_at_ms\":1795276815650,\"mac\":\"9370390f3b0e4f380bcb70486297d31f0682d08e98bfa6cf98b10e8d11672bd1\"}"
+  },
+  {
+   "sequence": 155,
+   "receive_ms": 15500,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":155,\"freshness_id\":156,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":155,\"issued_at_ms\":1795276815500,\"expires_at_ms\":1795276815750,\"mac\":\"8cb0a5ededbeb1f9331c7d651e50436cb7310d1398b239776917ff7c5fef32b3\"}"
+  },
+  {
+   "sequence": 156,
+   "receive_ms": 15600,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":156,\"freshness_id\":157,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":156,\"issued_at_ms\":1795276815600,\"expires_at_ms\":1795276815850,\"mac\":\"f0dc5da1b7868f387671983ea7fdf96d2d607c40d4c22e5d0bce5484ce557098\"}"
+  },
+  {
+   "sequence": 157,
+   "receive_ms": 15700,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":157,\"freshness_id\":158,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":157,\"issued_at_ms\":1795276815700,\"expires_at_ms\":1795276815950,\"mac\":\"984129231fae7014e02ea42f1c38854558dab1195249aa6d1d8126e47ed0f3c1\"}"
+  },
+  {
+   "sequence": 158,
+   "receive_ms": 15800,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":158,\"freshness_id\":159,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":158,\"issued_at_ms\":1795276815800,\"expires_at_ms\":1795276816050,\"mac\":\"e39ad6bae85df558c40f54281e2ab07e822fda0a4ddaa2b6af3405e63b77bd75\"}"
+  },
+  {
+   "sequence": 159,
+   "receive_ms": 15900,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":159,\"freshness_id\":160,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":159,\"issued_at_ms\":1795276815900,\"expires_at_ms\":1795276816150,\"mac\":\"6f749159073aeeec5d8cea2b305510aa60691c47a8eef1c88e26402b346841c3\"}"
+  },
+  {
+   "sequence": 160,
+   "receive_ms": 16000,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":160,\"freshness_id\":161,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":160,\"issued_at_ms\":1795276816000,\"expires_at_ms\":1795276816250,\"mac\":\"a016dbbb3bbb2280ca0edbd0cde9d00d8bbb2e40f8249f268ba8d7629c069e28\"}"
+  },
+  {
+   "sequence": 161,
+   "receive_ms": 16100,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":161,\"freshness_id\":162,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":161,\"issued_at_ms\":1795276816100,\"expires_at_ms\":1795276816350,\"mac\":\"a571ecc49cf219f9337286b48d145dabb835ef0a48a9b82a7478dbe8f323b33c\"}"
+  },
+  {
+   "sequence": 162,
+   "receive_ms": 16200,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":162,\"freshness_id\":163,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":162,\"issued_at_ms\":1795276816200,\"expires_at_ms\":1795276816450,\"mac\":\"5c5d1a370a27d7eeceae4c37438a31b185bcc031cba033298e7ece598c3ff516\"}"
+  },
+  {
+   "sequence": 163,
+   "receive_ms": 16300,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":163,\"freshness_id\":164,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":163,\"issued_at_ms\":1795276816300,\"expires_at_ms\":1795276816550,\"mac\":\"2e05fbebc8b5be6d83cfc9c684b522c95695017a9df845800eeb0a5a8499b677\"}"
+  },
+  {
+   "sequence": 164,
+   "receive_ms": 16400,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":164,\"freshness_id\":165,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":164,\"issued_at_ms\":1795276816400,\"expires_at_ms\":1795276816650,\"mac\":\"a90be6ab0b60824a77191a0378da204d8ead394788e9a3a9b0d4defb8e9b9cd4\"}"
+  },
+  {
+   "sequence": 165,
+   "receive_ms": 16500,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":165,\"freshness_id\":166,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":165,\"issued_at_ms\":1795276816500,\"expires_at_ms\":1795276816750,\"mac\":\"500a3ac4e4aeef0e843db5c0fc28eb43bba737fcb36c1cc7af730d766b64b282\"}"
+  },
+  {
+   "sequence": 166,
+   "receive_ms": 16600,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":166,\"freshness_id\":167,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":166,\"issued_at_ms\":1795276816600,\"expires_at_ms\":1795276816850,\"mac\":\"342fb928089eb90975267acde0e39a45697f2b16362e0937f640f3506799eca8\"}"
+  },
+  {
+   "sequence": 167,
+   "receive_ms": 16700,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":167,\"freshness_id\":168,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":167,\"issued_at_ms\":1795276816700,\"expires_at_ms\":1795276816950,\"mac\":\"80b06c4457abb4b943a94fc462542bae482b436f8beb46bf5daabfd78a4e8687\"}"
+  },
+  {
+   "sequence": 168,
+   "receive_ms": 16800,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":168,\"freshness_id\":169,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":168,\"issued_at_ms\":1795276816800,\"expires_at_ms\":1795276817050,\"mac\":\"55f75db8d07104229d2856f83c6bee0c8cf5fb8004a132d069b884a9e472d5c2\"}"
+  },
+  {
+   "sequence": 169,
+   "receive_ms": 16900,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":169,\"freshness_id\":170,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":169,\"issued_at_ms\":1795276816900,\"expires_at_ms\":1795276817150,\"mac\":\"65507ed800dc10f8fa0ea227b9c431f6edba9fd78bb58063f1281866294adedf\"}"
+  },
+  {
+   "sequence": 170,
+   "receive_ms": 17000,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":170,\"freshness_id\":171,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":170,\"issued_at_ms\":1795276817000,\"expires_at_ms\":1795276817250,\"mac\":\"14a4e304157e1974a7761606217506afc3e08d59a6c35ef913681fa5b04e1bef\"}"
+  },
+  {
+   "sequence": 171,
+   "receive_ms": 17100,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":171,\"freshness_id\":172,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":171,\"issued_at_ms\":1795276817100,\"expires_at_ms\":1795276817350,\"mac\":\"67e850c627413970ba2d7b8aa90f4b9423f75dd6bd7ac7c120543117e0254247\"}"
+  },
+  {
+   "sequence": 172,
+   "receive_ms": 17200,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":172,\"freshness_id\":173,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":172,\"issued_at_ms\":1795276817200,\"expires_at_ms\":1795276817450,\"mac\":\"955e21b6407d6ff429c4a256accf38a1b00ad6a923fa1a17fd1aa7081cec5da5\"}"
+  },
+  {
+   "sequence": 173,
+   "receive_ms": 17300,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":173,\"freshness_id\":174,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":173,\"issued_at_ms\":1795276817300,\"expires_at_ms\":1795276817550,\"mac\":\"a4fc03b3eabb8d8ea8abdd803a8ec21a603456a1f52dd7e2aec8c6c52f5aceab\"}"
+  },
+  {
+   "sequence": 174,
+   "receive_ms": 17400,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":174,\"freshness_id\":175,\"rearm_generation\":1,\"task_state\":\"manual\",\"linear_mps\":0.3,\"angular_rad_s\":0,\"stop\":false,\"status_challenge\":174,\"issued_at_ms\":1795276817400,\"expires_at_ms\":1795276817650,\"mac\":\"f0d13bc2eef166e9a00d6ef41de7bfaec12c8ab49843d32991525e7f6ba8a014\"}"
+  },
+  {
+   "sequence": 175,
+   "receive_ms": 17400,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":175,\"freshness_id\":176,\"rearm_generation\":1,\"task_state\":\"estop\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":175,\"issued_at_ms\":1795276817400,\"expires_at_ms\":1795276817650,\"mac\":\"035fa62324f16926a9f09aa620351c6c159b86d1a7c2ddafe3af947e329e5d6b\"}"
+  },
+  {
+   "sequence": 176,
+   "receive_ms": 17500,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":176,\"freshness_id\":177,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":176,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"c51579920b4089c53ee94458d8532572af5feeaf691d9b156992400f9e83c1f4\"}"
+  },
+  {
+   "sequence": 177,
+   "receive_ms": 17600,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":177,\"freshness_id\":178,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":177,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"94c7d0acc3da8c8a5a5ef8ea8a5521dc677a105979b4c9cb6de9891cf30bcc1b\"}"
+  },
+  {
+   "sequence": 178,
+   "receive_ms": 17700,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":178,\"freshness_id\":179,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":178,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"75e7d2bb3e7773e8c8b87b9ef705af3b0453925035c429ba3aa78a3c952b409b\"}"
+  },
+  {
+   "sequence": 179,
+   "receive_ms": 17800,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":179,\"freshness_id\":180,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":179,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"37dee5222b159394e243847608201500c4e53fd60a7640cd1ce30909a807f98f\"}"
+  },
+  {
+   "sequence": 180,
+   "receive_ms": 17900,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":180,\"freshness_id\":181,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":180,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"7baf6494026607792ef6b2a45b23343685aaa629ee99f3e891aa0ce65c104806\"}"
+  },
+  {
+   "sequence": 181,
+   "receive_ms": 18000,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":181,\"freshness_id\":182,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":181,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"e6ffb2154079cb0745dc36a053e1573470665d204749cb529e47b778d280d89f\"}"
+  },
+  {
+   "sequence": 182,
+   "receive_ms": 18100,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":182,\"freshness_id\":183,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":182,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"0cc0bd965287827689cb2442d6569f471bb401b817c837fe5586fac457e4bb1a\"}"
+  },
+  {
+   "sequence": 183,
+   "receive_ms": 18200,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":183,\"freshness_id\":184,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":183,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"99be0bcb2d9a31a620088bea3259a9fe5d16cc24499b15d60117750c78396241\"}"
+  },
+  {
+   "sequence": 184,
+   "receive_ms": 18300,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":184,\"freshness_id\":185,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":184,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"7ed625397d40952480510b5b4ffbc5279c023ccfba85b4073e8c3bb7b4cd8050\"}"
+  },
+  {
+   "sequence": 185,
+   "receive_ms": 18400,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":185,\"freshness_id\":186,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":185,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"bb5baeb5a475b9fc2f48a9bcd77053232f365500eab17368e990d10b20c87e91\"}"
+  },
+  {
+   "sequence": 186,
+   "receive_ms": 18500,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":186,\"freshness_id\":187,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":186,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"ee52d91ad253bed93f5271bff61b0565992da3f0127fedd52c50668b7695fb1b\"}"
+  },
+  {
+   "sequence": 187,
+   "receive_ms": 18600,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":187,\"freshness_id\":188,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":187,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"eb6ff31981daafb03cc7b95b2eac83e44f36737c2d473daffa11c6f6ad0a9b7f\"}"
+  },
+  {
+   "sequence": 188,
+   "receive_ms": 18700,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":188,\"freshness_id\":189,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":188,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"241dfa87999c0e92f84cd007c3ccc985c2331689f70554d29eb9e966d6299c53\"}"
+  },
+  {
+   "sequence": 189,
+   "receive_ms": 18800,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":189,\"freshness_id\":190,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":189,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"9b86d17eca12d28bd2fe59e05c8cf63824c7ee7052cdf46bf827585215003c5f\"}"
+  },
+  {
+   "sequence": 190,
+   "receive_ms": 18900,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":190,\"freshness_id\":191,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":190,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"46e25d2b58cabf07c6638c8ebcab8e434d4136af9da50ab3a7e208ea1ad806ae\"}"
+  },
+  {
+   "sequence": 191,
+   "receive_ms": 19000,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":191,\"freshness_id\":192,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":191,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"af14241009c847269898216b82e249aa1289f3ecf4df2257bf977717be7222b0\"}"
+  },
+  {
+   "sequence": 192,
+   "receive_ms": 19100,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":192,\"freshness_id\":193,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":192,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"fd4bd9ae1e45210998d608b621208895ac769b84bf427db4571e733cbf3986c8\"}"
+  },
+  {
+   "sequence": 193,
+   "receive_ms": 19200,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":193,\"freshness_id\":194,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":193,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"7f6ae2f8d3b537ca84ddef8993c76ac3fbb5f66fe4cc751a5f6841555bf4a195\"}"
+  },
+  {
+   "sequence": 194,
+   "receive_ms": 19300,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":194,\"freshness_id\":195,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":194,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"9fcfb8712bb13439cd5ce92b589155175265d2e577c7958570dbd757f9cd8e0e\"}"
+  },
+  {
+   "sequence": 195,
+   "receive_ms": 19400,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":195,\"freshness_id\":196,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":195,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"1dbca3a20ca5e68d5792cd5e0d7a7ddb990a912f33248b2b8b397842f9288ca4\"}"
+  },
+  {
+   "sequence": 196,
+   "receive_ms": 19500,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":196,\"freshness_id\":197,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":196,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"79a69a81f6463a522668391004e01ffa09ecd5520a846211dfe99d26251a9ae4\"}"
+  },
+  {
+   "sequence": 197,
+   "receive_ms": 19600,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":197,\"freshness_id\":198,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":197,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"27de8ecb6746ce3c28d0b8d285a04491cd92792aa263afef29d8d7e5c9397b54\"}"
+  },
+  {
+   "sequence": 198,
+   "receive_ms": 19700,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":198,\"freshness_id\":199,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":198,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"6d68bd23b4939775e930af6a79e2c1f5aecad890d57f6a395935a138248374dc\"}"
+  },
+  {
+   "sequence": 199,
+   "receive_ms": 19800,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":199,\"freshness_id\":200,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":199,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"e1b9ced5c76abf6a26ec6cefac96da3702e297cae3f6180324968a6fdc9d912c\"}"
+  },
+  {
+   "sequence": 200,
+   "receive_ms": 19900,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":200,\"freshness_id\":201,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":200,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"e6495086a32511196290eb884926337ae4becc2ab2f4be0dc2d4489bf5e142d4\"}"
+  },
+  {
+   "sequence": 201,
+   "receive_ms": 20000,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":201,\"freshness_id\":202,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":201,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"4f83d2c31467ea3235b8495105072e0c580fe93915fda4d9442eecf7f1d984a0\"}"
+  },
+  {
+   "sequence": 202,
+   "receive_ms": 20100,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":202,\"freshness_id\":203,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":202,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"97e332c2736206aa13fc9848e06c6d95396740f74f751c52db7d9f8ea9acdb58\"}"
+  },
+  {
+   "sequence": 203,
+   "receive_ms": 20200,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":203,\"freshness_id\":204,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":203,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"ffc6f870fd02f74995aedb27e1a5bb0144a249e72883e2b836da693d8e9ac4c7\"}"
+  },
+  {
+   "sequence": 204,
+   "receive_ms": 20300,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":204,\"freshness_id\":205,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":204,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"b62d4d97e7e92c7f2c21947dec7c3f3a304b81a4f2d870d87bf18b0a23945393\"}"
+  },
+  {
+   "sequence": 205,
+   "receive_ms": 20400,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":205,\"freshness_id\":206,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":205,\"issued_at_ms\":1795276820400,\"expires_at_ms\":1795276820650,\"mac\":\"45d807d554f4be49379b1fafcab212eeea8655c57d73127138b423a74339004f\"}"
+  },
+  {
+   "sequence": 206,
+   "receive_ms": 20500,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":206,\"freshness_id\":207,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":206,\"issued_at_ms\":1795276820900,\"expires_at_ms\":1795276821150,\"mac\":\"a565ab01bb67aecb7f3392b38f72a59385bb08158541fe2adc87e2329b354ffe\"}"
+  },
+  {
+   "sequence": 207,
+   "receive_ms": 20600,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":207,\"freshness_id\":208,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":207,\"issued_at_ms\":1795276820900,\"expires_at_ms\":1795276821150,\"mac\":\"35682a7b0b984a64926fc743c74e9277d1565d054b39ae08fc731dadf34068e2\"}"
+  },
+  {
+   "sequence": 208,
+   "receive_ms": 20700,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":208,\"freshness_id\":209,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":208,\"issued_at_ms\":1795276820900,\"expires_at_ms\":1795276821150,\"mac\":\"d578648230c966be2e4547d41a2e8929ea853ee8fb60d1600ecbacd7302ba437\"}"
+  },
+  {
+   "sequence": 209,
+   "receive_ms": 20800,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":209,\"freshness_id\":210,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":209,\"issued_at_ms\":1795276820900,\"expires_at_ms\":1795276821150,\"mac\":\"2f680c8f240f371878b84d56756e1f2aba0fc5b46278b6fe874fd15074423377\"}"
+  },
+  {
+   "sequence": 210,
+   "receive_ms": 20900,
+   "raw": "{\"schema_version\":\"4\",\"controller_id\":\"sim-drill\",\"boot_nonce\":42,\"session_id\":1,\"sequence\":210,\"freshness_id\":211,\"rearm_generation\":1,\"task_state\":\"idle\",\"linear_mps\":0,\"angular_rad_s\":0,\"stop\":true,\"status_challenge\":210,\"issued_at_ms\":1795276820900,\"expires_at_ms\":1795276821150,\"mac\":\"0eacf5cbee3ac1dbe1171dc602b149ec3d4698dd2edafb9654fac1a2e7b91f64\"}"
+  }
+ ]
+}

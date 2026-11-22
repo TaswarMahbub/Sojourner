@@ -89,13 +89,26 @@ No live calibration stream exists yet, so the panel reads saved profiles from `s
 python3 frontend/scripts/practice_profiles.py
 ```
 
+## 3D simulator (in progress)
+
+Plan: `docs/handoff.md`, then `docs/sim-decisions.md` (newer; it wins on conflict).
+
+- three.js and its add-ons are pinned exactly (`three` 0.187.0, `postprocessing`, `n8ao`, `three-mesh-bvh`). Bump them only on purpose.
+- The motor-command bridge port is set in one place, `src/net/bridgeConfig.js` (default 8767, not yet confirmed). Override it with `?bridge_port=9000` in the page address, or `VITE_MOTOR_BRIDGE_PORT=9000 npm run dev`.
+- `src/fixtures/commands/` holds three SYNTHETIC recorded command streams: `clean_traversal`, `watchdog_gap` and `estop_latch`. They were made by the drill sender, signed with the drill key, and are labelled `"provenance": {"source": "synthetic", ...}`; that provenance is carried into every metrics object an attempt emits. `src/net/recording.js` checks and replays them. To regenerate them, run this from `frontend/`:
+
+```text
+node scripts/record_commands.js
+```
+
 ## Architecture
 
 ```text
 src/contracts/   everything the frontend knows about a message: names, ranges, validation
 src/sources/     data sources with one interface: { kind, subscribe(listener) => unsubscribe }
 src/hooks/       subscribe to a source, validate each message, track staleness (useMessageStream is shared)
-src/sim/         the simulator: receiver model, drill sender, simulation (no display code)
+src/sim/         the simulator: receiver model, drill sender, simulation, metrics (no display code, no three.js)
+src/net/         motor-command bridge config and recorded command files
 src/components/  display only
 ```
 
