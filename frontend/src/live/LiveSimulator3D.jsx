@@ -5,6 +5,7 @@ import { createFrameLoop } from '../view/frameLoop.js'
 import TopDownInset from '../ui/TopDownInset.jsx'
 import { connectMirror } from './liveSource.js'
 import { motorBridgeUrl } from './config.js'
+import FacePreviewPip from '../preview/FacePreviewPip.jsx'
 import '../components/Simulator3D.css'
 
 // The 3D corridor, driven by the live software-only control run (demo/run_live_sim.py) instead of
@@ -109,6 +110,7 @@ export default function LiveSimulator3D() {
           </div>
         )}
       </div>
+      <FacePreviewPip corner="top-right" />
       <p className="hint">
         Observer only. Commands come from the laptop control run; this page&apos;s own receiver judges each one.
         {webglError ? ` WebGL 2 unavailable (${webglError}); showing the 2D plan.` : ''}

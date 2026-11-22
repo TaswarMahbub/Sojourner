@@ -41,6 +41,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from control.cue_map import CUE_MAP  # noqa: E402
+from demo.face_preview import PreviewChannel, preview_port  # noqa: E402
 from demo.motor_bridge import Fanout, OpLog, SharedCamera, TapReceiver, bridge_port  # noqa: E402
 from perception.publish import DEFAULT_PORT as CAMERA_PORT  # noqa: E402
 from tests.control_rig import lost_frame  # noqa: E402
@@ -139,6 +140,39 @@ class ScriptedFrames:
         pass
 
 
+class PreviewCameraThread(CameraThread):
+    """tests/session_harness.CameraThread with the local face preview tapped off the same camera.
+
+    Identical to CameraThread._run except that the CameraSource gets the preview
+    callback. One camera, one detector; the preview only receives references.
+    """
+
+    def __init__(self, camera_index: int, mirrored: bool, clock, model_path=None, *, preview=None):
+        self._preview = preview
+        super().__init__(camera_index, mirrored, clock, model_path)
+
+    def _run(self, camera_index, mirrored) -> None:
+        from perception.mediapipe_source import MODEL_PATH, CameraError, CameraSource
+
+        try:
+            source = CameraSource(camera_index, mirrored, self._model_path or MODEL_PATH, preview=self._preview)
+        except Exception as exc:  # reported to the caller, never swallowed
+            self._open_error = exc
+            self._ready.set()
+            return
+        self._ready.set()
+        try:
+            while not self._stop.is_set():
+                try:
+                    cf = source.read_frame()
+                except CameraError as exc:
+                    self._q.put(("error", str(exc)))
+                    return
+                self._q.put(("frame", cf.message, self._clock.stamp(), cf.brightness))
+        finally:
+            source.close()
+
+
 def build(clock, state_dir: Path, sink) -> HarnessRig:
     """A harness rig whose receiver is the tapped oracle. Every receiver call reaches the sink."""
     tap = TapReceiver(MotorReceiver(BOOT_NONCE), sink)
@@ -177,6 +211,8 @@ def main(argv=None) -> int:
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--model", type=Path, default=None)
     parser.add_argument("--seconds", type=float, default=300.0)
+    parser.add_argument("--no-face-preview", action="store_true",
+                        help="live mode: do not serve the local face-mesh preview")
     parser.add_argument("--no-frame-relay", action="store_true", help=f"do not serve frames on {CAMERA_PORT}")
     parser.add_argument("--every-tick", action="store_true")
     args = parser.parse_args(argv)
@@ -192,6 +228,8 @@ def main(argv=None) -> int:
     print(f"{LABEL} | open the 3D mirror at http://localhost:5173/live.html (cd frontend && npm run dev)")
     clock = WallClock()
     relay = None
+    preview_server = None
+    preview = None
     try:
         with tempfile.TemporaryDirectory() as tmp:
             if args.synthetic:
@@ -208,9 +246,14 @@ def main(argv=None) -> int:
                 pipeline.print_summary()
                 return _serve_until_interrupted(pipeline.rig)
             print(f"{LABEL} | live camera {args.camera}; profile {source}; cue map control/cue_map.py")
+            if not args.no_face_preview:
+                preview_server = Fanout(preview_port(), latest_only=True)
+                preview = PreviewChannel(preview_server.publish, has_clients=lambda: preview_server.has_clients)
+                print(f"{LABEL} | face preview (local only, not recorded) on ws://127.0.0.1:{preview_server.port}")
             # Open the camera before arming: arming starts the 250 ms watchdog (as run_live_e2e.py does).
             try:
-                camera = CameraThread(args.camera, False, clock, args.model)
+                camera = PreviewCameraThread(args.camera, False, clock, args.model,
+                                             preview=preview.offer if preview is not None else None)
             except Exception as exc:
                 print(f"{LABEL} | camera could not start: {exc}")
                 return 1
@@ -230,12 +273,18 @@ def main(argv=None) -> int:
             finally:
                 frames.close()
             pipeline.print_summary()
+            if preview is not None:
+                print(f"{LABEL} | {preview.summary()}")
             if recorder is not None:
                 recorder.close()
     finally:
         bridge.close()
         if relay is not None:
             relay.close()
+        if preview is not None:
+            preview.close()
+        if preview_server is not None:
+            preview_server.close()
     return 0
 
 

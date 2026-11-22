@@ -184,12 +184,19 @@ class Fanout:
     With ``replay`` a new client first receives everything published so far
     (the motor mirror needs the whole boot). Without it, only what follows
     (camera frames). One message per publish; nothing is coalesced.
+
+    With ``latest_only`` (the face preview) each client holds at most one
+    unsent message: a newer one replaces it, so a slow browser sees fewer
+    frames instead of older ones. Never used for motor operations.
     """
 
-    def __init__(self, port: int, *, host: str = "127.0.0.1", replay: bool = False):
+    def __init__(self, port: int, *, host: str = "127.0.0.1", replay: bool = False, latest_only: bool = False):
+        if replay and latest_only:
+            raise ValueError("a replayed stream cannot drop messages")
         self.host = host
         self.port = port
         self.replay = replay
+        self.latest_only = latest_only
         self._history: list[str] = []
         self._queues: set = set()
         self._loop = asyncio.new_event_loop()
@@ -205,6 +212,11 @@ class Fanout:
     def publish(self, text: str) -> None:
         self._loop.call_soon_threadsafe(self._push, text)
 
+    @property
+    def has_clients(self) -> bool:
+        """True while at least one client is connected. Read from another thread; a hint only."""
+        return bool(self._queues)
+
     def close(self) -> None:
         if self._stop is not None:
             self._loop.call_soon_threadsafe(self._stop.set)
@@ -214,10 +226,12 @@ class Fanout:
         if self.replay:
             self._history.append(text)
         for queue in self._queues:
+            if self.latest_only and queue.full():
+                queue.get_nowait()  # drop the outdated frame, keep the newest
             queue.put_nowait(text)
 
     async def _handler(self, websocket) -> None:
-        queue: asyncio.Queue = asyncio.Queue()
+        queue: asyncio.Queue = asyncio.Queue(maxsize=1 if self.latest_only else 0)
         for text in self._history:  # same loop thread as _push: nothing can interleave here
             queue.put_nowait(text)
         self._queues.add(queue)

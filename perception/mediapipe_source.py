@@ -13,6 +13,7 @@ which applies the contract's tracking-state table.
 
 from __future__ import annotations
 
+import logging
 import sys
 import time
 from dataclasses import dataclass
@@ -205,8 +206,13 @@ class CameraSource:
     before any server starts. Call close() to release both.
     """
 
-    def __init__(self, camera_index: int = 0, mirrored: bool = False, model_path: Path = MODEL_PATH) -> None:
+    def __init__(self, camera_index: int = 0, mirrored: bool = False, model_path: Path = MODEL_PATH,
+                 preview=None) -> None:
         self.mirrored = mirrored
+        # Optional local preview tap: called as preview(bgr, face_landmarks, message) after the
+        # message is built. It must only store references (it runs on the camera thread). It never
+        # changes the message, and if it raises it is switched off; the camera keeps running.
+        self._preview = preview
         self._clock = StrictlyIncreasingMs()
         self._landmarker = create_landmarker(model_path)
         try:
@@ -238,6 +244,12 @@ class CameraSource:
             blendshapes, matrix = unmirror(blendshapes, matrix)
         reasons = assess(face_count, blendshapes, matrix).reasons
         message = make_feature_message(capture_ms, face_count, blendshapes, matrix)
+        if self._preview is not None:
+            try:
+                self._preview(bgr, result.face_landmarks, message)
+            except Exception:  # a preview fault must never reach the control path
+                logging.getLogger(__name__).warning("face preview disabled after an error", exc_info=True)
+                self._preview = None
         return CameraFrame(message, reasons, grayscale_brightness(self._cv2, bgr))
 
     def frames(self):
