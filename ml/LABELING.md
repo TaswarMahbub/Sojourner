@@ -140,7 +140,25 @@ Every target is checked before anything is deleted. A generated name that is a s
 
 Otherwise discard stops with a code (`recording_identity_mismatch`, `recording_identity_unavailable`, `symlink_not_allowed`, `recording_has_other_links`, or `recording_unreadable`) and deletes nothing. A missing recording at the bound name is treated as already deleted. A byte-identical copy, under another name or put in place of the original, has a different inode and is refused. So is the original file after it was moved to another volume or restored from a backup, because its inode changed. Pointing a session at another recording is not supported in this phase. Run `init --replace` to bind the current file, which starts a new set of annotations. A session written before `recording_identity` existed can still be prepared and discarded, but its recording is never deleted by `--include-recording`.
 
-The recording is deleted first. If that fails, the session is left as it was (`recording_delete_failed`) and the same command can be retried. The generated files go in the order `quality-report.json`, `annotations.json`, `session.json`, marker. If one of those fails (`discard_incomplete`), a retry accepts the partial session and finishes. A marker left without `session.json` can be removed with plain `discard`. With `--include-recording` it fails with `recording_identity_unavailable`, because the recording can no longer be identified.
+These checks are a preflight. Another process could replace the file at that name right after they pass, so the recording is never deleted by its public name. Instead:
+
+1. A new private directory `.label-claim-*` (mode 0700) is created in the session directory.
+2. The recording is renamed into it as `recording`. The rename is atomic and stays on one file system. From then on the public name no longer reaches the claimed file, and a file another process puts at the public name is never touched by this discard.
+3. The claimed file is checked again: regular file, one link, bound device and inode, SHA-256 and byte length.
+4. Only the claimed name is unlinked, and the empty claim directory is removed.
+
+If the claim directory cannot be created or the rename fails, nothing has moved (`recording_claim_failed`). If a check on the claimed file fails (`recording_identity_mismatch`, `recording_has_other_links`, `recording_unreadable`) or its unlink fails (`recording_delete_failed`), the claimed file is put back at its old name with a hard link, which never replaces a file that appeared there meanwhile, and the claimed name is then removed. The session is left as it was and nothing else is deleted.
+
+If the claimed file cannot be put back, because the old name is taken, the file is not a regular file, or hard links are not supported, it stays in `.label-claim-*/recording` and discard reports `discard_recovery_pending`. The session metadata is not touched. Until a person resolves it, every command refuses that session directory with `discard_recovery_pending`; an empty claim directory is only a cleanup leftover and does not block. To recover by hand:
+
+1. Do not delete the `.label-claim-*` directory or its `recording` file. It may be a different recording that arrived during the discard.
+2. If the name in `session.json.recording_identity.name` is free, move `recording` back to that name.
+3. If that name is taken, compare inodes (`ls -i`). If both are the same file, the claimed name is an extra link: delete only the claimed name. Otherwise move the claimed file to another name of your choice; it is not the bound recording.
+4. Remove the empty claim directory and run `overview` to check the session.
+
+A crash between the rename and the unlink leaves the same state: the recording is in the claim directory, nothing was reported as withdrawn, and the session is blocked until the steps above are done. A crash after the unlink leaves only an empty claim directory, and a retry finishes removing the metadata. These are process-level guarantees, not power-loss durability.
+
+The recording is deleted before any metadata. If that fails, the session is left as it was and the same command can be retried. The generated files go in the order `quality-report.json`, `annotations.json`, `session.json`, marker. If one of those fails (`discard_incomplete`), a retry accepts the partial session and finishes. If a new file has appeared at the recording's name by then, a retry with `--include-recording` refuses it (`recording_identity_mismatch`), and plain `discard` finishes and leaves it in place. A marker left without `session.json` can be removed with plain `discard`. With `--include-recording` it fails with `recording_identity_unavailable`, because the recording can no longer be identified.
 
 ```text
 python -m ml.label discard captures/SESSION
@@ -167,7 +185,7 @@ Do not commit the recording, the session directory, or the quality report.
 After `replacement_rollback_incomplete` the session is never usable as it stands:
 
 - The previous marker is moved back only when no file of the new generation is left in the session directory. If a new file could not be moved out, the marker stays in the backup and the directory does not load (`not_a_label_session`). Old confirmed annotations can therefore never be read beside new metadata.
-- Separately, every command refuses a session directory whose `.label-backup-*` directory still holds anything, with `replacement_recovery_pending`. This holds even if a marker is present. An empty backup directory is only a cleanup leftover and does not block.
+- Separately, every command refuses a session directory whose `.label-backup-*` directory still holds anything, with `replacement_recovery_pending`. This holds even if a marker is present. An empty backup directory is only a cleanup leftover and does not block. If a `.label-claim-*` directory is also pending, this code is reported first.
 
 To recover the previous session by hand:
 
@@ -178,7 +196,7 @@ To recover the previous session by hand:
 
 These are process-level guarantees. A power loss or a killed process during the swap can leave a mix of files or a private directory behind. Each rename is atomic on a local file system and the marker goes in last, so an interrupted first `init` does not load as a session. The tool does not claim full crash durability.
 
-**Source collisions.** The recording cannot be a generated file. `init` refuses a recording in the session directory whose name, compared case-insensitively, is a generated name, a `.label-stage-` or `.label-backup-` name, or a dot-name ending in `.tmp` (`recording_collides_with_session_file`). It also compares device and inode with every existing generated file, which catches a hard link or a symlinked directory alias. The check runs before any file is created or moved.
+**Source collisions.** The recording cannot be a generated file. `init` refuses a recording in the session directory whose name, compared case-insensitively, is a generated name, a `.label-stage-`, `.label-backup-`, or `.label-claim-` name, or a dot-name ending in `.tmp` (`recording_collides_with_session_file`). It also compares device and inode with every existing generated file, which catches a hard link or a symlinked directory alias. The check runs before any file is created or moved.
 
 **Loading.** The marker must be exactly `sojourner-label-session-v1` and a newline. `session.json` and `annotations.json` are read as strict UTF-8 JSON: duplicate keys at any depth, `NaN`, `Infinity`, nesting deep enough to exhaust the decoder, and files over 4 MiB are refused. Every field is then checked for its exact type and value before it is used: ids and decision ids, the recording path (absolute), enumerated values (checked as strings first), reviewed labels, window length and stride, conditions, the recording summary, the SHA-256, the split history, and every interval row. The capture claim, category, authorization status, and timestamp provenance must agree. A constructed fixture goes only with `constructed` for all three, and an operator camera claim goes only with `consented_local`, `human_authorized`, and a measured or reconstructed timeline. Annotation ids must equal the session's. This happens before every command, including discard, so a hand-edited file cannot turn a candidate into a confirmed example.
 

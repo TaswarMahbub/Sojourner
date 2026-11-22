@@ -85,6 +85,11 @@ _MARKER_BYTES = (SESSION_FORMAT + "\n").encode("ascii")
 # directory, so every rename stays on one file system.
 _STAGE_PREFIX = ".label-stage-"
 _BACKUP_PREFIX = ".label-backup-"
+# Private directory ``discard --include-recording`` moves the recording into
+# before verifying and deleting it. It lives in the session directory, so the
+# move is a rename on one file system. The claimed file has a fixed name.
+_CLAIM_PREFIX = ".label-claim-"
+_CLAIMED_NAME = "recording"
 _METADATA_LIMIT = 4 * 1024 * 1024
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -1020,7 +1025,7 @@ def _reserved_name(name: str) -> bool:
     folded = name.casefold()
     if folded in {item.casefold() for item in _GENERATED}:
         return True
-    if folded.startswith((_STAGE_PREFIX, _BACKUP_PREFIX)):
+    if folded.startswith((_STAGE_PREFIX, _BACKUP_PREFIX, _CLAIM_PREFIX)):
         return True
     return folded.startswith(".") and folded.endswith(".tmp")
 
@@ -1218,38 +1223,52 @@ def _commit_generation(
         raise LabelingError("replacement_cleanup_incomplete")
 
 
-def _recovery_pending(destination: Path) -> bool:
-    """Whether a replacement left previous files in a backup directory.
+def _recovery_pending(destination: Path) -> str | None:
+    """The code to refuse with when an earlier operation left files to recover, else ``None``.
 
-    An empty backup directory is only a cleanup leftover. One that holds
-    anything, or cannot be read, means an earlier generation was not put
-    back, so the directory is not used until a person resolves it.
+    A ``.label-backup-*`` directory that holds anything means a replacement
+    did not put the previous generation back (``replacement_recovery_pending``).
+    A ``.label-claim-*`` directory that holds anything means a discard moved a
+    recording aside and did not finish (``discard_recovery_pending``). An empty
+    one of either is only a cleanup leftover. One that cannot be read, or is
+    not a directory, blocks too. The directory is not used until a person
+    resolves it.
     """
     try:
         entries = list(os.scandir(destination))
     except (FileNotFoundError, NotADirectoryError):
-        return False  # The marker check reports this as not_a_label_session.
+        return None  # The marker check reports this as not_a_label_session.
     except OSError:
-        return True
+        return "replacement_recovery_pending"
+    found = None
     for entry in entries:
-        if not entry.name.startswith(_BACKUP_PREFIX):
+        if entry.name.startswith(_BACKUP_PREFIX):
+            code = "replacement_recovery_pending"
+        elif entry.name.startswith(_CLAIM_PREFIX):
+            code = "discard_recovery_pending"
+        else:
             continue
         if not entry.is_dir(follow_symlinks=False):
-            return True
-        try:
-            with os.scandir(entry.path) as inner:
-                if any(True for _item in inner):
-                    return True
-        except OSError:
-            return True
-    return False
+            pending = True
+        else:
+            try:
+                with os.scandir(entry.path) as inner:
+                    pending = any(True for _item in inner)
+            except OSError:
+                pending = True
+        if pending:
+            if code == "replacement_recovery_pending":
+                return code
+            found = code
+    return found
 
 
 def _load(directory: Path):
     """Load and fully validate a session. Any problem raises ``LabelingError``."""
     destination = _output_dir(directory)
-    if _recovery_pending(destination):
-        raise LabelingError("replacement_recovery_pending")
+    pending = _recovery_pending(destination)
+    if pending:
+        raise LabelingError(pending)
     if _read_regular(destination / MARKER_NAME, missing="not_a_label_session") != _MARKER_BYTES:
         raise LabelingError("not_a_label_session")
     session = _check_session(_read_json(destination / "session.json", _SESSION_KEYS, _SESSION_OPTIONAL))
@@ -1847,8 +1866,9 @@ def _discard_state(destination: Path):
     with ``session.json`` and no ``annotations.json``, or the marker alone.
     Every file that is present is still validated in full.
     """
-    if _recovery_pending(destination):
-        raise LabelingError("replacement_recovery_pending")
+    pending = _recovery_pending(destination)
+    if pending:
+        raise LabelingError(pending)
     if _read_regular(destination / MARKER_NAME, missing="not_a_label_session") != _MARKER_BYTES:
         raise LabelingError("not_a_label_session")
     has_session = _existing_kind(destination / "session.json") is not None
@@ -1864,9 +1884,13 @@ def _discard_state(destination: Path):
 
 
 def _verified_recording(destination: Path, session) -> Path | None:
-    """Return the recording path only if it is provably the file bound at ``init``.
+    """Preflight: return the recording path only if it is the file bound at ``init``.
 
-    Policy, all checked before anything is deleted:
+    This only decides whether a deletion is attempted. Another process can
+    replace the path right after it returns, so ``_delete_recording`` moves
+    the file away and checks the moved file again before deleting it.
+
+    Policy, all checked before anything is moved or deleted:
 
     - The path is a direct child of the session directory. Otherwise it is
       left in place and ``None`` is returned.
@@ -1918,6 +1942,101 @@ def _verified_recording(destination: Path, session) -> Path | None:
     return recording
 
 
+def _rmdir_quietly(path: Path) -> None:
+    """Remove a directory only if it is empty. Never deletes what is inside."""
+    try:
+        os.rmdir(path)
+    except OSError:
+        pass
+
+
+def _check_claimed(claimed: Path, session) -> None:
+    """Check the file moved into the claim directory against the ``init`` identity."""
+    bound = session[_IDENTITY_KEY]
+    expect = (bound["device"], bound["inode"])
+    try:
+        info = os.lstat(claimed)
+    except OSError:
+        raise LabelingError("recording_unreadable") from None
+    if not stat.S_ISREG(info.st_mode) or (info.st_dev, info.st_ino) != expect:
+        raise LabelingError("recording_identity_mismatch")
+    if info.st_nlink != 1:
+        raise LabelingError("recording_has_other_links")
+    try:
+        fingerprint = _hash_file(claimed, expect=expect)
+    except LabelingError:
+        raise
+    except OSError:
+        raise LabelingError("recording_unreadable") from None
+    if fingerprint != (session["sha256"], session["byte_length"]):
+        raise LabelingError("recording_identity_mismatch")
+
+
+def _release_claim(claim: Path, claimed: Path, recording: Path, code: str) -> None:
+    """Put a claimed file back at its old name without replacing anything there, then raise.
+
+    The file is put back with a hard link, which fails if the name is taken,
+    and the claimed name is then removed. If that cannot be done the file stays
+    in the claim directory and ``discard_recovery_pending`` is raised; the
+    claim directory then blocks the session until a person resolves it.
+    """
+    try:
+        info = os.lstat(claimed)
+    except FileNotFoundError:
+        _rmdir_quietly(claim)
+        raise LabelingError(code) from None
+    except OSError:
+        raise LabelingError("discard_recovery_pending") from None
+    if not stat.S_ISREG(info.st_mode):
+        raise LabelingError("discard_recovery_pending")
+    try:
+        os.link(claimed, recording)
+    except OSError:
+        raise LabelingError("discard_recovery_pending") from None
+    try:
+        os.unlink(claimed)
+    except OSError:
+        raise LabelingError("discard_recovery_pending") from None
+    _rmdir_quietly(claim)  # An empty claim directory does not block anything.
+    raise LabelingError(code)
+
+
+def _delete_recording(destination: Path, recording: Path, session) -> None:
+    """Delete the recording only as the exact file that was verified.
+
+    1. Create a new private directory ``.label-claim-*`` in the session directory.
+    2. Rename the recording into it. The rename is atomic, so from then on the
+       public name no longer reaches the claimed file, and a file another
+       process puts at the public name afterwards is never touched.
+    3. Check the claimed file: regular, one link, bound device and inode,
+       SHA-256 and length.
+    4. Unlink only the claimed name, then remove the empty claim directory.
+
+    If the rename fails, nothing has moved (``recording_claim_failed``). If a
+    check or the unlink fails, the claimed file is put back without replacing
+    anything (``_release_claim``) and the session is left as it was.
+    """
+    try:
+        claim = Path(tempfile.mkdtemp(prefix=_CLAIM_PREFIX, dir=destination))
+    except OSError:
+        raise LabelingError("recording_claim_failed") from None
+    claimed = claim / _CLAIMED_NAME
+    try:
+        os.rename(recording, claimed)
+    except OSError:
+        _rmdir_quietly(claim)
+        raise LabelingError("recording_claim_failed") from None
+    try:
+        _check_claimed(claimed, session)
+    except LabelingError as exc:
+        _release_claim(claim, claimed, recording, exc.code)
+    try:
+        os.unlink(claimed)
+    except OSError:
+        _release_claim(claim, claimed, recording, "recording_delete_failed")
+    _rmdir_quietly(claim)  # If it stays, it is empty and counted as an unexpected entry.
+
+
 def discard_session(directory: Path, *, include_recording: bool = False) -> DiscardResult:
     """Delete files this tool wrote, and the recording only when asked and verified.
 
@@ -1950,10 +2069,7 @@ def discard_session(directory: Path, *, include_recording: bool = False) -> Disc
         raise LabelingError("recording_identity_unavailable")
     deleted_recording = False
     if target is not None:
-        try:
-            target.unlink()
-        except OSError:
-            raise LabelingError("recording_delete_failed") from None
+        _delete_recording(destination, target, session)
         deleted_recording = True
     deleted = 0
     # Marker last, so an interrupted discard is still a session a retry can load.

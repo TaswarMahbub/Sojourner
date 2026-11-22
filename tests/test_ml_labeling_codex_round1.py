@@ -621,16 +621,21 @@ def test_failure_before_deletion_changes_nothing(tmp_path, monkeypatch):
 def test_failed_recording_deletion_keeps_the_session_for_a_retry(tmp_path, monkeypatch):
     recording, directory = _make(tmp_path, inside=True)
     before = _files(directory)
-    real = Path.unlink
+    real = os.unlink
+    refused = []
 
+    # The recording is deleted under its private claimed name, never the
+    # public one, so the fault is injected there (once).
     def refuse(path, *args, **kwargs):
-        if path == recording:
+        if Path(path).parent.name.startswith(lab._CLAIM_PREFIX) and not refused:
+            refused.append(path)
             raise PermissionError(PLANTED)
         return real(path, *args, **kwargs)
 
-    monkeypatch.setattr(Path, "unlink", refuse)
+    monkeypatch.setattr(lab.os, "unlink", refuse)
     with pytest.raises(LabelingError) as exc:
         discard_session(directory, include_recording=True)
+    assert refused
     assert exc.value.code == "recording_delete_failed" and PLANTED not in str(exc.value)
     monkeypatch.undo()
     assert _files(directory) == before
