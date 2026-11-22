@@ -66,8 +66,9 @@ void main() {
   float rim = pow(1.0 - n.z, 2.0);
   col = mix(col, uC, 0.35 * rim);
 
-  // Semi-transparent, a little more solid at the centre, with a soft edge. Never more opaque than
-  // the theme's --orb-max-alpha.
-  float alpha = smoothstep(1.0, 0.96, r) * (0.6 + 0.4 * n.z) * uMaxAlpha;
+  // Semi-transparent, a little more solid at the centre, with a soft edge fading out between r = 0.96
+  // and 1. smoothstep needs its edges in increasing order (GLSL leaves edge0 >= edge1 undefined),
+  // so the fade is 1 minus the rising step. Never more opaque than the theme's --orb-max-alpha.
+  float alpha = (1.0 - smoothstep(0.96, 1.0, r)) * (0.6 + 0.4 * n.z) * uMaxAlpha;
   gl_FragColor = vec4(col * alpha, alpha);
 }`

@@ -21,7 +21,13 @@ describe('background orb', () => {
   it('blends the three theme tones and stays semi-transparent', () => {
     for (const u of ['uA', 'uB', 'uC', 'uTime', 'uMaxAlpha']) expect(FRAGMENT_SHADER).toMatch(new RegExp(`uniform \\w+ ${u};`))
     // Opacity never exceeds the theme's cap (centre: 0.6 + 0.4 = 1 times uMaxAlpha).
-    expect(FRAGMENT_SHADER).toMatch(/alpha = smoothstep\(1\.0, 0\.96, r\) \* \(0\.6 \+ 0\.4 \* n\.z\) \* uMaxAlpha/)
+    expect(FRAGMENT_SHADER).toMatch(/alpha = \(1\.0 - smoothstep\(0\.96, 1\.0, r\)\) \* \(0\.6 \+ 0\.4 \* n\.z\) \* uMaxAlpha/)
+  })
+
+  it('calls smoothstep only with its edges in increasing order (GLSL leaves the reverse undefined)', () => {
+    const calls = [...FRAGMENT_SHADER.matchAll(/smoothstep\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,/g)]
+    expect(calls.length).toBeGreaterThan(0)
+    for (const [, edge0, edge1] of calls) expect(Number(edge0)).toBeLessThan(Number(edge1))
     // Gentle shading (0.90 to 1.05), the range the contrast check in themes.css assumes.
     expect(FRAGMENT_SHADER).toContain('col *= 0.90 + 0.15 * light')
   })
