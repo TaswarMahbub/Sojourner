@@ -61,11 +61,12 @@ export default function SessionMetricsPanel({ result }) {
                   <th scope="col">Collisions</th>
                   <th scope="col">Path efficiency (×)</th>
                   <th scope="col">Cues per metre</th>
+                  <th scope="col">Hesitation, median (s)</th>
                 </tr>
               </thead>
               <tbody>
                 {earlier.map((a, i) => {
-                  const [time, collisions, efficiency, cues] = metricRows(a)
+                  const [time, collisions, efficiency, cues, hesitation] = metricRows(a)
                   return (
                     <tr key={`${a.started_at_ms}-${a.ended_at_ms}`}>
                       <th scope="row">{earlier.length - i}</th>
@@ -74,6 +75,7 @@ export default function SessionMetricsPanel({ result }) {
                       <td>{collisions.value}</td>
                       <td>{efficiency.value ?? '—'}</td>
                       <td>{cues.value ?? '—'}</td>
+                      <td>{hesitation.value ?? '—'}</td>
                     </tr>
                   )
                 })}

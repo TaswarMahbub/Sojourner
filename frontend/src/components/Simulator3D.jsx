@@ -3,7 +3,6 @@ import { Simulation } from '../sim/simulation.js'
 import { CORRIDOR_WORLD } from '../sim/worldModel.js'
 import { createSceneRoot } from '../view/sceneRoot.js'
 import TopDownInset from '../ui/TopDownInset.jsx'
-import SessionMetricsPanel from './SessionMetricsPanel.jsx'
 import { KEYS, combine } from '../ui/driveKeys.js'
 import './Simulator3D.css'
 
@@ -118,7 +117,6 @@ export default function Simulator3D() {
   }
 
   return (
-    <>
     <section className="panel panel--wide sim3d" aria-labelledby={headingId}>
       <header className="panel__header">
         <h2 id={headingId}>3D corridor simulator (grey box)</h2>
@@ -158,7 +156,5 @@ export default function Simulator3D() {
         Drop link stops the datagrams: the receiver&apos;s watchdog halts the rover. {webglError ? `WebGL 2 unavailable (${webglError}); showing the 2D plan.` : ''}
       </p>
     </section>
-    <SessionMetricsPanel result={view.attemptResult} />
-    </>
   )
 }

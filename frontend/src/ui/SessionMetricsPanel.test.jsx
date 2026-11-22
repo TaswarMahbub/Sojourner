@@ -55,6 +55,17 @@ describe('session metrics after one doorway run', () => {
     expect(html).toContain(`${result.path_efficiency.toFixed(2)}</span><span class="session-metrics__unit"> × shortest path</span>`)
     expect(html).toContain(`${result.cues_per_m.toFixed(2)}</span><span class="session-metrics__unit"> cues/m</span>`)
     expect(html).toContain('Near misses within 0.05 m: 0')
+    expect(html).toContain(`${result.hesitation_median_s.toFixed(2)}</span><span class="session-metrics__unit"> s</span>`)
+  })
+
+  it('all five metrics emit on a full traversal (none is computed by the panel)', () => {
+    expect(result.time_to_clear_s).toBeGreaterThan(0)
+    expect(Number.isInteger(result.collisions)).toBe(true)
+    expect(Number.isInteger(result.near_misses)).toBe(true)
+    expect(result.path_efficiency).toBeGreaterThan(1)
+    expect(result.cues_per_m).toBeGreaterThan(0)
+    expect(result.hesitation_s.length).toBeGreaterThan(0)
+    expect(result.hesitation_median_s).not.toBeNull()
   })
 
   it('labels the attempt as driven by synthetic commands', () => {
@@ -66,14 +77,16 @@ describe('metricRows', () => {
   const base = {
     ended_by: 'reset', near_miss_threshold_m: 0.05, time_to_clear_s: null, collisions: 1, near_misses: 2,
     path_efficiency: null, distance_m: 3.21, optimal_path_m: 10.4, cues: 0, cues_per_m: 0,
+    hesitation_s: [], hesitation_median_s: null,
   }
 
   it('shows a dash, not a number, for metrics an uncleared attempt does not have', () => {
-    const [time, collisions, efficiency, cues] = metricRows(base)
+    const [time, collisions, efficiency, cues, hesitation] = metricRows(base)
     expect(time).toMatchObject({ value: null, note: 'Did not clear' })
     expect(collisions).toMatchObject({ value: '1', unit: 'contact', note: 'Near misses within 0.05 m: 2' })
     expect(efficiency).toMatchObject({ value: null, note: 'Only for an attempt that cleared' })
     expect(cues).toMatchObject({ value: '0.00', unit: 'cues/m', note: '0 cues over 3.21 m' })
+    expect(hesitation).toMatchObject({ value: null, note: 'No cue followed a moment when one was available' })
     const html = renderToStaticMarkup(<SessionMetricsPanel result={base} />)
     expect(html).toContain('Reset before clearing')
     expect(html).toContain('—')

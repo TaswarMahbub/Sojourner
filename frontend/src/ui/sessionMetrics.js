@@ -11,7 +11,7 @@ export const ENDED_BY = {
   reset: 'Reset before clearing',
 }
 
-// The four session metrics, as rows: { key, label, value, unit, note }. value is null when the
+// The five session metrics, as rows: { key, label, value, unit, note }. value is null when the
 // metric does not exist for this attempt (for example time to clear, when it never cleared).
 export function metricRows(result) {
   const threshold = fixed(result.near_miss_threshold_m, 2)
@@ -45,6 +45,15 @@ export function metricRows(result) {
       value: fixed(result.cues_per_m, 2),
       unit: 'cues/m',
       note: `${result.cues} ${result.cues === 1 ? 'cue' : 'cues'} over ${fixed(result.distance_m, 2)} m`,
+    },
+    {
+      key: 'hesitation',
+      label: 'Hesitation (median)',
+      value: fixed(result.hesitation_median_s, 2),
+      unit: 's',
+      note: result.hesitation_s.length === 0
+        ? 'No cue followed a moment when one was available'
+        : `Dwell before each committed cue, ${result.hesitation_s.length} ${result.hesitation_s.length === 1 ? 'cue' : 'cues'}: ${result.hesitation_s.map((h) => h.toFixed(2)).join(', ')} s`,
     },
   ]
 }
