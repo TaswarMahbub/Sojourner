@@ -140,12 +140,12 @@ def auth(token="good"):
     return {"Authorization": f"Bearer {token}"}
 
 
-def upload(client, pid, frames, csid=None, token="good", **meta):
+def upload(client, pid, frames, csid=None, token="good", events=EVENTS, **meta):
     metadata = {"profile_id": str(pid), "client_session_id": str(csid or uuid.uuid4()),
                 "tier": 1, "data_origin": "synthetic_seed", **meta}
     return client.post("/v1/sessions", headers=auth(token),
                        data={"metadata": json.dumps(metadata)},
-                       files={"frames": ("f.jsonl", frames), "events": ("e.jsonl", EVENTS)})
+                       files={"frames": ("f.jsonl", frames), "events": ("e.jsonl", events)})
 
 
 # Auth -------------------------------------------------------------------------
@@ -200,6 +200,25 @@ def test_upload_writes_samples_and_events(client, db):
     assert body["samples"] == 2 * (52 + 3) and body["events"] == 1
     assert body["rejected_frames"]["total"] == 0
     assert r.headers["Location"] == f"/v1/sessions/{body['session_id']}"
+
+
+@pytest.mark.parametrize("event", [
+    {"t": 1795276800.5, "cue": None},          # NOT NULL in control_events: was a 500
+    {"t": 1795276800.5},                       # no cue
+    {"cue": "go"},                             # no t
+    {"t": 1e300, "cue": "go"},                 # beyond the representable date range
+    {"t": "yesterday", "cue": "go"},
+    {"t": True, "cue": "go"},
+    {"t": 1795276800.5, "cue": "go", "confidence": "high"},
+    {"t": 1795276800.5, "cue": "go", "stop_reason": 3},
+    ["not", "an", "object"],
+])
+def test_malformed_event_is_a_422_naming_the_line(client, db, event):
+    good = {"t": 1795276800.5, "cue": "go"}
+    r = upload(client, db.profile(), jsonl(tracking_frame(1795276800000)),
+               events=jsonl(good, event))
+    assert r.status_code == 422, r.text
+    assert "line 2" in r.json()["detail"]
 
 
 def test_upload_is_refused_without_granted_consent(client, db):
