@@ -59,7 +59,7 @@ describe('frame loop — a render error never stops the simulation (I8)', () => 
     expect(loop.renderErrors).toBe(240)
     expect(loop.running).toBe(true)
     expect(f.pending()).toBe(1) // the next frame is still registered
-    // Simulated time advanced by the full 4 s of frames (each well under the 50 ms cap).
+    // Simulated time advanced by the full 4 s of frames (each well under the MAX_FRAME_MS cap).
     expect(sim.timeMs - t0).toBeCloseTo(4000, -1)
     // The rover moved, and kept moving, under accepted commands.
     expect(mid.x).toBeGreaterThan(x0 + 0.3)
@@ -123,7 +123,7 @@ describe('frame loop — a render error never stops the simulation (I8)', () => 
     expect(report.mock.calls.map((c) => c[1])).toEqual([1, 100, 200])
   })
 
-  it('caps elapsed time per frame at MAX_FRAME_MS (a stall cannot fire the watchdog)', () => {
+  it('caps elapsed time per frame at MAX_FRAME_MS (a stall cannot dump its length into one frame)', () => {
     const sim = armedCorridorSim()
     const f = fakeRaf()
     const loop = createFrameLoop({ sim, render: () => {}, raf: f.raf, caf: f.caf, clock: f.clock })

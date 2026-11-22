@@ -23,6 +23,7 @@ import { signCommand } from '../contracts/motor.js'
 import { FixedClock, interpolatePose } from './clock.js'
 import { MAX_ANGULAR_RAD_S, MAX_LINEAR_MPS, SIM_STEP_S } from './constants.js'
 import { checkPose, sweep } from './collision.js'
+import { stepPose } from './stepPose.js'
 import { Attempt } from './attempt.js'
 import { REASONS, haltReason, rejectionReason } from './stopReason.js'
 
@@ -247,9 +248,7 @@ export class Simulation {
     const v = clamp(this.receiver.linearMps, MAX_LINEAR_MPS)
     const w = clamp(this.receiver.angularRadS, MAX_ANGULAR_RAD_S)
     const from = this.pose
-    const heading = from.heading + w * dt
-    const target = { x: from.x + v * Math.cos(heading) * dt, y: from.y + v * Math.sin(heading) * dt, heading }
-    const swept = sweep(from, target, this.world)
+    const swept = sweep(from, stepPose(from, v, w, dt), this.world)
     const to = swept.pose
     this.pose = to
     this.contact = swept.hit ? swept.segmentId : null

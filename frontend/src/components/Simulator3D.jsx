@@ -13,8 +13,8 @@ import './Simulator3D.css'
 // between its last two steps. The view never integrates (invariant I3) and never writes back (I1).
 
 // The frame loop (src/view/frameLoop.js) re-registers and ticks the simulation BEFORE rendering, and
-// catches render errors: a render error never stops the simulation (proposed invariant I8). It also
-// caps each frame's elapsed time (MAX_FRAME_MS) so a hidden tab cannot fire the watchdog.
+// catches render errors: a render error never stops the simulation (invariant I8). It also
+// caps each frame's elapsed time (MAX_FRAME_MS, 250 ms) so a hidden tab cannot dump a long stall into one frame.
 // The DOM readout refreshes at this period; the canvas draws every frame.
 const READOUT_MS = 33
 
