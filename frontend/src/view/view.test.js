@@ -157,11 +157,13 @@ describe('renderer settings and camera', () => {
     expect(cappedPixelRatio(1)).toBe(1)
   })
 
-  it('builds the scene headless with exactly one hemisphere and one directional light', () => {
+  it('builds the scene headless with the Phase 5a rig: one directional light, nine area lights', () => {
     const { scene } = buildScene(W)
     const lights = []
     scene.traverse((o) => { if (o.isLight) lights.push(o.type) })
-    expect(lights.sort()).toEqual(['DirectionalLight', 'HemisphereLight'])
+    expect(lights.filter((t) => t === 'DirectionalLight')).toHaveLength(1)
+    expect(lights.filter((t) => t === 'RectAreaLight')).toHaveLength(9)
+    expect(lights).toHaveLength(10)
   })
 
   it('the follow camera never sits outside the building, including at spawn', () => {

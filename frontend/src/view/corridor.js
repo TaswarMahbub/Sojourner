@@ -79,9 +79,10 @@ export function roomRect(world) {
 
 /**
  * Trough housings: TROUGH_M.count along the corridor centreline, every TROUGH_M.spacing, phased so
- * one trough is centred on the doorway (x = 1.5, 4.5, 7.5, 10.5). That trough sits square in front
- * of the far jamb's reveal face — the face the camera sees head-on on the approach — so the reveal
- * reads brighter than the wall beside it, which it lights only at a grazing angle (handoff T5.6).
+ * one trough is centred on the doorway (x = 1.5, 4.5, 7.5, 10.5): the opening sits under a light.
+ * Measured, this does NOT by itself make the reveal brighter than the wall: from the centreline the
+ * trough reaches the reveal (normal ±X) at cos ≈ 0.22 and the wall face at ≈ 0.65. The reveal reads
+ * by the door-lining material instead (sceneRoot JAMB_LINING_HEX; handoff_sim §9).
  */
 export function troughLayout(world) {
   const n = TROUGH_M.count
@@ -301,7 +302,7 @@ function teeGrid(rect, holes, z, phaseX, phaseY, material, name) {
 function resolveMaterials(m) {
   const set = m.isMaterial ? { surface: m } : { ...m }
   const owned = []
-  for (const k of ['trim', 'ceiling', 'door', 'rail', 'diffuser', 'grid']) set[k] = set[k] ?? set.surface
+  for (const k of ['trim', 'ceiling', 'door', 'rail', 'diffuser', 'grid', 'reveal']) set[k] = set[k] ?? set.surface
   if (!set.recess) {
     set.recess = (set.ceiling ?? set.surface).clone()
     set.recess.side = BackSide
@@ -333,8 +334,17 @@ export function buildCorridor(world, materials) {
   group.add(walls, trim)
 
   // --- Walls -------------------------------------------------------------------------------------
+  // The door lining: the reveal faces (box end faces at a jamb) and the lintel soffit take
+  // mats.reveal, so the opening reads by luminance contrast at every height (handoff_sim §9, the
+  // reveal decision). BoxGeometry groups: 0 = local +X (segment end b), 1 = local −X (end a), 3 = −Y.
+  const atJamb = (p) => [jA, jB].some((j) => Math.abs(p.x - j.x) < 1e-9 && Math.abs(p.y - j.y) < WALL_THICKNESS_M + 1e-9)
   for (const face of world.wallFaces) {
-    walls.add(wallBox(face, solidNormal(face, isFree), WALL_THICKNESS_M, 0, CEILING_HEIGHT_M, mats.surface))
+    const m = wallBox(face, solidNormal(face, isFree), WALL_THICKNESS_M, 0, CEILING_HEIGHT_M, mats.surface)
+    if (mats.reveal !== mats.surface && (atJamb(face.a) || atJamb(face.b))) {
+      m.material = [0, 1, 2, 3, 4, 5].map((g) => ((g === 0 && atJamb(face.b)) || (g === 1 && atJamb(face.a)) ? mats.reveal : mats.surface))
+      m.userData.revealLined = true
+    }
+    walls.add(m)
   }
   for (const seg of world.segments) {
     if (seg.kind === 'wall') {
@@ -363,7 +373,9 @@ export function buildCorridor(world, materials) {
   }
 
   // Lintel: the wall above the door head, across the opening, through the wall thickness.
-  walls.add(wallBox({ id: 'lintel', a: jA, b: jB }, { x: 0, y: -1 }, world.doorway.revealDepth, DOOR_HEAD_HEIGHT_M, CEILING_HEIGHT_M, mats.surface))
+  const lintel = wallBox({ id: 'lintel', a: jA, b: jB }, { x: 0, y: -1 }, world.doorway.revealDepth, DOOR_HEAD_HEIGHT_M, CEILING_HEIGHT_M, mats.surface)
+  if (mats.reveal !== mats.surface) lintel.material = [0, 1, 2, 3, 4, 5].map((g) => (g === 3 ? mats.reveal : mats.surface))
+  walls.add(lintel)
 
   // --- Trim --------------------------------------------------------------------------------------
   // Long corridor walls: the avatar is held 0.09 m off them by the rail, so trim may stand proud.

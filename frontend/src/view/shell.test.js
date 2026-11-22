@@ -219,7 +219,7 @@ describe('ceiling', () => {
       expect(hit.object.name).toBe(`${h.id}_diffuser`)
       expect(hit.point.y).toBeGreaterThan(CEILING_HEIGHT_M + 0.05)
     }
-    // Phased so one trough is centred on the doorway: the far reveal face is lit head-on.
+    // Phased so one trough is centred on the doorway (the opening sits under a light).
     expect(t.map((h) => h.cx)).toEqual([1.5, 4.5, 7.5, 10.5])
     expect(t.some((h) => Math.abs(h.cx - W.doorway.centreX) < 1e-12)).toBe(true)
   })

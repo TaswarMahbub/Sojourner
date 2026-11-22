@@ -4,7 +4,9 @@
 //  - sRGB output, AgX tone mapping, exposure 1.0.
 //  - Pixel ratio capped at min(devicePixelRatio, 1.5) from the start, so development never runs
 //    at a resolution the demo machine cannot hit.
-//  - One neutral grey MeshStandardMaterial, one HemisphereLight, one DirectionalLight.
+//  - One neutral grey MeshStandardMaterial for the architecture (materials are Phase 4).
+//  - Phase 5a lighting rig from lighting.js (exactly one shadow caster, PCF radius 4), plus PMREM
+//    RoomEnvironment as scene.environment at low intensity — never as scene.background.
 //
 // The view only READS the simulation: setPose() takes the interpolated pose the simulation hands
 // out. Nothing here integrates, steps, or feeds anything back (invariants I1, I3).
@@ -12,9 +14,8 @@
 import {
   AgXToneMapping,
   Color,
-  DirectionalLight,
-  HemisphereLight,
   MeshStandardMaterial,
+  PMREMGenerator,
   PerspectiveCamera,
   SRGBColorSpace,
   Scene,
@@ -23,10 +24,21 @@ import {
 import { buildCorridor, disposeCorridor } from './corridor.js'
 import { createAvatarProxy } from './chairView.js'
 import { FOV_DEG, NEAR_M, createFollowRig } from './cameraRig.js'
-import { rosToThree } from './frame.js'
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
+import { LIGHT_LEVELS, SHADOW, applyShadowFlags, buildLighting, diffuserMaterial, disposeLighting } from './lighting.js'
 
 export const MAX_PIXEL_RATIO = 1.5
 export const cappedPixelRatio = (dpr = globalThis.devicePixelRatio || 1) => Math.min(dpr, MAX_PIXEL_RATIO)
+
+/** Architecture grey (no materials until Phase 4). */
+export const WALL_HEX = 0xa3a3a3
+/**
+ * Door lining (reveal faces + head soffit). Lighter than the wall so the opening reads at every
+ * height: no light in the §6.3 table can make a reveal facing along the corridor brighter than the
+ * wall beside it. ~30+ LRV points above the wall, per door-frame contrast practice (BS 8300).
+ * Chosen by Mridhul, 2026-11-22. Pulled forward from Phase 4; re-check when materials land.
+ */
+export const JAMB_LINING_HEX = 0xe0ddd6
 
 export const RENDERER_SETTINGS = Object.freeze({
   antialias: false,
@@ -39,23 +51,21 @@ export const RENDERER_SETTINGS = Object.freeze({
 export function buildScene(world) {
   const scene = new Scene()
   scene.background = new Color(0x8c8f94)
-  const grey = new MeshStandardMaterial({ color: 0xa3a3a3, roughness: 0.85, metalness: 0 })
-  const corridor = buildCorridor(world, grey)
+  const grey = new MeshStandardMaterial({ color: WALL_HEX, roughness: 0.85, metalness: 0 })
+  const lining = new MeshStandardMaterial({ color: JAMB_LINING_HEX, roughness: 0.85, metalness: 0 })
+  const diffuser = diffuserMaterial()
+  const corridor = buildCorridor(world, { surface: grey, reveal: lining, diffuser })
   scene.add(corridor)
 
-  const hemi = new HemisphereLight(0xffffff, 0x6b6b6b, 1.6)
-  scene.add(hemi)
-  // From the end-window direction, low, so walls and floor read as different planes.
-  const sun = new DirectionalLight(0xffffff, 1.4)
-  const from = rosToThree({ x: world.bounds.x1 + 4, y: 2, z: 5 })
-  sun.position.set(from.x, from.y, from.z)
-  const at = rosToThree({ x: (world.bounds.x0 + world.bounds.x1) / 2, y: 0, z: 0 })
-  sun.target.position.set(at.x, at.y, at.z)
-  scene.add(sun, sun.target)
+  const lighting = buildLighting(world, corridor)
+  scene.add(...lighting.lights, lighting.sun.target, ...lighting.objects)
+  scene.environmentIntensity = LIGHT_LEVELS.environment
 
   const avatar = createAvatarProxy()
   scene.add(avatar.object)
-  return { scene, corridor, avatar, materials: [grey] }
+  applyShadowFlags(corridor)
+  avatar.object.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true } })
+  return { scene, corridor, avatar, lighting, materials: [grey, lining, diffuser] }
 }
 
 /**
@@ -68,8 +78,17 @@ export function createSceneRoot({ canvas, world }) {
   renderer.toneMapping = RENDERER_SETTINGS.toneMapping
   renderer.toneMappingExposure = RENDERER_SETTINGS.toneMappingExposure
   renderer.setPixelRatio(cappedPixelRatio())
+  renderer.shadowMap.enabled = true
+  renderer.shadowMap.type = SHADOW.type
 
-  const { scene, corridor, avatar, materials } = buildScene(world)
+  const { scene, corridor, avatar, lighting, materials } = buildScene(world)
+  // Soft ambient and reflections, zero downloads. Environment only; the windows are emissive planes.
+  const pmrem = new PMREMGenerator(renderer)
+  const envScene = new RoomEnvironment()
+  const envTarget = pmrem.fromScene(envScene, 0.04)
+  envScene.dispose()
+  pmrem.dispose()
+  scene.environment = envTarget.texture
   const camera = new PerspectiveCamera(FOV_DEG, 16 / 9, NEAR_M, 60)
   const rig = createFollowRig(camera, world, corridor)
   avatar.setPose(world.spawn)
@@ -94,6 +113,8 @@ export function createSceneRoot({ canvas, world }) {
     },
     dispose() {
       disposeCorridor(corridor)
+      disposeLighting(lighting)
+      envTarget.dispose()
       avatar.dispose()
       for (const m of materials) m.dispose()
       renderer.dispose()
