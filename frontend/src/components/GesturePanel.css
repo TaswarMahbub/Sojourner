@@ -1,0 +1,14 @@
+.gesture__label { font-family: var(--font-mono); }
+.gesture__meaning { margin: 0; }
+
+.gesture__score {
+  width: 100%;
+  height: 0.75rem;
+  appearance: none;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--color-meter-track);
+}
+.gesture__score::-webkit-meter-bar { background: var(--color-meter-track); border: none; border-radius: var(--radius); }
+.gesture__score::-webkit-meter-optimum-value { background: var(--color-meter-fill); border-radius: var(--radius); }
+.gesture__score::-moz-meter-bar { background: var(--color-meter-fill); border-radius: var(--radius); }

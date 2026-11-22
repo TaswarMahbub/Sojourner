@@ -1,30 +1,15 @@
-import { useEffect, useState } from 'react'
-import { validateCameraFrame } from '../contracts/cameraFrame.js'
+import { decodeCameraFrame, validateCameraFrame } from '../contracts/cameraFrame.js'
+import { checkWith, useMessageStream } from './useMessageStream.js'
 
-export const STALE_AFTER_MS = 250
+export { STALE_AFTER_MS } from './useMessageStream.js'
 
-// Subscribes to any camera source ({ kind, subscribe }) and validates every message.
-// `isStale` is true when no message has arrived for STALE_AFTER_MS, measured on this
-// browser's clock (the producer's clock may be on another machine).
-export function useCameraStream(source, { staleAfterMs = STALE_AFTER_MS } = {}) {
-  const [latest, setLatest] = useState(null)
-  const [isStale, setIsStale] = useState(false)
+const CAMERA_CHECKER = { validate: validateCameraFrame, decode: decodeCameraFrame }
 
-  useEffect(() => {
-    let receivedAtMs = null
-    const unsubscribe = source.subscribe((message) => {
-      receivedAtMs = Date.now()
-      setLatest({ message, validation: validateCameraFrame(message), receivedAtMs })
-      setIsStale(false)
-    })
-    const timer = setInterval(() => {
-      setIsStale(receivedAtMs !== null && Date.now() - receivedAtMs > staleAfterMs)
-    }, 50)
-    return () => {
-      unsubscribe()
-      clearInterval(timer)
-    }
-  }, [source, staleAfterMs])
+export function checkMessage(message, receivedAtMs) {
+  return checkWith(CAMERA_CHECKER, message, receivedAtMs)
+}
 
-  return { latest, isStale, sourceKind: source.kind }
+// Camera feature stream (contract section 1) from any source.
+export function useCameraStream(source, options) {
+  return useMessageStream(source, CAMERA_CHECKER, options)
 }
