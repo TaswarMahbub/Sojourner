@@ -1,9 +1,9 @@
 # Hosting the API on Vultr
 
-One Vultr instance runs the API behind Caddy (automatic HTTPS). The database stays on Tiger Cloud. GitHub Actions deploys every push to `main` that touches the API, so after the one-time setup below, nobody needs Docker, SSH keys or Vultr access on their own laptop to ship a change.
+One Vultr instance runs the API behind Caddy (automatic HTTPS). The database stays on Tiger Cloud. GitHub Actions deploys every push to `main` that touches the API, once a teammate approves it, so after the one-time setup below nobody needs Docker, SSH keys or Vultr access on their own laptop to ship a change.
 
 ```text
-push to main ─► GitHub Actions: tests ─► build image ─► push to GHCR ─► ssh deploy@server
+push to main ─► GitHub Actions: tests ─► build image ─► push to GHCR ─► approval ─► ssh deploy@server
                                                                              │
                 Vultr instance ◄─────────────────────────────────────────────┘
                   sojourner-deploy: pull image, start it, health check, roll back if unhealthy
@@ -17,11 +17,12 @@ push to main ─► GitHub Actions: tests ─► build image ─► push to GHCR
 | `cloud-init.yaml` | Pasted into Vultr when creating the instance. Installs Docker, makes SSH key-only, creates the `deploy` user, the secrets file and the deploy script |
 | `docker-compose.yml` | API + Caddy. Copied to the server on every deploy |
 | `Caddyfile` | HTTPS and the 50 MB upload cap. Copied to the server on every deploy |
+| `known_hosts` | The server's SSH host key, pinned. CI refuses to deploy to a server that presents any other key. See step 7 |
 | `../../../.github/workflows/deploy-cloud.yml` | The CI pipeline |
 
 ## One-time setup
 
-Takes about 30 minutes. You need: a Vultr account, admin on the GitHub repo (for secrets), a domain name you can add a DNS record to, and the Tiger Cloud admin URL.
+Takes about 30 minutes. You need: a Vultr account, admin on the GitHub repo (for the `production` environment and its secret), a domain name you can add a DNS record to, and the Tiger Cloud admin URL.
 
 ### 1. Make the CI deploy key
 
@@ -86,7 +87,7 @@ ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
 
 ### 6. Prepare the Tiger Cloud database
 
-From `backend/cloud` on your laptop, with the admin URL in `TIMESCALE_SERVICE_URL`:
+This assumes the base schema is already applied and `sojourner_app` has a login and password (`backend/db/README.md`, setup steps 5 and 6); `DATABASE_URL_APP` uses that password. Then, from `backend/cloud` on your laptop, with the admin URL in `TIMESCALE_SERVICE_URL`:
 
 ```sh
 psql "$TIMESCALE_SERVICE_URL" -f sql/cloud_schema.sql                     # API tables; re-runnable
@@ -102,7 +103,7 @@ The CI SSH key is an **environment secret**, not a repository secret. A reposito
 
 **Create the environment.** Repo → Settings → Environments → New environment, named `production`:
 
-- **Deployment branches and tags:** "Selected branches and tags", add `main` only. A workflow run from any other branch can't enter the environment, so it never sees the secrets.
+- **Deployment branches and tags:** "Selected branches and tags", add `main` only. A workflow run from any other branch can't enter the environment, so it never sees the secret.
 - **Required reviewers:** add at least one teammate. Every deploy then waits in the Actions tab until a reviewer approves it. Tick "Prevent self-review" if you want a second person on every deploy. With a four-person team, expect to ping someone.
 
 **Environment secrets** (on the `production` environment page → Add environment secret):
@@ -111,7 +112,7 @@ The CI SSH key is an **environment secret**, not a repository secret. A reposito
 | --- | --- |
 | `VULTR_SSH_KEY` | The whole contents of the private key file `sojourner-ci`, including the `BEGIN` and `END` lines |
 
-**Pin the server's host key in the repo.** The host key is public, not a credential, so it's committed as `backend/cloud/vultr/known_hosts` where anyone can read exactly what CI trusts. Changing it goes through PR review like any other file. From the repo root:
+**Pin the server's host key in the repo.** The host key is not stored in GitHub. It is public, not a credential, so it's committed as `backend/cloud/vultr/known_hosts`, one line in the form `<instance IP> ssh-ed25519 <key>`. Anyone can read exactly what CI trusts, and changing it goes through PR review like any other file. The deploy step copies this file and connects with `StrictHostKeyChecking=yes`, so a server presenting a different key is refused before anything is sent. From the repo root:
 
 ```sh
 ssh-keyscan -t ed25519 <instance IP> 2>/dev/null | grep '^<instance IP> ' > backend/cloud/vultr/known_hosts
@@ -120,14 +121,16 @@ ssh-keygen -lf backend/cloud/vultr/known_hosts
 
 The fingerprint printed must match the one you noted in step 5. This is what stops CI from deploying to an impostor, so compare it character by character. Commit the file on a branch and merge it by PR.
 
+The line is keyed by IP, so `VULTR_HOST` below must be that same IP, not a hostname. A hostname or a different IP fails the deploy with `Host key verification failed`.
+
 **Repository variables** (Repo → Settings → Secrets and variables → Actions → Variables tab). These are not secret and must stay at repository level: the workflow's job-level check for `VULTR_HOST` runs before the job enters the environment, so it can't see environment variables.
 
 | Name | Value |
 | --- | --- |
-| `VULTR_HOST` | The instance IP. The deploy job is skipped while this is unset |
+| `VULTR_HOST` | The instance IP, exactly as it appears at the start of `known_hosts`. The deploy job is skipped while this is unset |
 | `VULTR_API_DOMAIN` | The domain from step 4. Optional: enables a public `/healthz` check after each deploy |
 
-If `VULTR_SSH_KEY` was already added as a repository secret, delete it from the Secrets tab after adding it to the environment. A `VULTR_KNOWN_HOSTS` secret from an earlier setup is no longer read; delete it.
+If `VULTR_SSH_KEY` was already added as a repository secret, delete it from the Secrets tab after adding it to the environment. Nothing reads a `VULTR_KNOWN_HOSTS` secret any more. If one exists from an earlier setup, at repository or environment level, delete it so nobody mistakes it for the pin.
 
 **Protect `main`** (repo owner only): Settings → Branches → add a rule for `main` requiring a pull request with one approval. The environment trusts whatever is on `main`, including `deploy-cloud.yml` itself, so this is what stops one person from changing the workflow and deploying it alone. Keep write access to people you trust.
 
@@ -135,7 +138,7 @@ Then delete `sojourner-ci` and `sojourner-ci.pub` from your machine.
 
 ### 8. First deploy
 
-Repo → Actions → deploy-cloud → Run workflow (on `main`). When it's green:
+Repo → Actions → deploy-cloud → Run workflow (on `main`). Approve the deploy job when it waits (the run → Review deployments). When it's green:
 
 ```sh
 curl https://api.yourdomain.com/healthz        # {"ok":true}
@@ -155,7 +158,7 @@ DATABASE_URL_ADMIN="$TIMESCALE_SERVICE_URL" TOKEN_PEPPER=<the server's value> \
 
 - **Deploying:** merge to `main`. If the change touches `backend/cloud/`, `backend/db/tiger_store.py` or `requirements.txt`, GitHub Actions tests and builds it, then the deploy job waits for a `production` reviewer to approve it (Actions → the run → Review deployments). Anything else on `main` doesn't trigger a deploy. To deploy by hand: Actions → deploy-cloud → Run workflow, on `main`.
 - **A deploy that fails its health check** is rolled back to the previous release automatically, and the workflow run goes red with the API's last log lines.
-- **Rolling back by hand:** revert the bad commit on `main`, which deploys the reverted code. Or open an earlier green deploy-cloud run and choose "Re-run all jobs", which rebuilds and deploys that run's commit.
+- **Rolling back by hand:** revert the bad commit on `main`, which deploys the reverted code. Or open an earlier green deploy-cloud run and choose "Re-run all jobs", which rebuilds and deploys that run's commit, after approval. A re-run uses the workflow file from that commit, so only runs from after the `production` environment and the committed `known_hosts` were added (run 4 onward) can deploy. Earlier runs can't reach the SSH key.
 - **Logs and status**, as root on the server:
 
   ```sh
@@ -164,15 +167,15 @@ DATABASE_URL_ADMIN="$TIMESCALE_SERVICE_URL" TOKEN_PEPPER=<the server's value> \
   sojourner-compose logs caddy        # certificate problems show up here
   ```
 
-- **Changing a secret:** edit `/etc/sojourner/cloud.env`, then re-run the latest deploy-cloud run (or `sojourner-compose up -d`).
+- **Changing a server secret:** edit `/etc/sojourner/cloud.env`, then run `sojourner-compose up -d`, which recreates the API container with the new values. Re-running the latest deploy-cloud run also works, but needs an approval.
 - **OS updates:** Ubuntu installs security updates automatically. Reboot now and then (`reboot`); the containers start again on their own.
 
 ## Security notes
 
 - **The CI key can only deploy.** Its `authorized_keys` entry forces `sojourner-deploy`, which accepts one argument: an image from `ghcr.io/taswarmahbub/sojourner-api` pinned by digest. It can't open a shell, forward ports or run other commands. `sudo` is allowed for that one script only.
 - **Registry access is short-lived.** The server pulls with the workflow's `GITHUB_TOKEN`, which expires when the job ends. The credentials are stored in a temporary directory for the pull and deleted afterwards. The image can stay private.
-- **Secrets stay on the server.** They aren't in the repo, GitHub, the image, or the cloud-init user data.
-- **The host key pin is reviewed, not hidden.** `known_hosts` is a committed file, so a change to it needs an approved PR into `main`, and anyone can read it.
+- **App secrets stay on the server.** The database URLs and `TOKEN_PEPPER` live only in `/etc/sojourner/cloud.env`. They aren't in the repo, GitHub, the image, or the cloud-init user data. The only credential in GitHub is the CI deploy key, in the `production` environment.
+- **The host key pin is reviewed, not hidden.** `known_hosts` is a committed file, so a change to it needs an approved PR into `main`, and anyone can read it. A secret can't be read back, so nobody could check what CI actually trusted.
 - **Deploys only come from `main`, with a reviewer's approval.** The CI key lives in the `production` environment, which only releases it to runs from `main` after a required reviewer approves. Workflows on other branches and pull requests, including from forks, can't read it.
 - **The database admin URL is not in GitHub at all.** Only the server's env file holds app credentials, and the admin URL stays on admins' laptops.
 
@@ -184,6 +187,7 @@ If the repository moves to another owner, update `ALLOWED_REPO` in the deploy sc
 
 ## Not done yet
 
-- Not yet run on a real Vultr instance or against GHCR. Tested: the cloud-init schema, the SSH lockdown, the deploy script's checks, deploys, rollback and image cleanup, in an Ubuntu 24.04 container with a stand-in for Docker. The workflows pass `actionlint`.
+- Running on a real Vultr instance since 22 Nov 2026: deploy-cloud runs 4 to 6 pulled from GHCR, deployed over SSH with the pinned host key, and passed the public `/healthz` check. `/healthz` doesn't touch the database, so a green deploy says nothing about the routes against Tiger Cloud.
+- Not yet exercised on the server: automatic rollback after a failed health check. That was tested only in an Ubuntu 24.04 container with a stand-in for Docker, along with the cloud-init schema, the SSH lockdown and image cleanup.
 - Phase 2, only if needed: a Vultr Load Balancer in front of two instances (the API is stateless apart from its cache), and Vultr Object Storage to keep uploaded session files for re-ingestion.
 - To check before ever moving the database to Vultr: whether Vultr Managed Databases for PostgreSQL offers the TimescaleDB extension.

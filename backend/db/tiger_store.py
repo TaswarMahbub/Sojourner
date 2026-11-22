@@ -79,16 +79,22 @@ def parse_ts(value) -> datetime:
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
-def read_jsonl(path: Path):
+def _numbered_jsonl(path: Path):
+    """Yield (line_no, object) for each non-blank line. Invalid JSON raises ValueError."""
     with path.open() as f:
         for line_no, line in enumerate(f, 1):
             line = line.strip()
             if not line:
                 continue
             try:
-                yield json.loads(line)
+                yield line_no, json.loads(line)
             except json.JSONDecodeError as e:
                 raise ValueError(f"{path}:{line_no}: invalid JSON ({e})") from e
+
+
+def read_jsonl(path: Path):
+    for _, obj in _numbered_jsonl(path):
+        yield obj
 
 
 def synthetic_frame_rows(frames_path: Path, session_id, profile_id, conf_floor: float):
@@ -338,11 +344,45 @@ def contract_file_rows(frames_path: Path, session_id, profile_id, rejections: li
         yield from result.rows
 
 
+def _check_event(ev) -> str | None:
+    """Why an interim-format event can't be stored, or None. Checked here so a bad line is a
+    ValueError naming the line, not a database constraint error partway through COPY."""
+    if not isinstance(ev, dict):
+        return "event is not a JSON object"
+    if "t" not in ev:
+        return "missing field t"
+    t = ev["t"]
+    if isinstance(t, bool) or not isinstance(t, (int, float, str)):
+        return "t is neither epoch seconds nor an ISO-8601 string"
+    if isinstance(t, (int, float)) and not _is_number(t):
+        return "t is not a finite number"
+    cue = ev.get("cue")
+    if not isinstance(cue, str) or not cue:
+        return "cue is not a non-empty string"
+    conf = ev.get("confidence")
+    if conf is not None and not _is_number(conf):
+        return "confidence is neither null nor a finite number"
+    reason = ev.get("stop_reason")
+    if reason is not None and not isinstance(reason, str):
+        return "stop_reason is neither null nor a string"
+    return None
+
+
 def event_rows(events_path: Path, session_id, profile_id):
-    """Yield CONTROL_EVENTS_COPY rows; event_sequence is cue order in the session."""
-    for event_sequence, ev in enumerate(read_jsonl(events_path), 1):
-        yield (parse_ts(ev["t"]), session_id, profile_id, event_sequence, ev["cue"],
-               ev.get("confidence"), ev.get("stop_reason"))
+    """Yield CONTROL_EVENTS_COPY rows; event_sequence is cue order in the session.
+    A malformed event raises ValueError with its line number."""
+    for event_sequence, (line_no, ev) in enumerate(_numbered_jsonl(events_path), 1):
+        problem = _check_event(ev)
+        if problem is None:
+            try:
+                ts = parse_ts(ev["t"])
+            except (ValueError, OverflowError, OSError) as e:
+                problem = f"t is not a usable time ({e})"
+        if problem is not None:
+            raise ValueError(f"line {line_no}: {problem}")
+        conf = ev.get("confidence")
+        yield (ts, session_id, profile_id, event_sequence, ev["cue"],
+               None if conf is None else float(conf), ev.get("stop_reason"))
 
 
 # ---------------------------------------------------------------------------

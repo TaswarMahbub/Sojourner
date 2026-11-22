@@ -17,19 +17,12 @@ SELECT left(session_id::text, 8) AS session, channel_name,
 FROM session_channel_stats
 ORDER BY channel_name, started_at;
 
--- 3. Drift for one profile and channel. Falling observed_range suggests a re-fit.
--- SELECT started_at, tier, round(observed_range::numeric, 3) AS observed_range,
---        round(100 * tracking_ok_frac::numeric, 1) AS tracking_ok_pct
--- FROM session_channel_stats
--- WHERE profile_id = '<profile-uuid>' AND channel_name = 'brow_raise_left'
--- ORDER BY started_at;
+-- 3. Longitudinal trend for one profile and channel: observed_range across measured sessions,
+--    with change vs. the previous and the first session. Lives in its own file so it runs
+--    with variables, and states what observed_range can and can't show:
+--      psql "$TIMESCALE_SERVICE_URL" -v profile_id=<profile-uuid> -v channel=jawOpen -f trend.sql
 
--- 4. Same, with change vs. previous session.
--- SELECT started_at, observed_range,
---        observed_range - lag(observed_range) OVER (ORDER BY started_at) AS change_vs_previous
--- FROM session_channel_stats
--- WHERE profile_id = '<profile-uuid>' AND channel_name = 'brow_raise_left'
--- ORDER BY started_at;
+-- 4. (merged into trend.sql)
 
 -- 5. Within-session fatigue: 30-second range for one channel.
 -- SELECT time_bucket(INTERVAL '30 seconds', ts) AS window_start,
