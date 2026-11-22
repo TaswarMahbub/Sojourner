@@ -2,7 +2,8 @@
 
 Phase 1 turns Schema 4 camera feature messages into fixed vectors and into
 ``unknown`` classifications. The dataset helpers read local JSONL and check
-split plans. Neither trains a model, and neither publishes motor commands.
+split plans. The labeling commands review intervals on a recording that
+already exists. None of this trains a model or publishes motor commands.
 """
 
 from ml.classify import classification_for_window, unknown_classification
@@ -36,6 +37,16 @@ from ml.dataset import (
     validate_splits,
 )
 from ml.features import FEATURE_DIM, FEATURE_NAMES, extract_features, named_features
+from ml.labeling import (
+    CANDIDATE_LABELS,
+    LabelingError,
+    QualityReport,
+    check_collection,
+    create_session,
+    discard_session,
+    inspect_recording,
+    prepare_session,
+)
 from ml.pipeline import FeaturePipeline, PushResult, WindowProduct
 from ml.records import (
     LabeledExample,
@@ -66,6 +77,7 @@ __all__ = (
     "SCHEMA_VERSION",
     "AssembledWindow",
     "AuthorizationRecord",
+    "CANDIDATE_LABELS",
     "DatasetError",
     "DatasetSource",
     "ExtractionConfig",
@@ -75,11 +87,13 @@ __all__ = (
     "GestureAnnotation",
     "IngestResult",
     "LabeledExample",
+    "LabelingError",
     "NormalizationSpec",
     "ParticipantRole",
     "PersonalizedModelRef",
     "PreparedExample",
     "PushResult",
+    "QualityReport",
     "RecordingAssignment",
     "RecordingIdentity",
     "SessionSplit",
@@ -89,6 +103,9 @@ __all__ = (
     "ValidatedSplitPlan",
     "WindowProduct",
     "apply_normalization",
+    "check_collection",
+    "create_session",
+    "discard_session",
     "assert_examples_may_fit",
     "fitting_scope",
     "classification_for_window",
@@ -96,6 +113,7 @@ __all__ = (
     "group_by_participant",
     "group_by_session",
     "ingest_recording",
+    "inspect_recording",
     "is_actionable_feature",
     "named_features",
     "normalization_candidates",
@@ -103,6 +121,7 @@ __all__ = (
     "parse_gesture_annotation",
     "parse_recording_identity",
     "partition_splits",
+    "prepare_session",
     "unknown_classification",
     "validate_feature",
     "validate_gesture",
