@@ -1,0 +1,19 @@
+.session-metrics__ended { margin: 0; font-weight: 600; }
+
+.session-metrics__list { margin: 0; display: grid; gap: var(--space-2); }
+.session-metrics__row { display: grid; grid-template-columns: minmax(9rem, 1fr) minmax(10rem, 2fr); gap: var(--space-1) var(--space-3); align-items: baseline; }
+.session-metrics__row dt { color: var(--color-text-muted); }
+.session-metrics__row dd { margin: 0; }
+/* Tabular figures, so values keep their width from one attempt to the next. */
+.session-metrics__value { font: 600 1.15rem var(--font-mono); font-variant-numeric: tabular-nums; }
+.session-metrics__unit { color: var(--color-text-muted); }
+.session-metrics__note { display: block; font-size: 0.85rem; color: var(--color-text-muted); }
+
+.session-metrics__table-wrap { overflow-x: auto; }
+.session-metrics__earlier table { border-collapse: collapse; width: 100%; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.session-metrics__earlier th,
+.session-metrics__earlier td { text-align: left; padding: var(--space-1) var(--space-2); border-bottom: var(--border-width) solid var(--color-border); }
+
+@media (max-width: 30rem) {
+  .session-metrics__row { grid-template-columns: 1fr; }
+}
