@@ -55,10 +55,10 @@ describe('primitives', () => {
 })
 
 describe('against the corridor world', () => {
-  it('spawn clearance is to the back wall: 0.60 − 0.4225 m', () => {
+  it('spawn clearance is to the back wall: 0.80 − 0.4225 m', () => {
     const r = checkPose(W.spawn, W)
     expect(r.nearestId).toBe('back_wall')
-    expect(r.clearance).toBeCloseTo(0.6 - 0.4225, 12)
+    expect(r.clearance).toBeCloseTo(0.8 - 0.4225, 12)
     expect(r.penetration).toBe(0)
   })
 
@@ -84,7 +84,7 @@ describe('against the corridor world', () => {
   })
 
   it('a swept step cannot tunnel: a 1 m jump straight through the end wall is caught', () => {
-    const from = { x: 11.4 - 0.4225 - 0.05, y: 0, heading: 0 }
+    const from = { x: W.bounds.x1 - 0.4225 - 0.05, y: 0, heading: 0 }
     const s = sweep(from, { x: from.x + 1, y: 0, heading: 0 }, W)
     expect(s.hit).toBe(true)
     expect(s.segmentId).toBe('end_wall')

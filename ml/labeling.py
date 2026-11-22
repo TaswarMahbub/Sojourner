@@ -35,6 +35,7 @@ from ml.dataset import (
     ExtractionConfig,
     GestureAnnotation,
     ParticipantRole,
+    PreparedExample,
     RecordingAssignment,
     RecordingIdentity,
     SessionSplit,
@@ -1581,17 +1582,19 @@ def prepare_session(directory: Path) -> QualityReport:
     """
     destination, session, annotations = _load(directory)
     with _snapshot(Path(session["recording_path"])) as snap:
-        report = _prepare_snapshot(session, annotations, snap)
+        report, _examples = _prepare_snapshot(session, annotations, snap)
     _atomic_write(destination / "quality-report.json", report.to_json(), allow_replace=True)
     return report
 
 
-def _prepare_snapshot(session, annotations, snap: _Snapshot) -> QualityReport:
-    """Build the report from one private copy of the recording.
+def _prepare_snapshot(session, annotations, snap: _Snapshot):
+    """Build the report, and the examples it counts, from one private copy of the recording.
 
     The fingerprint, the counts, and ``ingest_recording`` all read ``snap.path``.
     After ingestion the copy is hashed again, and so is the original path. If
     either differs, the examples are withheld and the report is blocked.
+    Returns ``(report, examples)``. ``examples`` is empty unless the report
+    emitted them.
     """
     overview, timestamps, states = _summarize(snap)
     digest, size = snap.sha256, snap.byte_length
@@ -1670,6 +1673,7 @@ def _prepare_snapshot(session, annotations, snap: _Snapshot) -> QualityReport:
     examples_emitted = 0
     blocked_count = 0
     windows: tuple[tuple[int, int, str, int], ...] = ()
+    emitted: tuple[PreparedExample, ...] = ()
     ingest_non_actionable = 0
     ingest_review = 0
     if not blocks:
@@ -1694,6 +1698,7 @@ def _prepare_snapshot(session, annotations, snap: _Snapshot) -> QualityReport:
             else:
                 split_accepted = True
                 examples_emitted = len(ingested.examples)
+                emitted = ingested.examples
                 windows = tuple(
                     (
                         item.example.window_start_timestamp_ms,
@@ -1712,6 +1717,7 @@ def _prepare_snapshot(session, annotations, snap: _Snapshot) -> QualityReport:
                 blocks.update(integrity)
                 examples_emitted = 0
                 windows = ()
+                emitted = ()
     else:
         try:
             _source, _identity, _extraction, role, bound, assignment = _idents(session)
@@ -1767,7 +1773,53 @@ def _prepare_snapshot(session, annotations, snap: _Snapshot) -> QualityReport:
     )
     if report.authorization_is_proof is not False:
         raise LabelingError("authorization_is_not_proof")
-    return report
+    return report, emitted
+
+
+@dataclass(frozen=True)
+class SessionExamples:
+    """One session's prepared examples, held in memory, and what a split plan needs."""
+
+    report: QualityReport
+    examples: tuple[PreparedExample, ...]
+    role: ParticipantRole
+    session: SessionSplit
+    assignment: RecordingAssignment
+    dataset_id: str
+    recording_sha256: str
+    recording_byte_length: int
+    extraction: ExtractionConfig
+
+
+def load_session_examples(directory: Path) -> SessionExamples:
+    """Run the same checks as ``prepare_session`` and return the examples in memory.
+
+    The session is loaded and validated, the recording is read once through a
+    private snapshot, and its SHA-256, length, and timeline must still match
+    ``init``. Nothing is written: not the quality report, not the examples.
+    A blocked report raises ``LabelingError`` with its first block code, and
+    a rejected split plan raises ``SplitPlanError``. A caller that fits on the
+    rows must still pass them through ``assert_examples_may_fit``.
+    """
+    _destination, session, annotations = _load(directory)
+    with _snapshot(Path(session["recording_path"])) as snap:
+        report, examples = _prepare_snapshot(session, annotations, snap)
+    if report.block_reasons:
+        raise LabelingError(report.block_reasons[0])
+    if report.split_errors or not report.split_accepted:
+        raise SplitPlanError(report.split_errors or ("split_not_accepted",))
+    _source, _identity, extraction, role, bound, assignment = _idents(session)
+    return SessionExamples(
+        report,
+        examples,
+        role,
+        bound,
+        assignment,
+        session["dataset_id"],
+        session["sha256"],
+        session["byte_length"],
+        extraction,
+    )
 
 
 def _gesture_annotations(session, confirmed: Sequence[MarkedInterval], clip: str | None):

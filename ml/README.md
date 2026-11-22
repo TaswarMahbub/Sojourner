@@ -2,7 +2,7 @@
 
 Owner: Hardware/ML.
 
-This directory is the phase-1 feature pipeline for the gesture classifier. It consumes Schema 4 camera feature messages from `docs/contracts.md` and can publish a Schema 4 `unknown` classification. It does not publish motor commands, and it does not train a model.
+This directory is the phase-1 feature pipeline for the gesture classifier. It consumes Schema 4 camera feature messages from `docs/contracts.md` and can publish a Schema 4 `unknown` classification. It does not publish motor commands. The pipeline itself does not train a model; `ml.train` is a separate offline baseline trainer that is not connected to it (see `ml/TRAINING.md`).
 
 No weights, checkpoints, datasets, recordings, or participant identifiers belong here. Those stay outside the repository, as `.gitignore` and `CONTRIBUTING.md` already require.
 

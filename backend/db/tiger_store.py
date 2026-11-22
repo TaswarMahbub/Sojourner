@@ -357,10 +357,11 @@ def create_profile(conn, display_name, consent_state="pending", demo_visible=Fal
 
 
 def add_calibration(conn, profile_id, tier, thresholds=None, metric_summary=None):
-    return conn.execute(
+    row = conn.execute(
         "INSERT INTO calibrations (profile_id, tier, thresholds, metric_summary) "
         "VALUES (%s, %s, %s, %s) RETURNING calibration_id",
-        (profile_id, tier, _json(thresholds or {}), _json(metric_summary or {}))).fetchone()[0]
+        (profile_id, tier, _json(thresholds or {}), _json(metric_summary or {}))).fetchone()
+    return row["calibration_id"] if isinstance(row, dict) else row[0]
 
 
 def start_session(conn, profile_id, calibration_id, tier, started_at, data_origin):
