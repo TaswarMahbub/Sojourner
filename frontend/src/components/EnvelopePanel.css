@@ -43,7 +43,6 @@
 .envelope__unbound ul { margin: var(--space-2) 0 0; padding-left: var(--space-4); display: grid; gap: var(--space-1); font-size: 0.85rem; }
 
 /* Spans the whole dashboard row. */
-.panel--wide { grid-column: 1 / -1; }
 
 /* On a phone the chart is about 300 px wide, so its 7-unit labels would render near 6 px.
    Bigger labels here; the table carries the same values at full size. */

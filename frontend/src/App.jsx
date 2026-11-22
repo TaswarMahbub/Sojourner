@@ -5,7 +5,6 @@ import { createMockGestureSource } from './sources/mockGestureSource.js'
 import TrackingStatusPanel from './components/TrackingStatusPanel.jsx'
 import HeadPosePanel from './components/HeadPosePanel.jsx'
 import GesturePanel from './components/GesturePanel.jsx'
-import SimulatorSection from './components/SimulatorSection.jsx'
 import EnvelopePanel from './components/EnvelopePanel.jsx'
 import { useCalibrationSession } from './hooks/useCalibrationSession.js'
 import { selectCalibrationSource } from './sources/selectCalibrationSource.js'
@@ -42,7 +41,6 @@ export default function App() {
         <HeadPosePanel {...camera} />
         <GesturePanel {...gesture} />
       </div>
-      <SimulatorSection />
     </main>
   )
 }
