@@ -1,4 +1,4 @@
-// The real-time frame loop (proposed invariant I8: a render error must never stop the simulation).
+// The real-time frame loop (invariant I8: a render error must never stop the simulation).
 //
 // Per animation frame, in this order:
 //   1. re-register the next frame          — nothing below can stop the loop
@@ -8,13 +8,14 @@
 // A render or readout exception is caught, counted and reported (the first one in full, then every
 // `reportEvery`th), and the next frame runs as normal. The simulation never depends on the view.
 //
-// Elapsed time per frame is capped at `maxFrameMs` so a hidden tab or a long stall cannot reach the
-// receiver as one multi-second gap (which would fire its watchdog). NOTE: when frames are slower
-// than the cap, simulated time runs slower than wall time — see handoff_sim §9 clock audit (I-12).
+// Elapsed time per frame is capped at `maxFrameMs` so a hidden tab or a long stall cannot dump its
+// whole length into one frame as simulated steps. The cap is 250 ms (I-12): an 80 ms frame — the
+// slow end of measured hardware — is never clipped, so simulated time tracks wall time down to
+// 4 fps; only a genuine stall is truncated. Below 4 fps simulated time runs slower than wall time.
 //
 // No three, no React, no DOM: tested with a fake rAF and a throwing render.
 
-export const MAX_FRAME_MS = 50
+export const MAX_FRAME_MS = 250
 
 const defaultReport = (where) => (err, count) => {
   if (count === 1) console.error(`3D ${where} failed; the simulation keeps running.`, err)
