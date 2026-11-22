@@ -1,0 +1,105 @@
+# Build the cloud API image, push it to GHCR, and deploy it to the Vultr server.
+# Runs on pushes to main that touch the API, or by hand (Actions > deploy-cloud > Run workflow).
+# Setup (once, by a repo admin): backend/cloud/vultr/README.md. Until the VULTR_HOST variable
+# is set, this builds and pushes the image but skips the deploy. The deploy job runs in the
+# `production` environment and waits for a required reviewer to approve it.
+name: deploy-cloud
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - backend/cloud/**
+      - backend/db/tiger_store.py
+      - requirements.txt
+      - .github/workflows/deploy-cloud.yml
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-cloud
+  cancel-in-progress: false   # never interrupt a deploy halfway
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    uses: ./.github/workflows/tests.yml
+
+  build:
+    needs: tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.repo.outputs.name }}@${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: repo
+        name: Image name (GHCR needs lowercase)
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/sojourner-api" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/cloud/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.repo.outputs.name }}:${{ github.sha }}
+            ${{ steps.repo.outputs.name }}:latest
+          # Links the package to this repo, so this repo's GITHUB_TOKEN can pull it.
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    # VULTR_HOST must stay a repository variable: a job-level `if` is evaluated before the job
+    # enters its environment, so an environment variable here would always read as empty.
+    if: vars.VULTR_HOST != ''
+    # VULTR_SSH_KEY is a secret of this environment, not a repository secret. Its rules
+    # (deployment branch main only, required reviewer) gate access to it. The server's host key
+    # is public, so it is committed in backend/cloud/vultr/known_hosts and changed by PR.
+    environment: production
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read   # the server pulls the image with this job's token
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy over SSH
+        env:
+          HOST: ${{ vars.VULTR_HOST }}
+          IMAGE: ${{ needs.build.outputs.image }}
+          SSH_KEY: ${{ secrets.VULTR_SSH_KEY }}
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          umask 077
+          dir="$RUNNER_TEMP/deploy"
+          trap 'rm -rf "$dir"' EXIT
+          mkdir -p "$dir/bundle"
+          printf '%s\n' "$SSH_KEY" > "$dir/key"
+          cp backend/cloud/vultr/known_hosts "$dir/known_hosts"
+          cp backend/cloud/vultr/docker-compose.yml backend/cloud/vultr/Caddyfile "$dir/bundle/"
+          printf '%s' "$REGISTRY_USER" > "$dir/bundle/registry-user"
+          printf '%s' "$REGISTRY_TOKEN" > "$dir/bundle/registry-token"
+          # The server's forced command runs the deploy script with $IMAGE as its only argument.
+          tar -cf - -C "$dir/bundle" docker-compose.yml Caddyfile registry-user registry-token |
+            ssh -i "$dir/key" -o IdentitiesOnly=yes -o BatchMode=yes \
+                -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$dir/known_hosts" \
+                "deploy@$HOST" "$IMAGE"
+      - name: Check the public endpoint
+        if: vars.VULTR_API_DOMAIN != ''
+        env:
+          API_DOMAIN: ${{ vars.VULTR_API_DOMAIN }}
+        run: curl -fsS --retry 5 --retry-delay 5 --retry-all-errors "https://$API_DOMAIN/healthz"

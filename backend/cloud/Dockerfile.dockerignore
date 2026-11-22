@@ -1,0 +1,6 @@
+# The build context is the repository root; send only what the image needs.
+*
+!requirements.txt
+!backend/cloud/app/
+!backend/db/tiger_store.py
+**/__pycache__
