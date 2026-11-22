@@ -89,7 +89,17 @@ No live calibration stream exists yet, so the panel reads saved profiles from `s
 python3 frontend/scripts/practice_profiles.py
 ```
 
-The live calibration stream is not built yet. Its progress events are checked by `src/contracts/calibrationProgress.js`, also provisional and not in docs/contracts.md (defined in `docs/sim-decisions.md` §2). `ProgressTracker` checks §2.4: every channel gets one final value (`basis: "final_rest"`) before the profile arrives, and those final values match the stored profile. Questions still open with Mridhul are listed in `OPEN_QUESTIONS` in that file.
+The envelope can also follow a calibration while it runs. Pick the source in the page address:
+
+```text
+http://localhost:5173/                                         saved practice profiles (default)
+http://localhost:5173/?calibration=mock                        SYNTHETIC stream: one 60 s session, on a loop
+http://localhost:5173/?calibration=mock&calibration_speed=4    the same, four times faster
+http://localhost:5173/?calibration=live                        the calibration stream on ws://127.0.0.1:8766
+http://localhost:5173/?calibration=live&calibration_port=9000  the stream on another local port
+```
+
+While calibrating, each movement's spoke grows as its reps come in, drawn dotted because its jitter is still an estimate (rest is measured last). When rest lands the values turn final, then the profile arrives and the envelope rescales to the bound movements, with their thresholds. The stream's events are checked by `src/contracts/calibrationProgress.js`, also provisional and not in docs/contracts.md (defined in `docs/sim-decisions.md` §2). `ProgressTracker` checks §2.4: every channel gets one final value (`basis: "final_rest"`) before the profile, and those values match the stored profile. Any message that fails a check is listed on the panel, never drawn. The real stream does not exist yet; questions still open with Mridhul are in `OPEN_QUESTIONS` in that file.
 
 ## Architecture
 

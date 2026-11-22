@@ -7,21 +7,21 @@ import HeadPosePanel from './components/HeadPosePanel.jsx'
 import GesturePanel from './components/GesturePanel.jsx'
 import SimulatorSection from './components/SimulatorSection.jsx'
 import EnvelopePanel from './components/EnvelopePanel.jsx'
-import { useCalibrationProfile } from './hooks/useCalibrationProfile.js'
-import { createRecordedProfileSource } from './sources/recordedProfileSource.js'
+import { useCalibrationSession } from './hooks/useCalibrationSession.js'
+import { selectCalibrationSource } from './sources/selectCalibrationSource.js'
 
 // Created once at module level so React re-renders never create a second source.
 // Add ?source=live to the page address to read the perception publisher instead of the mock.
 const cameraSource = selectCameraSource()
 // No gesture classifier publishes yet (contract section 2), so gestures always come from the mock.
 const gestureSource = createMockGestureSource()
-// No live calibration stream exists yet, so the envelope reads saved profiles.
-const profileSource = createRecordedProfileSource()
+// Saved practice profiles by default; ?calibration=mock or ?calibration=live for a stream.
+const profileSource = selectCalibrationSource()
 
 export default function App() {
   const camera = useCameraStream(cameraSource)
   const gesture = useGestureStream(gestureSource)
-  const envelope = useCalibrationProfile(profileSource)
+  const envelope = useCalibrationSession(profileSource)
 
   return (
     <main className="app">
