@@ -124,6 +124,14 @@ This is not a memory limit. A very long line is still read into memory whole bef
 
 Public research collections are notes in `ml/sources.md`. Their files are not Schema 4, and this tree has no adapter for them.
 
+## Local labeling
+
+`python -m ml.label` reviews intervals on a Schema 4 JSONL file that `python -m perception.publish --record PATH` already wrote. It does not open a camera. `perception.calibrate` writes event-wrapped JSONL, and this tool rejects that file.
+
+Annotations live in a session directory. Confirmed intervals use the half-open range `[start_ms, end_ms)` on accepted frame timestamps. A prompted mark stays a candidate until the operator confirms it, and confirmation is an operator claim, not proof of the movement. Uncertain intervals and clip-level labels do not become training examples. `neutral` is used only when the operator marks it. `unknown` is rejected. Gaps are not labeled `neutral`, and no timestamp is invented from a frame rate.
+
+`prepare` copies the recording once into a private temporary snapshot, checks its SHA-256 against the session, and calls `ingest_recording` and `validate_split_plan` on that copy. It writes `quality-report.json` with counts only. Feature vectors are not stored. A split change requires `--reviewed` and still has to pass the ML-2A plan. `check` refuses one source recording used by several sessions. Session and annotation files are validated in full on every load. The operator procedure, the file-safety rules, and their limits are in `ml/LABELING.md`.
+
 ## Tests
 
 From the repository root:
@@ -133,4 +141,4 @@ python3 -m pip install -r tests/requirements.txt
 python3 -m pytest tests
 ```
 
-`tests/test_ml_pipeline.py` and `tests/test_ml_dataset.py` build their own messages. A passing run does not mean a model was trained or that a person was recorded.
+`tests/test_ml_pipeline.py`, `tests/test_ml_dataset.py`, and `tests/test_ml_labeling.py` build their own messages. A passing run does not mean a model was trained or that a person was recorded.
