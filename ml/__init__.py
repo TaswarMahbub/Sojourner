@@ -4,6 +4,8 @@ Phase 1 turns Schema 4 camera feature messages into fixed vectors and into
 ``unknown`` classifications. The dataset helpers read local JSONL and check
 split plans. The labeling commands review intervals on a recording that
 already exists. None of this trains a model or publishes motor commands.
+The offline baseline trainer is the separate ``ml.train`` module, which this
+package does not import, so ``import ml`` does not load scikit-learn.
 """
 
 from ml.classify import classification_for_window, unknown_classification
