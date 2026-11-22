@@ -85,10 +85,12 @@ export function createFollowRig(camera, world, walls = null) {
       for (const o of hidden) o.visible = true
       hidden = []
       if (isFree(ground)) return
-      for (const id of wallsBetween(world, pose, ground)) {
-        const o = walls.getObjectByName(id)
-        if (o) { o.visible = false; hidden.push(o) }
-      }
+      const ids = new Set(wallsBetween(world, pose, ground))
+      if (!ids.size) return
+      // The wall's own meshes (an aperture wall is several) and every trim hosted on it.
+      walls.traverse((o) => {
+        if (o.isMesh && (ids.has(o.userData.segmentId) || ids.has(o.userData.host))) { o.visible = false; hidden.push(o) }
+      })
     },
   }
 }

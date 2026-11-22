@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { AgXToneMapping, Box3, Mesh, MeshStandardMaterial, Object3D, SRGBColorSpace, Vector3 } from 'three'
+import { AgXToneMapping, Box3, Mesh, MeshStandardMaterial, Object3D, PerspectiveCamera, SRGBColorSpace, Vector3 } from 'three'
 import { CORRIDOR_WORLD as W } from '../sim/worldModel.js'
 import { AVATAR_HEIGHT_M, AVATAR_LENGTH_M, AVATAR_WIDTH_M, HANDRAIL_DIAMETER_M, HANDRAIL_HEIGHT_M } from '../sim/constants.js'
 import { applyPose, rosToThree } from './frame.js'
 import { buildCorridor, makeFreeSpace } from './corridor.js'
 import { createAvatarProxy } from './chairView.js'
-import { ARM_MIN_M, followCamera, wallsBetween } from './cameraRig.js'
+import { ARM_MIN_M, createFollowRig, followCamera, wallsBetween } from './cameraRig.js'
 import { SWING_RADIUS_M } from '../sim/constants.js'
 import { RENDERER_SETTINGS, buildScene, cappedPixelRatio } from './sceneRoot.js'
 
@@ -72,7 +72,8 @@ const inside = (p, r) => {
 describe('grey-box geometry is built from worldModel', () => {
   const group = buildCorridor(W, new MeshStandardMaterial())
   group.updateMatrixWorld(true)
-  const boxes = group.children.filter((m) => m instanceof Mesh && m.geometry.type === 'BoxGeometry')
+  const boxes = []
+  group.traverse((m) => { if (m instanceof Mesh && m.userData.solid) boxes.push(m) })
   const rects = boxes.map((m) => ({ id: m.name, rect: groundRect(m) }))
   const isFree = makeFreeSpace(W)
 
@@ -199,6 +200,19 @@ describe('renderer settings and camera', () => {
     expect(wallsBetween(W, pose, cam.ground)).toEqual(['back_wall'])
     // …and the hidden id really is a mesh in the built scene.
     expect(buildCorridor(W, new MeshStandardMaterial()).getObjectByName('back_wall')).toBeTruthy()
+  })
+
+  it('I-1: hiding a wall also hides the trim hosted on it, and restores both when clear', () => {
+    const corridor = buildCorridor(W, new MeshStandardMaterial())
+    const cam = new PerspectiveCamera()
+    const rig = createFollowRig(cam, W, corridor)
+    const hostedOnBack = []
+    corridor.traverse((o) => { if (o.isMesh && (o.userData.segmentId === 'back_wall' || o.userData.host === 'back_wall')) hostedOnBack.push(o) })
+    expect(hostedOnBack.length).toBeGreaterThanOrEqual(3) // wall, skirting, dado
+    rig.update({ x: W.bounds.x0 + 0.4225 + 0.005, y: 0, heading: 0 })
+    expect(hostedOnBack.every((o) => !o.visible)).toBe(true)
+    rig.update({ x: 5, y: 0, heading: 0 })
+    expect(hostedOnBack.every((o) => o.visible)).toBe(true)
   })
 
   it('mid-corridor the arm crosses no wall', () => {

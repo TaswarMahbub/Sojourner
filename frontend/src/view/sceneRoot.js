@@ -20,7 +20,7 @@ import {
   Scene,
   WebGLRenderer,
 } from 'three'
-import { buildCorridor } from './corridor.js'
+import { buildCorridor, disposeCorridor } from './corridor.js'
 import { createAvatarProxy } from './chairView.js'
 import { FOV_DEG, NEAR_M, createFollowRig } from './cameraRig.js'
 import { rosToThree } from './frame.js'
@@ -93,7 +93,7 @@ export function createSceneRoot({ canvas, world }) {
       camera.updateProjectionMatrix()
     },
     dispose() {
-      corridor.traverse((o) => o.geometry?.dispose())
+      disposeCorridor(corridor)
       avatar.dispose()
       for (const m of materials) m.dispose()
       renderer.dispose()

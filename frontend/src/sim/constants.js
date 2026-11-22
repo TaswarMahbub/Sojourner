@@ -119,6 +119,36 @@ export const ROOM_CEILING_HEIGHT_M = 2.7
 export const SPAWN_SETBACK_M = 0.8
 
 // ---------------------------------------------------------------------------------------------
+// Visual-only architecture (Phase 3 shell). NONE of these are in the collision world: worldModel
+// does not read them and no metric can depend on them. They live here so the renderer and its
+// geometry tests share one source of truth with the dimension table.
+// ---------------------------------------------------------------------------------------------
+
+/** End-of-corridor window, centred on the corridor axis in the end wall. Handoff Phase 3 table. */
+export const END_WINDOW_M = Object.freeze({ width: 1.6, height: 1.4, sill: 0.9 })
+/** Room window, centred in the room's far wall. Sill not given in the handoff; 0.90 m to match. */
+export const ROOM_WINDOW_M = Object.freeze({ width: 1.2, height: 1.4, sill: 0.9 })
+/** Suspended ceiling: 600 mm grid, 24 mm exposed tee. */
+export const CEILING_TILE_M = 0.6
+export const CEILING_TEE_M = Object.freeze({ width: 0.024, drop: 0.008 })
+/** Recessed ceiling troughs: 1.20 × 0.30 m, every 3.0 m along the corridor centreline. */
+export const TROUGH_M = Object.freeze({ length: 1.2, width: 0.3, depth: 0.1, spacing: 3.0, count: 4 })
+/** Room task light housing over the (Phase 4) couch position. Position is provisional. */
+export const ROOM_TASK_LIGHT = Object.freeze({ x: 6.6, y: -4.1, length: 1.2, width: 0.3 })
+/** Skirting: 0.10 m. Proud of the wall only where a handrail keeps the avatar off that wall. */
+export const SKIRTING_M = Object.freeze({ height: 0.1, proud: 0.015 })
+/** Dado / crash-rail band: 0.20 m tall, bottom edge at 0.80 m, so it is centred on the 0.90 m rail. */
+export const DADO_M = Object.freeze({ bottom: 0.8, height: 0.2, proud: 0.02 })
+/** Trim on a wall whose face IS a collision surface: a flush band, under the 1 mm tolerance. */
+export const FLUSH_TRIM_PROUD_M = 0.0008
+/** Door architrave on the corridor face (behind the rail line). */
+export const ARCHITRAVE_M = Object.freeze({ width: 0.07, proud: 0.02 })
+/** Door leaf: 0.90 m wide, 44 mm thick, opened ~180° flat against the room side of the door wall. */
+export const DOOR_LEAF_THICKNESS_M = 0.044
+export const DOOR_LEAF_HEIGHT_M = 2.08
+export const DOOR_STOP_GAP_M = 0.01
+
+// ---------------------------------------------------------------------------------------------
 // Chassis — Hiwonder 4WD Chassis Car Kit, SKU 21030025 (handoff Part B, answers §5)
 // ---------------------------------------------------------------------------------------------
 // Vendor-confirmed envelope: 180 × 140 × 89 mm. Everything below is PROVISIONAL until measured off
