@@ -65,6 +65,18 @@ The browser's HMAC is asynchronous, and the receiver procedure is a strict seque
 
 This is a model of the contract. It drives no motors, and a passing test is not a hardware verification.
 
+## Control envelope
+
+The Control envelope panel draws a calibration profile: one spoke per bound movement. A spoke's length is that movement's reach divided by its own resting jitter (`usable_range / effective_std`, the signal-to-noise ratio from `perception/calibration.py`). That ratio has no unit, so scores, degrees and centimetres share one scale. Each spoke is also labelled with its real range in its own unit. The dashed outline is the activation threshold on the same scale. The scale rescales to fit the strongest bound movement, and switching profiles animates that rescale, instantly when reduced motion is on.
+
+The profile is **not part of docs/contracts.md**. `src/contracts/calibrationProfile.js` validates it as "provisional, profile schema 1", from `build_profile()`.
+
+No live calibration stream exists yet, so the panel reads saved profiles from `src/fixtures/calibration-profiles/`. Those are SYNTHETIC: synthetic recordings scored by the real `score_session()` and `build_profile()`, labelled `"measured": false`. To regenerate them, run this from the repository root (needs pytest):
+
+```text
+python3 frontend/scripts/practice_profiles.py
+```
+
 ## Architecture
 
 ```text
