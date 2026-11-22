@@ -13,6 +13,9 @@
 .envelope__shape { fill: var(--color-meter-fill); fill-opacity: 0.25; stroke: var(--color-meter-fill); stroke-width: 1.4; stroke-linejoin: round; }
 .envelope__threshold { fill: none; stroke: var(--color-text); stroke-width: 0.8; stroke-dasharray: 2 1.5; }
 .envelope__tip { fill: var(--color-meter-fill); }
+/* Provisional: measured against an estimated jitter. Dotted and lighter, so it never reads as final. */
+.envelope__shape--provisional { fill-opacity: 0.12; stroke-dasharray: 1.5 2.5; }
+.envelope__tip--provisional { fill: none; stroke: var(--color-meter-fill); stroke-width: 1; }
 .envelope__centre { fill: var(--color-text-muted); }
 .envelope__label { fill: var(--color-text); font: 600 7px var(--font-mono); }
 .envelope__label-value { fill: var(--color-text-muted); font-weight: 400; }
@@ -20,6 +23,7 @@
 .envelope__legend { margin: 0; display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); font-size: 0.85rem; color: var(--color-text-muted); }
 .swatch { display: inline-block; width: 1.4em; height: 0.8em; vertical-align: middle; border-radius: 2px; }
 .swatch--shape { background: var(--color-meter-fill); opacity: 0.5; }
+.swatch--provisional { border-top: 2px dotted var(--color-meter-fill); height: 0; }
 .swatch--threshold { border-top: 2px dashed var(--color-text); height: 0; }
 
 .envelope__picker { margin: 0; border: var(--border-width) solid var(--color-border); border-radius: var(--radius); padding: var(--space-1) var(--space-3) var(--space-2); display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); }
@@ -28,6 +32,7 @@
 
 .envelope__facts { display: grid; gap: var(--space-3); align-content: start; }
 .envelope__tier { margin: 0; display: grid; gap: var(--space-1); }
+.envelope__table-wrap { overflow-x: auto; }
 .envelope__table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
 .envelope__table caption { text-align: left; font-weight: 700; padding-bottom: var(--space-1); }
 .envelope__table th, .envelope__table td { text-align: left; padding: var(--space-1) var(--space-2); border-bottom: var(--border-width) solid var(--color-border); }
@@ -38,4 +43,10 @@
 .envelope__unbound ul { margin: var(--space-2) 0 0; padding-left: var(--space-4); display: grid; gap: var(--space-1); font-size: 0.85rem; }
 
 /* Spans the whole dashboard row. */
-.panel--wide { grid-column: 1 / -1; }
+
+/* On a phone the chart is about 300 px wide, so its 7-unit labels would render near 6 px.
+   Bigger labels here; the table carries the same values at full size. */
+@media (max-width: 30rem) {
+  .envelope__label { font-size: 10px; }
+  .envelope__ring-label { font-size: 8px; }
+}

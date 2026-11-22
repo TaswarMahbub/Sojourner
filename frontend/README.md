@@ -2,12 +2,12 @@
 
 Owner: Davina.
 
-This directory will hold the React application: the operator dashboard, the 2D rover simulator, and the visualizations of features, gestures, and commands.
+This directory will hold the React application: the operator dashboard, the rover simulator, and the visualizations of features, gestures, and commands.
 
 Planned responsibilities:
 
 - Show tracking state, named features, head pose, gesture label, confidence, and model version.
-- Drive the 2D simulator from the motor-command contract, including sequence, task state, and the stop flag.
+- Drive the simulator from the motor-command contract, including sequence, task state, and the stop flag.
 - Display a rejected or expired command as not applied. The simulator uses the same acceptance rules as the firmware.
 - Keep on-screen wording free of clinical, diagnostic, and therapeutic claims.
 
@@ -49,17 +49,9 @@ No gesture classifier publishes yet, so the Gesture panel always uses a mock sou
 
 Schema 4 allows only `neutral` and `unknown` until a reviewed label list exists for a `model_version`. A reviewed list goes in `REVIEWED_LABELS` in `src/contracts/gesture.js`, with its review, when a model ships. The validator in that file follows `validate_gesture` in `tests/contract_schema.py`.
 
-## 2D simulator
+## Simulator
 
-The simulator section shows a rover from above, its motor status, and every datagram with its outcome. Everything in it is labelled "DRILL": the rover, the receiver and the sender are simulated, and nothing talks to the physical rover. The drill status cannot arm the physical rover.
-
-To drive it, follow the "Next" hint: finish startup, release the e-stop, close the cutoff, connect the drill sender, arm, then hold a drive button (or focus the arena and use the arrow keys or W A S D).
-
-- The rover moves only while the simulated receiver has torque, at the velocities it accepted. A datagram that was ignored or rejected never moves it.
-- The drill sender (`src/sim/drillSender.js`) stands in for shared control. Every command copies the boot, freshness id and rearm generation from a status whose MAC verifies and that echoes the sender's outstanding challenge, received within 250 ms. One status authorizes at most one command. It sends `rearm` only after you press Arm. With no input it sends ordinary `idle` stops to keep the session alive. Its high-water marks are in memory only.
-- The rover controls (e-stop, cutoff, motor power, freeze, reboot) model local inputs on the rover, not network traffic.
-- The injection buttons send hostile datagrams (a replay, an old challenge, the wrong generation, a forged MAC, another boot, a truncated datagram) so you can see the receiver refuse them.
-- `src/sim/simulation.test.js` runs these flows without a browser.
+The 2D drill simulator was removed (22 Nov 2026, agreed with Mridhul). The 3D corridor simulator, on `mridhul/sim-3d`, replaces it and uses the same simulation, receiver and drill sender in `src/sim/`. `src/sim/simulation.test.js` and `src/sim/simulation.corridor.test.js` still run the drill flows without a browser, including every hostile injection.
 
 ## Simulator receiver
 
@@ -88,6 +80,18 @@ No live calibration stream exists yet, so the panel reads saved profiles from `s
 ```text
 python3 frontend/scripts/practice_profiles.py
 ```
+
+The envelope can also follow a calibration while it runs. Pick the source in the page address:
+
+```text
+http://localhost:5173/                                         saved practice profiles (default)
+http://localhost:5173/?calibration=mock                        SYNTHETIC stream: one 60 s session, on a loop
+http://localhost:5173/?calibration=mock&calibration_speed=4    the same, four times faster
+http://localhost:5173/?calibration=live                        the calibration stream on ws://127.0.0.1:8766
+http://localhost:5173/?calibration=live&calibration_port=9000  the stream on another local port
+```
+
+While calibrating, each movement's spoke grows as its reps come in, drawn dotted because its jitter is still an estimate (rest is measured last). When rest lands the values turn final, then the profile arrives and the envelope rescales to the bound movements, with their thresholds. The stream's events are checked by `src/contracts/calibrationProgress.js`, also provisional and not in docs/contracts.md (defined in `docs/sim-decisions.md` §2). `ProgressTracker` checks §2.4: every channel gets one final value (`basis: "final_rest"`) before the profile, and those values match the stored profile. Any message that fails a check is listed on the panel, never drawn. The real stream does not exist yet; questions still open with Mridhul are in `OPEN_QUESTIONS` in that file.
 
 ## Architecture
 
