@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  REASONS, angleFor, ease, formatInUnit, niceMax, ringsFor, scaleFor, shapePoints, spokesFrom, unboundFrom,
+  REASONS, angleFor, ease, formatInUnit, niceMax, ringsFor, scaleFor, shapePoints, spokesFrom, spokesFromProgress, unboundFrom,
 } from './envelope.js'
 import broad from '../fixtures/calibration-profiles/broad.json'
 import twoNarrow from '../fixtures/calibration-profiles/two-narrow.json'
@@ -101,5 +101,12 @@ describe('units and animation helpers', () => {
     expect(ease(-1)).toBe(0)
     expect(ease(0.5)).toBe(0.5)
     expect(ease(2)).toBe(1)
+  })
+})
+
+describe('spokesFromProgress', () => {
+  it('draws the stream values as they are, with no threshold, and keeps the basis', () => {
+    const [s] = spokesFromProgress([{ channel: 'yaw_deg', unit: 'deg', peak_deviation: -12, snr: 40, provisional: true, basis: 'interrep_quiet' }])
+    expect(s).toMatchObject({ channel: 'yaw_deg', unit: 'deg', range: 12, snr: 40, thresholdSnr: null, provisional: true, basis: 'interrep_quiet' })
   })
 })

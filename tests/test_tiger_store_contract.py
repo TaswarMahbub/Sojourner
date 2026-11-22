@@ -387,3 +387,37 @@ def test_delete_profile_reads_range_deletes_refreshes_then_counts(monkeypatch, c
     ]
     out = capsys.readouterr().out
     assert f"leftover signal_summary_1min rows for this profile: {leftover}" in out
+
+
+# Interim event format (events file). A bad line must be a ValueError, never a database error.
+
+def _events_file(tmp_path, *lines):
+    path = tmp_path / "events.jsonl"
+    path.write_text("\n".join(lines) + "\n")
+    return path
+
+
+def test_event_rows_convert_and_number_events_in_order(tmp_path):
+    path = _events_file(tmp_path, '{"t": 1795276800.5, "cue": "go", "confidence": 1}', "",
+                        '{"t": "2026-11-22T10:00:00", "cue": "stop", "stop_reason": "estop"}')
+    rows = list(tiger_store.event_rows(path, SESSION, PROFILE))
+    assert [r[3] for r in rows] == [1, 2]
+    assert rows[0][5] == 1.0 and isinstance(rows[0][5], float)
+    assert rows[1][0] == datetime(2026, 11, 22, 10, 0, tzinfo=timezone.utc)
+    assert rows[1][6] == "estop"
+
+
+@pytest.mark.parametrize("line", [
+    '{"t": 1795276800.5, "cue": null}',
+    '{"t": 1795276800.5, "cue": ""}',
+    '{"t": 1e300, "cue": "go"}',
+    '{"t": NaN, "cue": "go"}',
+    '{"t": false, "cue": "go"}',
+    '{"t": "2026-13-40", "cue": "go"}',
+    '{"t": 1795276800.5, "cue": "go", "confidence": true}',
+    '[1, 2]',
+])
+def test_malformed_event_raises_value_error_with_line_number(tmp_path, line):
+    path = _events_file(tmp_path, '{"t": 1795276800.5, "cue": "go"}', "", line)
+    with pytest.raises(ValueError, match="line 3"):
+        list(tiger_store.event_rows(path, SESSION, PROFILE))

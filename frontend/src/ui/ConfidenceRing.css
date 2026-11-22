@@ -1,0 +1,12 @@
+/* The ring sits outside the badge, so the badge's own text and colours are unchanged. */
+.confidence-ring {
+  display: inline-block;
+  border-radius: var(--radius);
+  box-shadow: 0 0 0 var(--ring-width, 1px) var(--ring-colour);
+  margin: var(--space-2);
+  transition: box-shadow 150ms linear;
+}
+.confidence-ring--good { --ring-colour: var(--color-good); }
+.confidence-ring--warn { --ring-colour: var(--color-warn); }
+.confidence-ring--bad { --ring-colour: var(--color-bad); }
+.confidence-ring--neutral { --ring-colour: var(--color-neutral); }

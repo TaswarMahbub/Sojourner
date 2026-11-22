@@ -206,7 +206,9 @@ def create_app(settings: Settings | None = None, pools=None) -> FastAPI:
 
     if settings.allowed_origins:   # browsers only need the public dashboard reads
         app.add_middleware(CORSMiddleware, allow_origins=list(settings.allowed_origins),
-                           allow_methods=["GET"], allow_headers=["Authorization"])
+                           allow_methods=["GET"], allow_headers=["Authorization"],
+                           # Let browser code read the CSV's stale flag and filename.
+                           expose_headers=["X-Data-Stale", "Content-Disposition"])
 
     @app.exception_handler(PoolTimeout)
     @app.exception_handler(psycopg.OperationalError)

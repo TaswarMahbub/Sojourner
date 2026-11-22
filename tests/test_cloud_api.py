@@ -4,10 +4,13 @@ Run from the repository root:  pip install -r requirements.txt && pytest tests
 """
 from __future__ import annotations
 
+import csv
+import io
 import json
 import sys
 import uuid
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 import psycopg
@@ -68,6 +71,8 @@ class FakeDB:
         self.clients, self.profiles, self.sessions = {}, {}, {}
         self.copied, self.dashboard_calls, self.dashboard_fail = [], 0, False
         self.leftover = {"signal_summary_1min": 0, "control_summary_1min": 0}
+        self.session_rows = [{"session_alias": "abc"}]
+        self.trend_rows = []
 
     def add_token(self, token, scopes):
         self.clients[hash_token(token, PEPPER)] = scopes
@@ -120,8 +125,13 @@ def db(monkeypatch):
         fake.dashboard_calls += 1
         if fake.dashboard_fail:
             raise psycopg.OperationalError("down")
-        return [{"session_alias": "abc"}]
+        return fake.session_rows
     s(store, "dashboard_sessions", dashboard_sessions)
+
+    def dashboard_trends(c, channel):
+        fake.dashboard_calls += 1
+        return [r for r in fake.trend_rows if channel is None or r["channel_name"] == channel]
+    s(store, "dashboard_trends", dashboard_trends)
     return fake
 
 
@@ -140,12 +150,12 @@ def auth(token="good"):
     return {"Authorization": f"Bearer {token}"}
 
 
-def upload(client, pid, frames, csid=None, token="good", **meta):
+def upload(client, pid, frames, csid=None, token="good", events=EVENTS, **meta):
     metadata = {"profile_id": str(pid), "client_session_id": str(csid or uuid.uuid4()),
                 "tier": 1, "data_origin": "synthetic_seed", **meta}
     return client.post("/v1/sessions", headers=auth(token),
                        data={"metadata": json.dumps(metadata)},
-                       files={"frames": ("f.jsonl", frames), "events": ("e.jsonl", EVENTS)})
+                       files={"frames": ("f.jsonl", frames), "events": ("e.jsonl", events)})
 
 
 # Auth -------------------------------------------------------------------------
@@ -202,6 +212,25 @@ def test_upload_writes_samples_and_events(client, db):
     assert r.headers["Location"] == f"/v1/sessions/{body['session_id']}"
 
 
+@pytest.mark.parametrize("event", [
+    {"t": 1795276800.5, "cue": None},          # NOT NULL in control_events: was a 500
+    {"t": 1795276800.5},                       # no cue
+    {"cue": "go"},                             # no t
+    {"t": 1e300, "cue": "go"},                 # beyond the representable date range
+    {"t": "yesterday", "cue": "go"},
+    {"t": True, "cue": "go"},
+    {"t": 1795276800.5, "cue": "go", "confidence": "high"},
+    {"t": 1795276800.5, "cue": "go", "stop_reason": 3},
+    ["not", "an", "object"],
+])
+def test_malformed_event_is_a_422_naming_the_line(client, db, event):
+    good = {"t": 1795276800.5, "cue": "go"}
+    r = upload(client, db.profile(), jsonl(tracking_frame(1795276800000)),
+               events=jsonl(good, event))
+    assert r.status_code == 422, r.text
+    assert "line 2" in r.json()["detail"]
+
+
 def test_upload_is_refused_without_granted_consent(client, db):
     assert upload(client, db.profile("pending"), jsonl(tracking_frame(1))).status_code == 403
     assert upload(client, uuid.uuid4(), jsonl(tracking_frame(1))).status_code == 404
@@ -256,6 +285,85 @@ def test_dashboard_without_cache_and_database_down_is_503(client, db):
 
 def test_channel_parameter_is_validated(client):
     assert client.get("/v1/dashboard/trends", params={"channel": "x; DROP"}).status_code == 422
+
+
+# Dashboard CSV export --------------------------------------------------------------
+# The store is faked here, so these tests can't catch a leak introduced in the SQL views. The
+# real check is the live call: report.csv on the server must show only P- aliases.
+
+def _view_rows(db):
+    """Rows shaped like demo_session_summary and demo_channel_trend (columns from schema.sql)."""
+    started = datetime(2026, 11, 21, 16, 0, tzinfo=timezone.utc)
+    db.session_rows = [
+        {"profile_alias": "P-1a2b3c", "session_alias": "0f1e2d3c", "data_origin": "measured",
+         "tier": 1, "started_at": started, "duration_s": 90.0,
+         "simulator_metrics": {"cleared": True, "hesitation_s": [0.4, 1.2]}},
+        {"profile_alias": "P-1a2b3c", "session_alias": "9a8b7c6d", "data_origin": "measured",
+         "tier": 1, "started_at": started, "duration_s": 85.5, "simulator_metrics": {}},
+    ]
+    db.trend_rows = [
+        {"profile_alias": "P-1a2b3c", "session_alias": "0f1e2d3c", "data_origin": "measured",
+         "started_at": started, "channel_name": name, "observed_range": 0.58,
+         "tracking_ok_frac": 1.0}
+        for name in ("jawOpen", "browInnerUp", "head_pose.yaw_deg")]
+
+
+def _csv(response):
+    return list(csv.DictReader(io.StringIO(response.text)))
+
+
+def test_report_csv_matches_the_json_endpoint_and_leaks_no_ids(client, db):
+    _view_rows(db)
+    pid = db.profile()          # a real profile exists; its UUID must not reach the CSV
+    r = client.get("/v1/dashboard/report.csv", params={"view": "sessions"})
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv")
+    assert r.headers["x-data-stale"] == "false"
+    assert 'filename="sojourner-sessions.csv"' in r.headers["content-disposition"]
+    header = r.text.splitlines()[0]
+    assert header and header.split(",")[:2] == ["profile_alias", "session_alias"]
+    rows = _csv(r)
+    assert len(rows) == len(client.get("/v1/dashboard/sessions").json()["data"]) == 2
+    assert "profile_id" not in r.text and str(pid) not in r.text
+    assert json.loads(rows[0]["simulator_metrics"]) == {"cleared": True, "hesitation_s": [0.4, 1.2]}
+    assert rows[0]["started_at"] == "2026-11-21T16:00:00+00:00"
+    assert db.dashboard_calls == 1                   # CSV and JSON shared one cached load
+
+
+def test_report_csv_channels_view_and_filter(client, db):
+    _view_rows(db)
+    everything = _csv(client.get("/v1/dashboard/report.csv", params={"view": "channels"}))
+    one = client.get("/v1/dashboard/report.csv", params={"view": "channels", "channel": "jawOpen"})
+    assert len(everything) == len(client.get("/v1/dashboard/trends").json()["data"]) == 3
+    assert [r["channel_name"] for r in _csv(one)] == ["jawOpen"]
+    assert 'filename="sojourner-channels.csv"' in one.headers["content-disposition"]
+
+
+def test_report_csv_empty_result_is_an_empty_csv(client, db):
+    db.session_rows = []
+    r = client.get("/v1/dashboard/report.csv")      # view defaults to sessions
+    assert r.status_code == 200 and r.text == ""
+    assert r.headers["content-type"].startswith("text/csv")
+
+
+@pytest.mark.parametrize("params", [{"view": "profiles"}, {"view": "channels", "channel": "x; DROP"},
+                                    {"view": "sessions", "channel": "jawOpen"}])
+def test_report_csv_rejects_bad_parameters(client, db, params):
+    assert client.get("/v1/dashboard/report.csv", params=params).status_code == 422
+
+
+def test_report_csv_marks_stale_data(client, db):
+    _view_rows(db)
+    client.get("/v1/dashboard/report.csv")
+    client.app.state.dashboard_cache.ttl = 0
+    db.dashboard_fail = True
+    r = client.get("/v1/dashboard/report.csv")
+    assert r.status_code == 200 and r.headers["x-data-stale"] == "true" and len(_csv(r)) == 2
+
+
+def test_report_csv_is_rate_limited(client, db):
+    client.app.state.dashboard_limiter = RateLimiter(per_minute=60, burst=1)
+    codes = [client.get("/v1/dashboard/report.csv").status_code for _ in range(2)]
+    assert codes == [200, 429]
 
 
 # Rate limiting ------------------------------------------------------------------------

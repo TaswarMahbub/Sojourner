@@ -1,9 +1,12 @@
 """HTTP routes and request bodies. SQL lives in store.py; auth, cache and limits in main.py."""
 from __future__ import annotations
 
+import csv
+import io
 import json
 import shutil
 import tempfile
+from datetime import date, datetime
 from pathlib import Path
 from typing import Literal
 from uuid import UUID
@@ -182,15 +185,62 @@ def _query(pool, fn, *args):
         return fn(conn, *args)
 
 
+# One loader per view, shared by the JSON and CSV routes: same query, same cache key, so a CSV
+# and its JSON twin always come from the same cached rows.
+
+def _load_sessions(pool, cache: TTLCache) -> dict:
+    return cache.get(("sessions",), lambda: _query(pool, store.dashboard_sessions))
+
+
+def _load_trends(pool, cache: TTLCache, channel: str | None) -> dict:
+    return cache.get(("trends", channel), lambda: _query(pool, store.dashboard_trends, channel))
+
+
 @dashboard.get("/sessions")
 def dashboard_sessions(pool=Depends(dashboard_pool), cache: TTLCache = Depends(dashboard_cache)):
-    return cache.get(("sessions",), lambda: _query(pool, store.dashboard_sessions))
+    return _load_sessions(pool, cache)
 
 
 @dashboard.get("/trends")
 def dashboard_trends(pool=Depends(dashboard_pool), cache: TTLCache = Depends(dashboard_cache),
                      channel: str | None = Query(default=None, pattern=CHANNEL_PATTERN)):
-    return cache.get(("trends", channel), lambda: _query(pool, store.dashboard_trends, channel))
+    return _load_trends(pool, cache, channel)
+
+
+def _csv_cell(value):
+    """JSON for objects and arrays (simulator_metrics), ISO 8601 for times, str for the rest."""
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, separators=(",", ":"), default=str)
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return value
+
+
+@dashboard.get("/report.csv")
+def dashboard_report_csv(
+        pool=Depends(dashboard_pool), cache: TTLCache = Depends(dashboard_cache),
+        view: Literal["sessions", "channels"] = "sessions",
+        channel: str | None = Query(default=None, pattern=CHANNEL_PATTERN,
+                                    description="view=channels only")):
+    """The dashboard views as CSV. Only the demo views' columns: aliases and aggregates for
+    consented, demo_visible profiles. The views enforce that, so this adds no filtering."""
+    if view == "sessions":
+        if channel is not None:
+            raise HTTPException(422, "channel applies to view=channels only")
+        result = _load_sessions(pool, cache)
+    else:
+        result = _load_trends(pool, cache, channel)
+
+    headers = {"X-Data-Stale": "true" if result["stale"] else "false",
+               "Content-Disposition": f'attachment; filename="sojourner-{view}.csv"'}
+    rows = result["data"]
+    if not rows:
+        return Response("", media_type="text/csv", headers=headers)
+    out = io.StringIO()
+    writer = csv.DictWriter(out, fieldnames=list(rows[0].keys()))
+    writer.writeheader()
+    writer.writerows({k: _csv_cell(v) for k, v in row.items()} for row in rows)
+    return Response(out.getvalue(), media_type="text/csv", headers=headers)
 
 
 ROUTERS = (profiles, sessions, dashboard)
