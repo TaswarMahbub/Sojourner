@@ -79,6 +79,23 @@ python3 -m demo.run_live_sim --replay captures/calibration/<...>_probe.jsonl --p
 Do **not** run `python -m perception.publish` at the same time: the demo process owns the camera
 and relays its frames on 8765 itself (`--no-frame-relay` turns that off).
 
+## Face-mesh preview (picture-in-picture)
+
+In live camera mode the demo also serves a small preview of **its own** camera image with the
+**same** Face Landmarker's landmarks on `ws://127.0.0.1:8768` (`SOJOURNER_PREVIEW_PORT`). Both
+`live.html` and the dashboard show it in a floating panel (`frontend/src/preview/FacePreviewPip.jsx`).
+
+- No second camera, no second detector, no `getUserMedia()`. The camera thread only hands over
+  references; a separate thread downsizes and JPEG-encodes at most 10 fps, only while a browser is
+  connected, and drops any frame a newer one replaces. Nothing is recorded or written to disk.
+- The Schema 4 messages, cues, thresholds and the motor path are unchanged. A preview error switches
+  the preview off; the camera and control loop keep running. `--no-face-preview` turns it off.
+- The panel says **LIVE CAMERA** only for the real camera. `--synthetic` and `--replay` serve no
+  preview, so the panel says DISCONNECTED. The mesh is hidden when tracking is lost, and the image
+  and mesh are cleared when the stream is more than 1 s old. "Mirror" flips the picture only.
+- Test without a camera: `python3 -m demo.preview_fixture --pattern tracking|lost|cycle` serves a
+  constructed stream labelled **TEST FIXTURE**.
+
 ## Tests
 
 ```zsh
