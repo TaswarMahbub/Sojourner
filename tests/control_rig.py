@@ -77,7 +77,9 @@ def lost_frame(timestamp_ms: int) -> dict:
     }
 
 
-def gesture(end_ms: int, label: str = "neutral", start_ms: int | None = None) -> dict:
+def gesture(end_ms: int, label: str = "neutral", start_ms: int | None = None, frame_count: int = 1) -> dict:
+    """A gesture message. Section 2: a one-frame window has start == end and
+    window_frame_count 1, so a wider window must say how many frames it used."""
     start = end_ms if start_ms is None else start_ms
     return {
         "schema_version": SCHEMA,
@@ -85,7 +87,7 @@ def gesture(end_ms: int, label: str = "neutral", start_ms: int | None = None) ->
         "source_timestamp_ms": end_ms,
         "window_start_timestamp_ms": start,
         "window_end_timestamp_ms": end_ms,
-        "window_frame_count": 1,
+        "window_frame_count": frame_count,
         "label": label,
         "confidence": 0.5,
         "model_version": "none",

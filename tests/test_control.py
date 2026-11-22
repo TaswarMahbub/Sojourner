@@ -558,11 +558,20 @@ def test_missing_perception_publishes_a_stop(tmp_path):
 
 
 def test_gesture_window_with_a_non_actionable_frame_publishes_a_stop(tmp_path):
+    from tests.contract_schema import validate_gesture
+
     rig = _armed_rig(tmp_path)
     now = rig.clock.unix
+    rig.publisher.observe_frame(tracking_frame(now - 60))
     rig.publisher.observe_frame(lost_frame(now - 40))
     rig.publisher.observe_frame(tracking_frame(now))
-    rig.publisher.observe_gesture(gesture(now, start_ms=now - 60))
+    # Three input frames, oldest at the window start. The message is
+    # schema-valid, so only the window check can produce this stop. (A
+    # classifier that follows section 2 would have labelled this window
+    # "unknown"; the publisher must not rely on that.)
+    window = gesture(now, start_ms=now - 60, frame_count=3)
+    assert validate_gesture(window) == []
+    rig.publisher.observe_gesture(window)
     message, _ = rig.tick(motion=MOVE)
     assert message["stop"] is True and "non-actionable" in rig.publisher.last_decision
 
