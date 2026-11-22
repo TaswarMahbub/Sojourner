@@ -98,16 +98,14 @@ If your Tiger Cloud plan supports IP allow-lists, allow the instance's IP (and y
 
 ### 7. Add the GitHub settings
 
-Repo → Settings → Secrets and variables → Actions.
+The SSH key and known-hosts entry are **environment secrets**, not repository secrets. A repository secret can be read by a workflow on any branch, so anyone with write access could push a branch whose workflow prints it. An environment secret is only released to a job that names the environment and passes its rules.
 
-**Variables** tab:
+**Create the environment.** Repo → Settings → Environments → New environment, named `production`:
 
-| Name | Value |
-| --- | --- |
-| `VULTR_HOST` | The instance IP. The deploy job is skipped while this is unset |
-| `VULTR_API_DOMAIN` | The domain from step 4. Optional: enables a public `/healthz` check after each deploy |
+- **Deployment branches and tags:** "Selected branches and tags", add `main` only. A workflow run from any other branch can't enter the environment, so it never sees the secrets.
+- **Required reviewers:** add at least one teammate. Every deploy then waits in the Actions tab until a reviewer approves it. Tick "Prevent self-review" if you want a second person on every deploy. With a four-person team, expect to ping someone.
 
-**Secrets** tab:
+**Environment secrets** (on the `production` environment page → Add environment secret):
 
 | Name | Value |
 | --- | --- |
@@ -115,6 +113,17 @@ Repo → Settings → Secrets and variables → Actions.
 | `VULTR_KNOWN_HOSTS` | The output of `ssh-keyscan -t ed25519 <instance IP>`, run from your laptop |
 
 Check `VULTR_KNOWN_HOSTS` before saving: `ssh-keyscan -t ed25519 <IP> | ssh-keygen -lf -` must print the same fingerprint you noted in step 5. This is what stops CI from deploying to an impostor.
+
+**Repository variables** (Repo → Settings → Secrets and variables → Actions → Variables tab). These are not secret and must stay at repository level: the workflow's job-level check for `VULTR_HOST` runs before the job enters the environment, so it can't see environment variables.
+
+| Name | Value |
+| --- | --- |
+| `VULTR_HOST` | The instance IP. The deploy job is skipped while this is unset |
+| `VULTR_API_DOMAIN` | The domain from step 4. Optional: enables a public `/healthz` check after each deploy |
+
+If `VULTR_SSH_KEY` or `VULTR_KNOWN_HOSTS` were already added as repository secrets, delete them from the Secrets tab after adding them to the environment.
+
+**Protect `main`** (repo owner only): Settings → Branches → add a rule for `main` requiring a pull request with one approval. The environment trusts whatever is on `main`, including `deploy-cloud.yml` itself, so this is what stops one person from changing the workflow and deploying it alone. Keep write access to people you trust.
 
 Then delete `sojourner-ci` and `sojourner-ci.pub` from your machine.
 
@@ -138,7 +147,7 @@ DATABASE_URL_ADMIN="$TIMESCALE_SERVICE_URL" TOKEN_PEPPER=<the server's value> \
 
 ## Day to day
 
-- **Deploying:** merge to `main`. If the change touches `backend/cloud/`, `backend/db/tiger_store.py` or `requirements.txt`, GitHub Actions tests, builds and deploys it. Anything else on `main` doesn't trigger a deploy. To deploy by hand: Actions → deploy-cloud → Run workflow.
+- **Deploying:** merge to `main`. If the change touches `backend/cloud/`, `backend/db/tiger_store.py` or `requirements.txt`, GitHub Actions tests and builds it, then the deploy job waits for a `production` reviewer to approve it (Actions → the run → Review deployments). Anything else on `main` doesn't trigger a deploy. To deploy by hand: Actions → deploy-cloud → Run workflow, on `main`.
 - **A deploy that fails its health check** is rolled back to the previous release automatically, and the workflow run goes red with the API's last log lines.
 - **Rolling back by hand:** revert the bad commit on `main`, which deploys the reverted code. Or open an earlier green deploy-cloud run and choose "Re-run all jobs", which rebuilds and deploys that run's commit.
 - **Logs and status**, as root on the server:
@@ -157,7 +166,8 @@ DATABASE_URL_ADMIN="$TIMESCALE_SERVICE_URL" TOKEN_PEPPER=<the server's value> \
 - **The CI key can only deploy.** Its `authorized_keys` entry forces `sojourner-deploy`, which accepts one argument: an image from `ghcr.io/taswarmahbub/sojourner-api` pinned by digest. It can't open a shell, forward ports or run other commands. `sudo` is allowed for that one script only.
 - **Registry access is short-lived.** The server pulls with the workflow's `GITHUB_TOKEN`, which expires when the job ends. The credentials are stored in a temporary directory for the pull and deleted afterwards. The image can stay private.
 - **Secrets stay on the server.** They aren't in the repo, GitHub, the image, or the cloud-init user data.
-- **Deploys only come from `main`.** Pull requests, including from forks, never run the deploy job.
+- **Deploys only come from `main`, with a reviewer's approval.** The CI key lives in the `production` environment, which only releases it to runs from `main` after a required reviewer approves. Workflows on other branches and pull requests, including from forks, can't read it.
+- **The database admin URL is not in GitHub at all.** Only the server's env file holds app credentials, and the admin URL stays on admins' laptops.
 
 ## Updating the server setup
 
