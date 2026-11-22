@@ -16,14 +16,15 @@
 // Cost: createConeScheduler recomputes at most every 100 ms of simulation time, or at once when the
 // command changes (see CONE_REFRESH_MS).
 //
-// PENDING: stepPose is not on mridhul/sim-3d yet. Until it is, predictPath takes it as a
-// parameter; once pushed, it is imported here and the parameter goes.
+// Kinematics: stepPose from src/sim/stepPose.js (Mridhul, 4a62db1), the function integrateInWorld
+// itself calls, so the cone and the simulation cannot diverge.
 //
 // Excluded from bloom and DOF: the ribbon is tagged as an instrument (userData.instrument) for the
 // post chain to skip. Frame mapping only through frame.js (REP-103 → three.js at render time).
 
 import { BufferAttribute, BufferGeometry, DoubleSide, Group, Mesh, MeshBasicMaterial } from 'three'
 import { sweep as collisionSweep } from '../sim/collision.js'
+import { stepPose as simStepPose } from '../sim/stepPose.js'
 import { SIM_STEP_S } from '../sim/constants.js'
 import { STATUS_PERIOD_MS } from '../sim/simulation.js'
 import { rosToThree } from './frame.js'
@@ -64,19 +65,18 @@ export function coneVisible(view) {
  * @param {{linear:number, angular:number}} command  the command the receiver is applying
  * @param {object} world  a worldModel world
  * @param {object} options
- * @param {(pose, v, w, dt) => object} options.stepPose  the simulation's own step (src/sim)
+ * @param {object} [options]  sweep, steps, sweepEvery and ribbonEvery may be overridden for tests
  * @returns {{ poses: object[], stopped: boolean, stopPose: object|null, segmentId: string|null, steps: number, sweeps: number }}
  *   poses: one per RIBBON_EVERY_STEPS steps, starting at the start pose, ending at the last clear pose.
  */
-export function predictPath(pose, command, world, { stepPose, sweep = collisionSweep, steps = CONE_STEPS, sweepEvery = SWEEP_EVERY_STEPS, ribbonEvery = RIBBON_EVERY_STEPS } = {}) {
-  if (typeof stepPose !== 'function') throw new Error('predictPath needs the simulation\'s stepPose')
+export function predictPath(pose, command, world, { sweep = collisionSweep, steps = CONE_STEPS, sweepEvery = SWEEP_EVERY_STEPS, ribbonEvery = RIBBON_EVERY_STEPS } = {}) {
   const start = { x: pose.x, y: pose.y, heading: pose.heading }
   const poses = [start]
   let checked = start // the last pose the sweep cleared
   let current = start
   let sweeps = 0
   for (let i = 1; i <= steps; i += 1) {
-    current = stepPose(current, command.linear, command.angular, SIM_STEP_S)
+    current = simStepPose(current, command.linear, command.angular, SIM_STEP_S)
     if (i % sweepEvery === 0 || i === steps) {
       sweeps += 1
       const s = sweep(checked, current, world)

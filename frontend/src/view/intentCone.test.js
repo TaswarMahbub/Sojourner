@@ -1,26 +1,39 @@
 import { describe, expect, it } from 'vitest'
 import { CORRIDOR_WORLD as W } from '../sim/worldModel.js'
 import { checkPose } from '../sim/collision.js'
+import { Simulation } from '../sim/simulation.js'
 import { AVATAR_WIDTH_M } from '../sim/constants.js'
 import { CONE_REFRESH_MS, CONE_STEPS, SWEEP_EVERY_STEPS, coneVisible, createConeScheduler, createIntentCone, predictPath, ribbonEdges } from './intentCone.js'
 
-// TEST DOUBLE ONLY, until Mridhul's stepPose (src/sim) is pushed: the handoff T1.3 equations.
-// The cone itself never contains kinematics; it takes the simulation's stepPose. When stepPose
-// lands, these tests import it instead, and a test checks the cone against the simulation.
-const stepPoseDouble = (p, v, w, dt) => {
-  const heading = p.heading + w * dt
-  return { x: p.x + v * Math.cos(heading) * dt, y: p.y + v * Math.sin(heading) * dt, heading }
-}
-const opts = { stepPose: stepPoseDouble }
-
 describe('predictPath', () => {
-  it('needs the simulation\'s stepPose: it has no kinematics of its own', () => {
-    expect(() => predictPath(W.spawn, { linear: 0.3, angular: 0 }, W)).toThrow(/stepPose/)
+  it('predicts exactly the path the simulation then drives (same stepPose, same dt)', () => {
+    let unix = 1795276800000
+    const sim = new Simulation({ bootNonce: 42, unixNow: () => unix, world: W })
+    const tick = (ms) => { unix += ms; sim.tick(ms) }
+    sim.finishStartup()
+    sim.setEstopPressed(false)
+    sim.closeCutoff()
+    sim.connect()
+    tick(300)
+    sim.requestArm()
+    tick(300)
+    sim.setDrive({ linear: 0.2, angular: 0.3 })
+    tick(1000) // the receiver is now applying the command steadily
+    const command = { linear: sim.receiver.linearMps, angular: sim.receiver.angularRadS }
+    expect(command).toEqual({ linear: 0.2, angular: 0.3 })
+    const path = predictPath(sim.pose, command, W, { ribbonEvery: 1, sweepEvery: 1 })
+    expect(path.stopped).toBe(false)
+    const driven = [sim.pose]
+    for (let i = 0; i < CONE_STEPS; i += 1) {
+      sim.step()
+      driven.push(sim.pose)
+    }
+    expect(path.poses).toEqual(driven)
   })
 
   it('integrates 2.0 s at 1/120 s from a copy of the pose, never writing to it', () => {
     const start = Object.freeze({ ...W.spawn })
-    const path = predictPath(start, { linear: 0.3, angular: 0 }, W, opts)
+    const path = predictPath(start, { linear: 0.3, angular: 0 }, W)
     expect(path.stopped).toBe(false)
     expect(path.steps).toBe(CONE_STEPS)
     expect(path.poses[0]).toEqual(start)
@@ -29,13 +42,13 @@ describe('predictPath', () => {
   })
 
   it('sweeps every SWEEP_EVERY_STEPS steps, not every step', () => {
-    const path = predictPath(W.spawn, { linear: 0.3, angular: 0 }, W, opts)
+    const path = predictPath(W.spawn, { linear: 0.3, angular: 0 }, W)
     expect(path.sweeps).toBe(CONE_STEPS / SWEEP_EVERY_STEPS)
   })
 
   it('stops at a wall, before it, and names the wall', () => {
     const nearEnd = { x: 10.6, y: 0, heading: 0 }
-    const path = predictPath(nearEnd, { linear: 0.3, angular: 0 }, W, opts)
+    const path = predictPath(nearEnd, { linear: 0.3, angular: 0 }, W)
     expect(path.stopped).toBe(true)
     expect(path.segmentId).toBe('end_wall')
     expect(path.poses.at(-1)).toEqual(path.stopPose)
@@ -44,7 +57,7 @@ describe('predictPath', () => {
   })
 
   it('a pure turn on the spot stays in place and turns left for positive angular', () => {
-    const path = predictPath(W.spawn, { linear: 0, angular: 0.5 }, W, opts)
+    const path = predictPath(W.spawn, { linear: 0, angular: 0.5 }, W)
     const end = path.poses.at(-1)
     expect(end.x).toBeCloseTo(W.spawn.x, 12)
     expect(end.heading - W.spawn.heading).toBeCloseTo(1.0, 9)
@@ -75,14 +88,14 @@ describe('ribbon', () => {
     const [ribbon, stopBar] = cone.object.children
     expect(cone.object.userData.instrument).toBe(true)
 
-    const clear = predictPath(W.spawn, { linear: 0.3, angular: 0 }, W, opts)
+    const clear = predictPath(W.spawn, { linear: 0.3, angular: 0 }, W)
     cone.update(clear)
     expect(ribbon.geometry.drawRange.count).toBe((clear.poses.length - 1) * 6)
     expect(stopBar.visible).toBe(false)
     const pos = ribbon.geometry.attributes.position.array
     expect(pos[2]).toBeCloseTo(-(W.spawn.y + AVATAR_WIDTH_M / 2), 6) // three.z = −ros.y, left edge
 
-    cone.update(predictPath({ x: 10.6, y: 0, heading: 0 }, { linear: 0.3, angular: 0 }, W, opts))
+    cone.update(predictPath({ x: 10.6, y: 0, heading: 0 }, { linear: 0.3, angular: 0 }, W))
     expect(stopBar.visible).toBe(true)
     cone.setVisible(true)
     expect(cone.object.visible).toBe(true)
