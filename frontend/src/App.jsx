@@ -1,6 +1,7 @@
 import { createMockCameraSource } from './sources/mockCameraSource.js'
 import { useCameraStream } from './hooks/useCameraStream.js'
 import TrackingStatusPanel from './components/TrackingStatusPanel.jsx'
+import HeadPosePanel from './components/HeadPosePanel.jsx'
 
 // Created once at module level so React re-renders never create a second source.
 // To use real data, replace this line with a source that has the same { kind, subscribe }.
@@ -19,6 +20,7 @@ export default function App() {
       </header>
       <div className="app__grid">
         <TrackingStatusPanel {...camera} />
+        <HeadPosePanel {...camera} />
       </div>
     </main>
   )

@@ -1,0 +1,57 @@
+.face {
+  width: min(100%, 10rem);
+  justify-self: center;
+  overflow: visible;
+}
+.face__outline { fill: var(--color-surface-raised); stroke: var(--color-border); stroke-width: 2; }
+.face__eyeline { stroke: var(--color-border); stroke-width: 1.5; }
+.face__eye { fill: var(--color-text-muted); }
+.face__nose { fill: var(--color-accent); }
+
+.angles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.angle {
+  display: grid;
+  grid-template-columns: 3.5rem minmax(4rem, 1fr) 4.5rem;
+  grid-template-areas:
+    'label track value'
+    '. direction direction';
+  align-items: center;
+  column-gap: var(--space-2);
+}
+.angle__label { grid-area: label; font-weight: 700; }
+.angle__value { grid-area: value; font-family: var(--font-mono); text-align: right; }
+.angle__direction { grid-area: direction; font-size: 0.85rem; color: var(--color-text-muted); }
+
+.angle__track {
+  grid-area: track;
+  position: relative;
+  height: 0.75rem;
+  border-radius: var(--radius);
+  background: var(--color-meter-track);
+}
+.angle__zero {
+  position: absolute;
+  left: 50%;
+  top: -0.2rem;
+  bottom: -0.2rem;
+  width: 2px;
+  background: var(--color-text-muted);
+}
+.angle__marker {
+  position: absolute;
+  top: 50%;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 50%;
+  background: var(--color-meter-fill);
+  transform: translate(-50%, -50%);
+}
+
+.unavailable { margin: 0; color: var(--color-text-muted); }
