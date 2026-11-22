@@ -1,5 +1,6 @@
-import { useId, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { ARENA_HALF_M } from '../sim/simulation.js'
+import { DriveTaps } from './driveTaps.js'
 import './SimulatorPanel.css'
 
 // Drive inputs. Each value is canonical (already equal to its six-digit form) and inside the
@@ -36,7 +37,7 @@ function nextStep(view) {
   if (!view.senderEnabled) return 'Connect the drill sender.'
   if (!view.sessionTrusted) return 'Waiting for a status that echoes the session challenge.'
   if (!s.armed) return 'Arm. The drill sends a rearm only after you ask.'
-  return 'Hold a drive button, or focus the arena and use the arrow keys.'
+  return 'Hold a drive button to drive, or tap it to nudge for half a second. Or focus the arena and use the arrow keys.'
 }
 
 const degrees = (rad) => Math.round((rad * 180) / Math.PI)
@@ -86,7 +87,12 @@ export default function SimulatorPanel({ view, sim }) {
     press(name, down)
   }
 
+  // Hold to drive, tap to nudge (driveTaps.js). Created once, used from event handlers only.
+  const [taps] = useState(() => new DriveTaps())
+  useEffect(() => () => taps.stopAll(), [taps])
+
   const clearAll = () => {
+    taps.stopAll()
     setPressed(new Set())
     sim.setDrive(null)
   }
@@ -94,13 +100,14 @@ export default function SimulatorPanel({ view, sim }) {
   const holdButton = (name) => ({
     onPointerDown: (e) => {
       e.currentTarget.setPointerCapture?.(e.pointerId)
-      press(name, true)
+      taps.down(name, press)
     },
-    onPointerUp: () => press(name, false),
-    onPointerCancel: () => press(name, false),
-    onKeyDown: (e) => (e.key === ' ' || e.key === 'Enter') && !e.repeat && press(name, true),
-    onKeyUp: (e) => (e.key === ' ' || e.key === 'Enter') && press(name, false),
-    onBlur: () => press(name, false),
+    onPointerUp: () => taps.up(name, press),
+    onPointerCancel: () => taps.up(name, press),
+    onKeyDown: (e) => (e.key === ' ' || e.key === 'Enter') && !e.repeat && taps.down(name, press),
+    onKeyUp: (e) => (e.key === ' ' || e.key === 'Enter') && taps.up(name, press),
+    onClick: () => taps.click(name, press),
+    onBlur: () => taps.blur(name, press),
     'aria-pressed': pressed.has(name),
   })
 
@@ -117,7 +124,7 @@ export default function SimulatorPanel({ view, sim }) {
       </p>
 
       <div className="sim">
-        <div className="sim__arena" tabIndex={0} onKeyDown={onKey(true)} onKeyUp={onKey(false)} onBlur={clearAll} aria-label="Arena. Use the arrow keys or W A S D to drive while focused.">
+        <div className="sim__arena" role="group" tabIndex={0} onKeyDown={onKey(true)} onKeyUp={onKey(false)} onBlur={clearAll} aria-label="Arena. Use the arrow keys or W A S D to drive while focused.">
           <Arena view={view} />
           <p className="sim__readout">
             <span>{view.torque ? '● Moving' : '○ Stopped'}</span>
