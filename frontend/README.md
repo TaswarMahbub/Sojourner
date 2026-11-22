@@ -89,6 +89,8 @@ No live calibration stream exists yet, so the panel reads saved profiles from `s
 python3 frontend/scripts/practice_profiles.py
 ```
 
+The live calibration stream is not built yet. Its progress events are checked by `src/contracts/calibrationProgress.js`, also provisional and not in docs/contracts.md (defined in `docs/sim-decisions.md` §2). `ProgressTracker` checks §2.4: every channel gets one final value (`basis: "final_rest"`) before the profile arrives, and those final values match the stored profile. Questions still open with Mridhul are listed in `OPEN_QUESTIONS` in that file.
+
 ## Architecture
 
 ```text
