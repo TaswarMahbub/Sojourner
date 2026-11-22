@@ -47,14 +47,17 @@ class CameraError(RuntimeError):
 
 @dataclass(frozen=True)
 class CameraFrame:
-    """One published message plus the checks that kept it from tracking.
+    """One published message plus diagnostics about the captured image.
 
-    reasons is empty for a tracking frame. It is diagnostic only and is not
-    part of the published message.
+    reasons lists the checks that kept the frame from tracking, and is empty
+    for a tracking frame. brightness is grayscale_brightness of the captured
+    image, 0 to 255. Both are diagnostic only and are not part of the
+    published message.
     """
 
     message: dict
     reasons: list[str]
+    brightness: float | None = None
 
 
 class StrictlyIncreasingMs:
@@ -102,6 +105,19 @@ def import_mediapipe():
             "`python -m pip install -r perception/requirements.txt`."
         ) from error
     return mediapipe
+
+
+def grayscale_brightness(cv2, bgr) -> float:
+    """Mean grayscale value of a BGR image, 0 (black) to 255 (white).
+
+    This is the repository's single definition of frame brightness. The
+    image is converted with cv2.COLOR_BGR2GRAY, which weights channels
+    0.299 R + 0.587 G + 0.114 B (ITU-R BT.601 luma), and every pixel is
+    averaged with equal weight. It describes the lighting of the whole
+    image, not of the face.
+    """
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    return float(cv2.mean(gray)[0])
 
 
 def open_camera(index: int):
@@ -206,8 +222,9 @@ class CameraSource:
 
         timestamp_ms is wall-clock Unix epoch milliseconds, UTC, taken as
         soon as the read returns. The buffer given to the detector is the
-        camera image as captured, not mirrored. Raises CameraError if the
-        camera stops delivering frames.
+        camera image as captured, not mirrored. brightness is measured on
+        that same image. Raises CameraError if the camera stops delivering
+        frames.
         """
         ok, bgr = self._capture.read()
         capture_ms = time.time_ns() // 1_000_000
@@ -220,7 +237,8 @@ class CameraSource:
         if self.mirrored:
             blendshapes, matrix = unmirror(blendshapes, matrix)
         reasons = assess(face_count, blendshapes, matrix).reasons
-        return CameraFrame(make_feature_message(capture_ms, face_count, blendshapes, matrix), reasons)
+        message = make_feature_message(capture_ms, face_count, blendshapes, matrix)
+        return CameraFrame(message, reasons, grayscale_brightness(self._cv2, bgr))
 
     def frames(self):
         """Yield CameraFrame objects until the camera fails or close() is called."""

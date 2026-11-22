@@ -48,7 +48,7 @@ Frames are served on `ws://127.0.0.1:8765`, one compact JSON text message per fr
 - Detector: Face Landmarker in VIDEO mode, one face, blendshapes and the facial transformation matrix enabled. Detection, presence and tracking thresholds are left at their library defaults and are never published as `confidence`.
 - The image passed to the detector is the camera image as captured. This program never mirrors it, and there is no preview window. If the camera driver itself mirrors the image, pass `--mirrored`.
 - `timestamp_ms` is wall-clock Unix epoch milliseconds, UTC, taken as soon as the camera read returns. The detector gets separate, strictly increasing monotonic milliseconds, because `detect_for_video` raises on a repeated or decreasing timestamp.
-- The frame rate is whatever the camera and detector sustain, about 20 frames per second on the development laptop. It is not paced to a fixed rate.
+- The frame rate is whatever the camera and detector sustain. It is not paced to a fixed rate, and it depends on the lighting: see [Frame rate depends on lighting](#frame-rate-depends-on-lighting).
 - A camera that cannot be opened, a missing model, or a missing package exits with a one-line message and status 1, not a traceback.
 
 ### Tracking state
@@ -105,3 +105,80 @@ Do not edit them by hand. `tests/test_fake_stream.py` fails if they differ from 
 ### Tests
 
 `tests/test_fake_stream.py` checks the generator against the validator in `tests/contract_schema.py`. `tests/test_frame_builder.py` checks the tracking-state decision, the pose rules and `mirror_feature_names` with plain inputs, and checks that importing the camera source and the publisher loads none of `cv2`, `mediapipe`, `numpy` or `websockets`. Both need no packages beyond pytest. `websockets` is imported only inside the server functions, so `--once`, `--write-fixtures`, and the tests run on the standard library alone.
+
+## Filtering
+
+`filters.py` is a downstream stage. It is not part of the published camera feature stream: `publish.py` emits the raw Face Landmarker scores, and the frontend, the backend and the classifier consume message 1 as published. Calibration and shared control apply this stage to the stream after receiving it. Standard library only.
+
+A channel is one scalar per tracking frame: a blendshape score, `yaw_deg`, `pitch_deg`, `roll_deg`, or the head translation `x_cm`, `y_cm`, `z_cm` (the last column of the matrix). Each channel runs a causal moving median (odd window, 1 is pass-through) and then a one-pole low-pass whose smoothing factor is `1 - exp(-2*pi*cutoff_hz/rate_hz)`. `FilterBank` applies a `ChannelConfig` per channel to whole messages and returns a value and a validity flag per channel.
+
+Gap handling:
+
+- Only `tracking` frames update filter state. A `partial` or `lost` frame is not fed as 0.0 or as the last value, and a missing channel is never read as 0.0. Its outputs are marked not valid.
+- If consecutive tracking frames are more than `reset_after_ms` apart (default 200), the filter resets instead of resuming. A one-pole that resumes across a 450 ms dropout, which has been measured during a fast head turn, blends pre-gap and post-gap values into a slow ramp that looks like a deliberate gesture.
+- Output is not valid, and its value is `None`, until the median window is full. The one-pole is then seeded with the first median output, not with 0.0.
+
+`group_delay_ms(config, rate_hz)` reports the added latency: `(W-1)/2` frames for a median of window `W`, about `1/(2*pi*cutoff_hz)` for the one-pole, and their total.
+
+## Rest baseline
+
+`baseline.py` measures the noise floor that thresholds are set against, while the subject holds still:
+
+```text
+python -m perception.baseline --source camera --out PATH.json
+python -m perception.baseline --source fake --out PATH.json
+```
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `--source {fake,camera}` | `fake` | Which source to measure. Only `camera` is measurement |
+| `--seconds S` | `10` | Seconds of frames to measure, by `timestamp_ms` |
+| `--settle S` | `1` | Seconds of frames discarded first, while camera exposure settles |
+| `--out PATH` | required | JSON record to write. A camera baseline is derived from human data: keep it out of git |
+| `--rate`, `--seed` | `30.0`, `11` | Fake source only |
+| `--camera`, `--mirrored` | `0`, off | Camera source only |
+
+For each channel, over tracking frames only and on raw published values, the record holds `count`, `mean`, `std` (sample standard deviation, `n - 1`), `min`, `max` and `peak_to_peak`, plus:
+
+| Field | Meaning |
+| --- | --- |
+| `distinct_values` | Number of distinct raw values seen |
+| `zero_variance` | Every value identical, so `std` is exactly 0. A truly dead channel |
+| `noise_floor` | Smallest `std` accepted as measured noise for the channel's unit |
+| `below_noise_floor` | `std < noise_floor`. The channel is pinned and its rest noise is not usable |
+| `range` | Full-scale range: 1.0 for a blendshape score, the width of the contract's valid range for pose |
+| `snr` | `range / max(std, noise_floor)`. Always finite. When `below_noise_floor` is true it comes from the floor, not from the channel |
+
+For the run it holds total frames, frames per state, `lost_fraction` (frames not tracking over all frames), `frame_rate_hz` measured from `timestamp_ms`, brightness (mean, min, max), and a `lighting` field that states the record is valid only for the lighting it was measured under.
+
+### Pinned channels and the noise floor
+
+In both camera baselines measured so far (brightness 105 and 135), five blendshapes stayed pinned near zero: `cheekSquintLeft`, `cheekSquintRight`, `_neutral`, `noseSneerLeft` and `noseSneerRight`. They were not exactly zero. Every value was under 3e-6 and their `std` was between 6e-9 and 4.0e-7, so `zero_variance` is false for them and `distinct_values` is large. The quietest other channel, `cheekPuff`, had `std` 7.7e-7 and 1.9e-6. The score noise floor, `NOISE_FLOORS["score"] = 5e-7` in `baseline.py`, sits in that gap in both runs, so exactly these five are reported `below_noise_floor`. The gap is narrow, under a factor of two on each side. The degree and centimeter floors, 0.01, only guard against dividing by zero; the smallest pose `std` measured was 0.30 degrees and 0.19 cm. A rest baseline shows that a channel is silent at rest. It cannot show that the channel will respond to a deliberate movement.
+
+### Frame rate depends on lighting
+
+The camera lengthens its exposure in dim light, which caps the frame rate. Two rest baselines on the development laptop, with nothing else changed in the code:
+
+| Mean brightness | Frame rate |
+| --- | --- |
+| 105.3 / 255 | 19.94 Hz |
+| 135.4 / 255 | 29.80 Hz |
+
+The 20 frames per second reported earlier came from the room, not from the code. Any frame rate quoted from this repository moves with the lighting, and so does everything derived from it: the median's group delay, and channel noise. A baseline is valid only for the lighting it was measured under, and its record says so. Before you compare baselines across sessions, compare their brightness first, or a lighting change will look like a change in the user.
+
+Filter latency, from `filters.group_delay_ms`, at the measured rates:
+
+| Configuration | Rate | Median | One-pole | Total |
+| --- | --- | --- | --- | --- |
+| Directional: median 3, one-pole 2 Hz | 29.8 Hz | 33.6 ms | 79.6 ms | 113.1 ms |
+| Stop: median 1, one-pole 8 Hz | 29.8 Hz | 0.0 ms | 19.9 ms | 19.9 ms |
+| Directional: median 3, one-pole 2 Hz | 19.94 Hz | 50.2 ms | 79.6 ms | 129.7 ms |
+| Stop: median 1, one-pole 8 Hz | 19.94 Hz | 0.0 ms | 19.9 ms | 19.9 ms |
+
+The one-pole term does not depend on the frame rate, so better lighting shortens only the median term. At 29.8 Hz the directional configuration is 113.1 ms, well over the 20 ms filtering budget, and most of that is the 2 Hz one-pole. The stop configuration fits, at 19.9 ms.
+
+Brightness is the mean grayscale value of the captured image, 0 to 255, computed by `mediapipe_source.grayscale_brightness` (BT.601 luma via `cv2.COLOR_BGR2GRAY`). That function is the single definition of brightness in this repository. It is recorded so that a clinician-facing caveat, that a decline may reflect worse lighting rather than worse motor control, can be checked against the lighting the baseline was measured under. The fake source has no image and records `null`. Brightness is a diagnostic on `CameraFrame` and is not published.
+
+The record carries its own `schema_version` (currently 2; version 1 lacked the per-channel floor fields and `lighting`) and `record_type` `"rest_baseline"`. **This record is not part of `docs/contracts.md` yet**; its version is independent of the contract's schema.
+
+`tests/test_filters.py` and `tests/test_baseline.py` cover both modules with the standard library and pytest only.
