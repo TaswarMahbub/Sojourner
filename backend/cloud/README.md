@@ -1,6 +1,6 @@
-# Sojourner cloud API
+# Sojourner cloud API (architecture sketch)
 
-Status: scaffolded. Runs locally with Docker Compose; Vultr files included. Not yet run against a real database (see Verification).
+Status: design only, no code yet. Runs locally first, then on Vultr.
 
 ## Scope
 
@@ -22,7 +22,7 @@ Out of scope: anything on the control path. The contract (`docs/contracts.md`) k
                         local profile store
         │  sync job: consented profiles only, completed sessions only, retries
         ▼
-   HTTPS ──► reverse proxy (TLS, body-size cap)
+   HTTPS ──► reverse proxy (TLS, rate limit, body-size cap)
                 │
                 ▼
              API service (one process, three route groups, three DB pools)
@@ -50,7 +50,7 @@ Out of scope: anything on the control path. The contract (`docs/contracts.md`) k
 | `PUT` | `/v1/profiles/{id}/consent` | `granted` or `withdrawn`. `withdrawn` deletes the profile (as `DELETE` below) |
 | `DELETE` | `/v1/profiles/{id}` | Cascade delete. Returns `202` with a status URL; see Deletion |
 
-Rule (decided): `consent_state = 'granted'` is the cloud-upload consent; there is no separate flag. The sync job uploads only profiles whose local consent is `granted`. The API rejects session uploads (`403`) unless the profile's `consent_state` is `granted`. A `pending` profile can exist, but no data is accepted for it.
+Rule: the sync job uploads only profiles whose local consent is `granted`. The API rejects session uploads (`403`) unless the profile's `consent_state` is `granted`. A `pending` profile can exist, but no data is accepted for it.
 
 ### Session ingestion
 
@@ -65,14 +65,14 @@ Rule (decided): `consent_state = 'granted'` is the cloud-upload consent; there i
 - **Validation.** Frames go through the contract adapter. Non-conforming frames are skipped and returned as `{line, reason}` (first 100, plus a total). The request fails (`422`) if no frame conforms.
 - **Size.** About 150k rows for a 90-second session. A synchronous `COPY` is fine. Cap the body (e.g. 50 MB) at the proxy. Add a job queue only if uploads start timing out.
 
-### Historical aggregates (any team token)
+### Historical aggregates (authenticated, per profile)
 
 | Method | Path | Source |
 | --- | --- | --- |
 | `GET` | `/v1/profiles/{id}/trends?channel=…` | `session_channel_stats`, ordered by `started_at` |
 | `GET` | `/v1/sessions/{id}/summary` | `signal_summary_1min`, `control_summary_1min` |
 
-Any valid team token with `aggregates:read` can read any profile's aggregates (decided). There is no per-device ownership check. These read continuous aggregates only, never raw `signal_samples` in bulk.
+These read continuous aggregates only, never raw `signal_samples` in bulk.
 
 ### Dashboard reads (non-critical, public)
 
@@ -82,8 +82,7 @@ Any valid team token with `aggregates:read` can read any profile's aggregates (d
 | `GET` | `/v1/dashboard/trends?channel=…` | `demo_channel_trend` |
 
 - Separate pool on a login role under `demo_reader`, so this path cannot see base tables, names or ids, whatever the code does.
-- Per-client-IP rate limit (token bucket: 60 requests/minute, burst 20; `429` with `Retry-After`; set with `DASHBOARD_RATE_PER_MINUTE`, `DASHBOARD_BURST`). It matters because each `channel` value is its own cache entry, so the cache alone can't stop a client forcing queries. The dashboard pool's 3 connections cap concurrent database load from this path.
-- In-process TTL cache (60 s). On a database error, serve stale cache with `"stale": true`, or `503`. Never fail over to pool A.
+- In-process TTL cache (60 s) and a stricter rate limit. On a database error, serve stale cache with `"stale": true`, or `503`. Never fail over to pool A.
 
 ## Auth
 
@@ -101,84 +100,38 @@ A continuous aggregate refresh needs the owner and can't run inside a transactio
 
 ## Secrets and configuration
 
-All configuration comes from environment variables: `DATABASE_URL_APP`, `DATABASE_URL_DASHBOARD`, `TOKEN_PEPPER`, `ALLOWED_ORIGINS`. Locally they live in a git-ignored `.env`; on Vultr in a root-only env file on the instance. Never commit them; `backend/db/tiger-cloud-db-*-credentials.env` is the precedent to avoid.
-
-The API does not read `TIMESCALE_SERVICE_URL`, the loader's variable. See [Which variable points where](../README.md#which-variable-points-where) for which program reads which variable, and which database each points to.
-
-## Layout
-
-```text
-app/main.py     settings, DB pools, auth, dashboard cache and rate limit, app factory
-app/routes.py   HTTP routes and request bodies
-app/store.py    everything that touches the database: SQL, ingestion, token hashing
-sql/            cloud_schema.sql: additions on top of backend/db/schema.sql
-docker/         local-only init script (role logins)
-scripts/        create_token.py (admin)
-docker-compose.yml        local: TimescaleDB + API
-vultr/          hosting: cloud-init.yaml (server setup + deploy script), docker-compose.yml (API + Caddy), Caddyfile
-```
-
-CI: `.github/workflows/deploy-cloud.yml` tests, builds and deploys on pushes to `main`.
+All configuration comes from environment variables: `DATABASE_URL_APP`, `DATABASE_URL_DASHBOARD`, `TOKEN_PEPPER`, `ALLOWED_ORIGINS`. Locally they live in a git-ignored `.env`; on Vultr in a root-only env file on the instance. Never commit them.
 
 ## Running locally
 
-Needs Docker Desktop. From `backend/cloud`:
+`docker compose up` with two services:
 
-```sh
-cp .env.example .env                      # fill each value with: openssl rand -hex 24
-docker compose up --build -d              # db applies schema.sql + cloud_schema.sql on first start
-set -a; source .env; set +a
-pip install -r ../../requirements.txt
-DATABASE_URL_ADMIN="postgresql://postgres:$POSTGRES_PASSWORD@127.0.0.1:5432/postgres" \
-  python scripts/create_token.py create --name my-laptop \
-  --scopes profiles:write sessions:write aggregates:read
-```
+- `db`: the `timescale/timescaledb` image, with `backend/db/schema.sql` applied on first start. No Tiger Cloud account needed, no shared data touched.
+- `api`: the API container, on `127.0.0.1:8000`.
 
-Then, with the printed token:
-
-```sh
-T=<token>
-curl -s -H "Authorization: Bearer $T" -H 'content-type: application/json' \
-  -d '{"consent_state": "granted"}' localhost:8000/v1/profiles
-curl -s -H "Authorization: Bearer $T" localhost:8000/v1/sessions \
-  -F metadata='{"profile_id": "<id>", "client_session_id": "'$(uuidgen)'", "tier": 1, "data_origin": "synthetic_seed"}' \
-  -F frames=@frames.jsonl -F events=@events.jsonl
-curl -s localhost:8000/v1/dashboard/sessions
-```
-
-`frames.jsonl` is contract-format camera frames, e.g. from `python -m perception.publish --source fake --record frames.jsonl` (fake data: use `synthetic_seed`). Interactive docs: http://localhost:8000/docs.
-
-Reset the local database: `docker compose down -v`.
-
-Tests (no Docker needed) are in the repository's `tests/test_cloud_api.py` and run in CI: from the repository root, `pip install -r requirements.txt && pytest tests`.
-
-To test against Tiger Cloud instead: apply `sql/cloud_schema.sql` there as admin, create a `demo_dashboard` login under `demo_reader`, and run the API with `DATABASE_URL_*` pointing at it.
+Pointing `DATABASE_URL_*` at Tiger Cloud instead tests against the shared database.
 
 ## Hosting on Vultr
 
-One Vultr instance runs the API behind Caddy (automatic HTTPS); the database stays on Tiger Cloud. GitHub Actions tests, builds and deploys every push to `main` that touches the API, with automatic rollback if the new release fails its health check. After a one-time setup by one person, deploying needs nothing on anyone's laptop.
+Phase 1, enough for the project:
 
-Setup, day-to-day use and security notes: [vultr/README.md](vultr/README.md).
+- One Vultr Cloud Compute instance running the same Compose file, without `db`, plus Caddy for automatic TLS.
+- Vultr Firewall: inbound 443 (and 80 for the ACME challenge) only. SSH restricted to team IPs.
+- Database stays on Tiger Cloud. If Tiger Cloud supports IP allow-lists on your plan, allow only the instance's IP.
+- Images are built in CI and pushed to Vultr Container Registry (or GHCR). Deploy = pull and restart.
 
-## Schema changes (in `sql/cloud_schema.sql`)
+Phase 2, only if needed: a Vultr Load Balancer in front of two instances (the API is stateless apart from the cache), and Vultr Object Storage to keep uploaded session files for re-ingestion.
+
+To verify before relying on it: whether Vultr Managed Databases for PostgreSQL offers the TimescaleDB extension. If not, moving the database to Vultr means running TimescaleDB on a compute instance yourselves, which is more work than staying on Tiger Cloud.
+
+## Schema changes this needs
 
 - `sessions.client_session_id uuid UNIQUE`, for idempotent uploads.
 - `api_clients (client_id, token_hash, scopes, created_at, revoked_at)`, with no grant to `demo_reader`.
-- `GRANT UPDATE (consent_state, demo_visible) ON profiles TO sojourner_app`, for granting consent and for the `FOR SHARE` lock taken during uploads.
-- A dashboard login role under `demo_reader`. Created by `docker/120_local_roles.sh` locally; by hand on Tiger Cloud.
-
-## Verification
-
-- Done: 20 route tests (auth, consent, idempotent retry, frame rejection, size cap, dashboard cache, stale fallback, rate limiting); server boots and returns 503 with no database; compose files parse.
-- Done: the local stack (`docker compose up`) starts, and `tiger_store.py report` connects to its database.
-- Done (hosting): cloud-init schema, SSH lockdown, deploy script checks, deploy, rollback and image cleanup, tested in an Ubuntu 24.04 container with a stand-in for Docker; workflows pass `actionlint`.
-- Not done: the API routes against a real TimescaleDB; a real Vultr instance; pulling from GHCR with the workflow token.
-
-## Decisions
-
-- Cloud upload consent is the existing `consent_state = 'granted'`. No separate flag.
-- Per-profile aggregate reads are open to any team token. No per-device ownership.
+- A dashboard login role: `CREATE ROLE demo_dashboard LOGIN ... IN ROLE demo_reader` (already noted in `schema.sql`).
 
 ## Open decisions
 
+- Is the existing `consent_state = 'granted'` enough for cloud upload, or does cloud upload need its own consent flag?
+- Should per-profile aggregate reads be limited to the device that uploaded the profile, or open to any team token?
 - Should gesture classification messages be stored once PR #4 produces real ones? That needs the `control_events` changes listed in `schema.sql`.
