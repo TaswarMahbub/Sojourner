@@ -107,11 +107,16 @@ export const ROOM_CEILING_HEIGHT_M = 2.7
 /**
  * Spawn setback: distance from the corridor's back wall to the spawn pose (footprint centre).
  * The handoff puts spawn at 0.0 and the doorway 7.50 m from spawn, inside a 12.00 m corridor, but
- * does not say where spawn sits relative to the back wall. 0.60 m is the smallest round figure that
- * lets the avatar turn in place at spawn (swing radius 0.533 m) without breaching the 0.05 m
- * near-miss threshold. Accepted by Mridhul, 22 Nov 2026.
+ * does not say where spawn sits relative to the back wall.
+ *
+ * 0.80 m (revised 22 Nov 2026, issue I-2; was 0.60 m). A turn in place at spawn sweeps the swing
+ * radius (0.533 m), so the back-wall margin while reorienting is 0.80 − 0.533 = 0.267 m. At 0.60 m
+ * it was 0.067 m — 17 mm above the 0.05 m near-miss threshold — so any attempt that opened with a
+ * reorientation risked logging a near-miss against a wall the driver never approached, which would
+ * contaminate metric 2. Spawn stays at the origin; the corridor extent becomes −0.80 → 11.20 and the
+ * doorway stays 7.50 m from spawn.
  */
-export const SPAWN_SETBACK_M = 0.6
+export const SPAWN_SETBACK_M = 0.8
 
 // ---------------------------------------------------------------------------------------------
 // Chassis — Hiwonder 4WD Chassis Car Kit, SKU 21030025 (handoff Part B, answers §5)

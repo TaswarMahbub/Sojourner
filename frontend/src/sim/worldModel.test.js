@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CORRIDOR_WORLD as W, createCorridorWorld } from './worldModel.js'
+import { CORRIDOR_WORLD as W, createCorridorWorld, swingRadius } from './worldModel.js'
 import { checkPose } from './collision.js'
 import { DOORWAY_CLEARANCE_PER_SIDE_M, NEAR_MISS_THRESHOLD_M } from './constants.js'
 
@@ -15,6 +15,22 @@ describe('corridor world', () => {
   it('spawns at the origin facing +X, in a 12.00 m corridor', () => {
     expect(W.spawn).toEqual({ x: 0, y: 0, heading: 0 })
     expect(W.bounds.x1 - W.bounds.x0).toBeCloseTo(12, 12)
+    expect(W.bounds.x0).toBeCloseTo(-0.8, 12)
+    expect(W.bounds.x1).toBeCloseTo(11.2, 12)
+  })
+
+  it('a turn in place at spawn keeps every corner at least 0.25 m from the back wall (I-2)', () => {
+    // A full 360° at spawn: the swept footprint is the swing-radius circle. The margin must sit well
+    // clear of the 0.05 m near-miss threshold, or a reorientation at the start pollutes metric 2.
+    let min = Infinity
+    for (let k = 0; k < 360; k += 1) {
+      const r = checkPose({ x: 0, y: 0, heading: (k * Math.PI) / 180 }, W)
+      expect(r.penetration).toBe(0)
+      min = Math.min(min, r.clearance)
+    }
+    expect(min).toBeGreaterThan(0.25)
+    expect(min - NEAR_MISS_THRESHOLD_M).toBeGreaterThan(0.2)
+    expect(W.bounds.x0 + swingRadius()).toBeCloseTo(-0.267, 3)
   })
 
   it('puts the doorway 7.50 m from spawn in the right-hand wall, 0.815 m clear', () => {

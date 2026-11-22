@@ -22,7 +22,7 @@ import {
 } from 'three'
 import { buildCorridor } from './corridor.js'
 import { createAvatarProxy } from './chairView.js'
-import { FOV_DEG, createFollowRig } from './cameraRig.js'
+import { FOV_DEG, NEAR_M, createFollowRig } from './cameraRig.js'
 import { rosToThree } from './frame.js'
 
 export const MAX_PIXEL_RATIO = 1.5
@@ -70,8 +70,8 @@ export function createSceneRoot({ canvas, world }) {
   renderer.setPixelRatio(cappedPixelRatio())
 
   const { scene, corridor, avatar, materials } = buildScene(world)
-  const camera = new PerspectiveCamera(FOV_DEG, 16 / 9, 0.05, 60)
-  const rig = createFollowRig(camera, world)
+  const camera = new PerspectiveCamera(FOV_DEG, 16 / 9, NEAR_M, 60)
+  const rig = createFollowRig(camera, world, corridor)
   avatar.setPose(world.spawn)
   rig.update(world.spawn)
 

@@ -100,10 +100,12 @@ describe('Simulation in the corridor world', () => {
   it('stalls against the end wall instead of passing through it, and records one collision', () => {
     const { sim, tick } = armed({ world: CORRIDOR_WORLD })
     sim.setDrive({ linear: 0.3, angular: 0 })
-    tick(45000) // 12 m of commanded travel; the end wall is 11.4 m away
+    tick(45000) // 13.5 m of commanded travel; the end wall is 11.2 m away
+    const endX = CORRIDOR_WORLD.bounds.x1
+    expect(endX).toBeCloseTo(11.2, 12)
     expect(sim.contact).toBe('end_wall')
-    expect(sim.pose.x + 0.4225).toBeLessThanOrEqual(11.4)
-    expect(sim.pose.x + 0.4225).toBeGreaterThan(11.4 - 0.001 - 1e-9)
+    expect(sim.pose.x + 0.4225).toBeLessThanOrEqual(endX)
+    expect(sim.pose.x + 0.4225).toBeGreaterThan(endX - 0.001 - 1e-9)
     expect(sim.clearance.penetration).toBe(0)
     expect(sim.attempt.metrics.collisions).toBe(1)
   })

@@ -7,7 +7,7 @@
 //              +Y
 //               ^      left handrail face, y = +1.01 (continuous)
 //   back wall   |  ======================================================  end wall (window)
-//   x = −0.60   |  spawn (0,0) → +X
+//   x = −0.80   |  spawn (0,0) → +X
 //               |  =========================|  door  |==================   right handrail face, y = −1.01
 //                                           |reveal  |                     right wall face,   y = −1.10
 //                                 ----------+        +----------           room wall,         y = −1.22
