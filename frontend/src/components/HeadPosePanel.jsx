@@ -1,4 +1,4 @@
-import { useId } from 'react'
+import { useId, useState } from 'react'
 import { SourceBadge } from './TrackingStatusPanel.jsx'
 import { ANGLE_FIELDS, describeAngle, faceGlyph, summarizePose } from './headPose.js'
 import './HeadPosePanel.css'
@@ -13,8 +13,8 @@ function unavailableReason(latest, isStale) {
   return null
 }
 
-function FaceDrawing({ pose }) {
-  const { noseX, noseY, rotateDeg } = faceGlyph(pose)
+function FaceDrawing({ pose, mirrored }) {
+  const { noseX, noseY, rotateDeg } = faceGlyph(pose, { mirrored })
   return (
     <svg className="face" viewBox="-50 -50 100 100" role="img" aria-label={`Head orientation: ${summarizePose(pose)}`}>
       <circle className="face__outline" r="40" />
@@ -47,6 +47,8 @@ function AngleRow({ angle }) {
 
 export default function HeadPosePanel({ latest, isStale, sourceKind }) {
   const headingId = useId()
+  // Mirror view by default: a person watching their own head expects it to move like a mirror.
+  const [mirrored, setMirrored] = useState(true)
   const reason = unavailableReason(latest, isStale)
   const pose = reason ? null : latest.message.head_pose
 
@@ -59,7 +61,7 @@ export default function HeadPosePanel({ latest, isStale, sourceKind }) {
 
       {pose ? (
         <>
-          <FaceDrawing pose={pose} />
+          <FaceDrawing pose={pose} mirrored={mirrored} />
           <ul className="angles">
             {ANGLE_FIELDS.map((field) => (
               <AngleRow key={field} angle={describeAngle(field, pose[field])} />
@@ -69,7 +71,14 @@ export default function HeadPosePanel({ latest, isStale, sourceKind }) {
       ) : (
         <p className="unavailable">{reason}</p>
       )}
-      <p className="hint">Directions are as seen in the unmirrored camera image. Image right is the subject’s left.</p>
+      <button type="button" className="button" aria-pressed={mirrored} onClick={() => setMirrored((v) => !v)}>
+        Mirror view: {mirrored ? 'on' : 'off'}
+      </button>
+      <p className="hint">
+        {mirrored
+          ? 'The drawing moves like a mirror. Left and right in the words are the person’s own.'
+          : 'The drawing shows the head as the camera sees it. Left and right in the words are the person’s own.'}
+      </p>
     </section>
   )
 }

@@ -81,6 +81,11 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
   letter-spacing: 0.05em;
 }
 
+.source-badge--live {
+  background: var(--color-live-bg);
+  color: var(--color-live-text);
+}
+
 .button {
   font: inherit;
   justify-self: start;

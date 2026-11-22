@@ -1,8 +1,10 @@
 // Display helpers for head pose (docs/contracts.md section 1, "Head pose" > "Angles").
-// Directions are relative to an unmirrored camera image, as the contract defines them:
-// - positive yaw turns the nose toward image right (the subject's left)
+// Sign conventions, from the contract (defined on an unmirrored camera image):
+// - positive yaw turns the nose toward image right, which is the subject's left
 // - positive pitch raises the nose
-// - positive roll lowers the subject's right ear, which tilts the head toward image left
+// - positive roll lowers the subject's right ear
+// The words below name the subject's own left and right, so they read the same in mirror
+// view and camera view. Only the drawing changes between the two views.
 
 import { ANGLE_RANGES_DEG } from '../contracts/cameraFrame.js'
 
@@ -10,9 +12,9 @@ import { ANGLE_RANGES_DEG } from '../contracts/cameraFrame.js'
 export const NEUTRAL_DEG = 2
 
 const WORDS = {
-  yaw_deg: { label: 'Yaw', positive: 'nose toward image right', negative: 'nose toward image left', neutral: 'facing the camera' },
+  yaw_deg: { label: 'Yaw', positive: 'turned to their left', negative: 'turned to their right', neutral: 'facing the camera' },
   pitch_deg: { label: 'Pitch', positive: 'nose up', negative: 'nose down', neutral: 'level' },
-  roll_deg: { label: 'Roll', positive: 'tilted toward image left', negative: 'tilted toward image right', neutral: 'upright' },
+  roll_deg: { label: 'Roll', positive: 'tilted toward their right shoulder', negative: 'tilted toward their left shoulder', neutral: 'upright' },
 }
 
 export const ANGLE_FIELDS = Object.keys(WORDS)
@@ -40,14 +42,16 @@ export function describeAngle(field, deg) {
 }
 
 // Geometry for the face drawing, in an SVG whose y axis points down.
-// The nose moves toward image right with yaw and up with pitch. Positive roll lowers the
-// image-left side of the face, which on screen is a counterclockwise turn, so SVG rotate() gets -roll.
-export function faceGlyph({ yaw_deg, pitch_deg, roll_deg }, reach = 24) {
+// Camera view: the nose moves toward image right with yaw and up with pitch. Positive roll
+// lowers the image-left side of the face, a counterclockwise turn on screen, so rotate() gets -roll.
+// Mirror view reflects the drawing left to right: x changes sign and so does the rotation.
+export function faceGlyph({ yaw_deg, pitch_deg, roll_deg }, { mirrored = false, reach = 24 } = {}) {
   const rad = (deg) => (deg * Math.PI) / 180
+  const flip = mirrored ? -1 : 1
   return {
-    noseX: reach * Math.sin(rad(yaw_deg)),
+    noseX: flip * reach * Math.sin(rad(yaw_deg)),
     noseY: -reach * Math.sin(rad(pitch_deg)),
-    rotateDeg: -roll_deg,
+    rotateDeg: flip * -roll_deg,
   }
 }
 

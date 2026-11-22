@@ -10,12 +10,14 @@ describe('head pose display helpers', () => {
   })
 
   it('uses the contract sign conventions for direction words', () => {
-    expect(describeAngle('yaw_deg', 20).direction).toBe('nose toward image right')
-    expect(describeAngle('yaw_deg', -20).direction).toBe('nose toward image left')
+    // Contract: positive yaw turns the nose toward image right, the subject's left.
+    expect(describeAngle('yaw_deg', 20).direction).toBe('turned to their left')
+    expect(describeAngle('yaw_deg', -20).direction).toBe('turned to their right')
     expect(describeAngle('pitch_deg', 10).direction).toBe('nose up')
     expect(describeAngle('pitch_deg', -10).direction).toBe('nose down')
-    expect(describeAngle('roll_deg', 10).direction).toBe('tilted toward image left')
-    expect(describeAngle('roll_deg', -10).direction).toBe('tilted toward image right')
+    // Contract: positive roll lowers the subject's right ear.
+    expect(describeAngle('roll_deg', 10).direction).toBe('tilted toward their right shoulder')
+    expect(describeAngle('roll_deg', -10).direction).toBe('tilted toward their left shoulder')
     expect(describeAngle('yaw_deg', 1.5).direction).toBe('facing the camera')
   })
 
@@ -45,9 +47,20 @@ describe('head pose display helpers', () => {
     expect(faceGlyph({ yaw_deg: 0, pitch_deg: 0, roll_deg: 15 }).rotateDeg).toBe(-15)
   })
 
+  it('mirror view reflects the drawing left to right and leaves up and down alone', () => {
+    const pose = { yaw_deg: 30, pitch_deg: 10, roll_deg: -20 }
+    const camera = faceGlyph(pose)
+    const mirror = faceGlyph(pose, { mirrored: true })
+    expect(mirror.noseX).toBeCloseTo(-camera.noseX)
+    expect(mirror.noseY).toBeCloseTo(camera.noseY)
+    expect(mirror.rotateDeg).toBe(-camera.rotateDeg)
+    // Turning to your own left: in a mirror your nose moves to the left of the screen.
+    expect(faceGlyph({ yaw_deg: 30, pitch_deg: 0, roll_deg: 0 }, { mirrored: true }).noseX).toBeLessThan(0)
+  })
+
   it('summarizes the pose in words for screen readers', () => {
     expect(summarizePose({ yaw_deg: 20, pitch_deg: 0, roll_deg: -10 })).toBe(
-      'Yaw +20.0°, nose toward image right; Pitch 0.0°, level; Roll −10.0°, tilted toward image right',
+      'Yaw +20.0°, turned to their left; Pitch 0.0°, level; Roll −10.0°, tilted toward their left shoulder',
     )
   })
 })

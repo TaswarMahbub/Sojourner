@@ -19,6 +19,8 @@
   --color-neutral: #4f5869;
   --color-mock-bg: #fde7a6;
   --color-mock-text: #4a3500;
+  --color-live-bg: #dbe4ff;
+  --color-live-text: #1f3a8a;
   --color-meter-track: #e2e5ec;
   --color-meter-fill: #3a5ccc;
   --radius: 12px;
@@ -43,6 +45,8 @@
     --color-neutral: #a6aebb;
     --color-mock-bg: #e9b949;
     --color-mock-text: #161a21;
+    --color-live-bg: #8aa4ff;
+    --color-live-text: #161a21;
     --color-meter-track: #313846;
     --color-meter-fill: #8aa4ff;
     --radius: 12px;

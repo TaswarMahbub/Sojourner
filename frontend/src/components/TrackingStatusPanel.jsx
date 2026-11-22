@@ -1,5 +1,6 @@
-import { useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { CONTROL_EXCLUDED_FEATURES, SCHEMA_VERSION } from '../contracts/cameraFrame.js'
+import { RERANK_MS, orderFeatures, rankFeatures } from './featureRanking.js'
 import './TrackingStatusPanel.css'
 
 const TOP_N = 8
@@ -22,12 +23,21 @@ function statusKey(latest, isStale) {
 }
 
 export function SourceBadge({ kind }) {
-  if (kind !== 'mock') return null
-  return (
-    <span className="source-badge" title="Synthetic data generated in the browser, not measured from a face">
-      MOCK DATA
-    </span>
-  )
+  if (kind === 'mock') {
+    return (
+      <span className="source-badge" title="Synthetic data generated in the browser, not measured from a face">
+        MOCK DATA
+      </span>
+    )
+  }
+  if (kind === 'live') {
+    return (
+      <span className="source-badge source-badge--live" title="From the perception publisher, which may be running its camera or its synthetic fake source">
+        PUBLISHER
+      </span>
+    )
+  }
+  return null
 }
 
 export default function TrackingStatusPanel({ latest, isStale, sourceKind }) {
@@ -37,14 +47,24 @@ export default function TrackingStatusPanel({ latest, isStale, sourceKind }) {
 
   const key = statusKey(latest, isStale)
   const status = STATUS[key]
-  const valid = latest?.validation.valid
-  const frame = valid ? latest.message : null
+  // Stale data is not shown as current: no values, no features.
+  const frame = key === 'stale' || !latest?.validation.valid ? null : latest.message
 
-  const features = frame
-    ? Object.entries(frame.features)
-        .filter(([name]) => !CONTROL_EXCLUDED_FEATURES.includes(name))
-        .sort((a, b) => b[1] - a[1])
-    : []
+  // The order is refreshed once per RERANK_MS so names with close scores do not swap
+  // places on every frame. The values are always the latest frame's.
+  const [ranking, setRanking] = useState([])
+  const latestFeatures = useRef(null)
+  useEffect(() => {
+    latestFeatures.current = frame ? frame.features : null
+  })
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (latestFeatures.current) setRanking(rankFeatures(latestFeatures.current, CONTROL_EXCLUDED_FEATURES))
+    }, RERANK_MS)
+    return () => clearInterval(timer)
+  }, [])
+
+  const features = frame ? orderFeatures(frame.features, ranking, CONTROL_EXCLUDED_FEATURES) : []
   const shown = showAll ? features : features.slice(0, TOP_N)
 
   return (
@@ -82,7 +102,7 @@ export default function TrackingStatusPanel({ latest, isStale, sourceKind }) {
       )}
       <p className="hint">Face score is a per-frame detector score when the detector provides one (stock MediaPipe does not). It is not a probability, and “Not provided” does not mean the face was lost.</p>
 
-      {features.length > 0 && !isStale && (
+      {features.length > 0 && (
         <>
           <h3>{showAll ? 'All named features' : `Top ${TOP_N} named features`}</h3>
           <ul className="features" id={listId}>
