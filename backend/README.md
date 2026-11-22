@@ -59,7 +59,7 @@ New laptop? Repeat the steps, or copy your `.env` file across privately.
 | `python tiger_store.py report` | Show the latest sessions and per-channel summaries |
 | `python tiger_store.py make-fixture` | Generate two synthetic test sessions in `fixtures/` |
 | `python tiger_store.py load-session ...` | Write one session (frames file + events file) to the database |
-| `python tiger_store.py delete-profile --profile-id <uuid>` | Delete a profile and everything about it |
+| `python tiger_store.py delete-profile --profile-id <uuid>` | Delete a profile and everything about it, including its summary rows (admin connection; prints the leftover count, which should be 0) |
 
 The summaries refresh themselves every minute. `python tiger_store.py refresh` forces it now, but needs the admin connection; `sojourner_app` cannot run it.
 
@@ -117,18 +117,6 @@ Optional flags: `--calibration cal.json`, `--sim-metrics '{"cues_per_metre": 3.1
 ### Setting up the service from scratch
 
 _Only needed if someone creates a new Tiger Cloud service. See `db/README.md`._
-
-1. Create a Tiger Cloud service (the free tier is enough). Keep the downloaded `tiger-cloud-db-*-credentials.env` outside the repo, or at least never `git add -f` it. `.gitignore` covers that name, but an ignored file can still be force-added, and once pushed the password has to be reset.
-2. Apply the schema as the admin: `psql "$TIMESCALE_SERVICE_URL" -f schema.sql` (needs psql; do not run it as one transaction, because continuous aggregates can't be created in one). It's safe to re-run, and re-running restores the structure but never restores deleted data.
-3. Enable the app role and set its password interactively, so the password never lands in a file or your shell history:
-
-   ```sh
-   psql "$TIMESCALE_SERVICE_URL" -c 'ALTER ROLE sojourner_app LOGIN'
-   psql "$TIMESCALE_SERVICE_URL" -c '\password sojourner_app'
-   ```
-
-4. Share the `sojourner_app` URL with the team privately. Keep the admin URL to yourself.
-5. Reset the passwords in the Tiger Cloud console after the hackathon, or immediately if a URL ever leaks.
 
 Public demo: point any public dashboard at a login role under `demo_reader`, never at the admin or app URL. `demo_reader` can only read `demo_session_summary` and `demo_channel_trend`, which show hashed aliases and aggregates for profiles with consent granted and `demo_visible` set.
 
