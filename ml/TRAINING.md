@@ -67,4 +67,52 @@ A training session alone cannot be evaluated, because its windows were fit. Vali
 - separate recordings, never a copy or re-label of a training recording;
 - ideally several held-out participants and sessions on different days, so one person's or one session's quirks do not decide the number.
 
-Personalization (fitting on a held-out person's `calibration` session) is not implemented in this phase.
+Personalization (fitting on a held-out person's `calibration` session) is not implemented. The baseline-relative mode below reads a calibration session, but it fits nothing on it: it only subtracts one mean vector.
+
+## Baseline-relative mode (ML-4A, experimental)
+
+People differ in their resting face and head pose. One person's neutral brow height can exceed another person's brow raise, and the raw model then calls a resting face `brow_raise`. This mode removes each session's resting offset before the population model sees the vector.
+
+```text
+python -m ml.train fit --features baseline-relative --session captures/TRAIN_A [--session ...] --out captures/models/ml4a-...
+python -m ml.train evaluate --model captures/models/ml4a-... \
+  --session captures/EVAL_P05 --calibration captures/CAL_P05 [--session ... --calibration ...]
+```
+
+- **Baseline.** The mean 162-number vector of a session's confirmed `neutral` windows. At least `MIN_BASELINE_WINDOWS` (10) windows are required. That floor was fixed before any recording was seen.
+- **Training.** Each `train` session gets its own baseline, from its own authorized neutral rows, subtracted from every row of that session. Two sessions of one person get two baselines. Every row, neutral rows included, has already passed `assert_examples_may_fit` with the population scope. Then the same `StandardScaler` and the same fixed logistic regression are fit. A session without enough neutral windows is refused (`training_baseline_insufficient`), and so is a class list without `neutral` (`baseline_requires_neutral_class`).
+- **Evaluation.** Each evaluated participant needs exactly one `--calibration` session. Its baseline is the mean of that session's confirmed `neutral` rows, after `assert_examples_may_fit` with `fitting_scope(plan, "personalization", participant)`. No eval row or label is read to build it, and the population scaler and classifier are never refit. The baseline is subtracted from that participant's eval rows, then the frozen model scores them.
+- **Refusals.** These are in addition to every raw-mode evaluation rule:
+  - no calibration: `calibration_required`;
+  - a calibration participant who is not evaluated: `calibration_participant_not_evaluated`;
+  - an evaluated participant without one: `calibration_missing`;
+  - two calibrations for one person: `conflicting_calibration`;
+  - a session that is not `calibration`/`held_out`: `calibration_session_invalid`;
+  - too few neutral windows: `calibration_baseline_insufficient`;
+  - a shared session or recording id: `calibration_evaluation_overlap`, or the ML-2A split rules;
+  - a byte-identical recording: `calibration_eval_source_leakage`;
+  - a raw model given a calibration: `calibration_not_used_by_raw_model`.
+- **Artifact.** A baseline-relative `model.json` has `"feature_mode": "baseline-relative"`. A file without that key is a raw ML-3 model, and raw artifacts are byte-identical to ML-3. The baselines themselves are not stored, because each evaluation computes its own.
+
+### Calibration protocol for a held-out participant
+
+Record two separate sessions with the same consent, camera, and room. They must use different `--session` and `--recording-id` values and different recording files.
+
+1. **Calibration session.** About 15 s of relaxed rest, face toward the camera as during use. Mark that rest `neutral` and confirm it. Mark nothing else.
+
+   ```text
+   python -m ml.label init --recording captures/CAL/features.jsonl --out captures/CAL \
+     --dataset ds01 --participant p05 --session s-cal --recording-id r-cal \
+     --split calibration --role held_out --category consented_local \
+     --provenance measured_capture --claim operator_claims_camera --decision DECISION
+   ```
+
+2. **Evaluation session.** The usual protocol, recorded separately, with `--split eval --role held_out` and new session and recording ids.
+
+Training sessions should start with a dedicated rest of at least 10 s marked `neutral`, so each one has its own baseline.
+
+Mark every interval on the movement you observed, not on the spoken cue. A late or short attempt is marked where it happened, or left uncertain.
+
+### Evaluation discipline
+
+p02 and p04 were examined while this mode was designed. Their results under it are not an unbiased estimate of improvement. Judge this mode against raw on new held-out participants, with success criteria written down before their data is scored.
