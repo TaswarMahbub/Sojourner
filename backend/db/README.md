@@ -21,7 +21,11 @@ TimescaleDB on Tiger Cloud. Stores derived channel values, cues, calibration and
    psql "$TIMESCALE_SERVICE_URL" -c '\password sojourner_app'
    ```
 
+7. If the cloud API will use this service, also apply its additions: `psql "$TIMESCALE_SERVICE_URL" -f ../cloud/sql/cloud_schema.sql`.
+
 Teammates: copy `.env.example` to `.env`, fill in the `sojourner_app` URL you were given, then `set -a; source .env; set +a`.
+
+`TIMESCALE_SERVICE_URL` is read by `tiger_store.py` and `psql` only. The cloud API uses `DATABASE_URL_APP` and `DATABASE_URL_DASHBOARD`; see [Which variable points where](../README.md#which-variable-points-where).
 
 ## Two-session demonstration
 

@@ -61,7 +61,7 @@ Units, ranges, neutral values, and stop behavior are defined there. A producer o
 From the repository root:
 
 ```bash
-python3 -m pip install -r tests/requirements.txt
+python3 -m pip install -r requirements.txt
 python3 -m pytest tests
 ```
 
