@@ -97,6 +97,15 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
   cursor: pointer;
 }
 
+/* Shared by every panel with buttons (head pose mirror toggle, the 3D simulator's controls). */
+.button:disabled { opacity: 0.5; cursor: not-allowed; }
+.button[aria-pressed='true'] { background: var(--color-meter-fill); color: var(--color-surface); }
+.button--danger { border-color: var(--color-bad); color: var(--color-bad); }
+.button-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+/* A panel that spans the whole grid row. */
+.panel--wide { grid-column: 1 / -1; }
+
 .hint { margin: 0; font-size: 0.85rem; color: var(--color-text-muted); }
 
 /* Read by screen readers, not shown on screen. */
