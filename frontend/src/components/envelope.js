@@ -41,6 +41,31 @@ export function spokesFrom(profile) {
   }))
 }
 
+// Spokes while calibration is still running: one per channel with progress, in first-seen order.
+// Each uses the stream's own snr and peak_deviation. There is no threshold yet (it comes with the
+// profile), and every spoke says whether its noise estimate is provisional and on what basis.
+export function spokesFromProgress(progress) {
+  return progress.map((e) => ({
+    channel: e.channel,
+    unit: e.unit,
+    role: null,
+    direction: null,
+    range: Math.abs(e.peak_deviation),
+    snr: e.snr,
+    thresholdSnr: null,
+    deadbandSnr: null,
+    provisional: e.provisional,
+    basis: e.basis,
+  }))
+}
+
+// What each noise basis means, in words (docs/sim-decisions.md §2.3).
+export const BASIS_WORDS = {
+  prior_default: 'Provisional: typical noise, not measured yet',
+  interrep_quiet: 'Provisional: noise from the quiet gaps between reps',
+  final_rest: 'Final: noise from the rest measurement',
+}
+
 // The channels that were measured but not bound, with their reasons.
 export function unboundFrom(profile) {
   if (!profile) return []

@@ -1,7 +1,8 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import {
-  REASONS, angleFor, ease, formatInUnit, lerp, ringsFor, scaleFor, shapePoints, spokesFrom, toPath, unboundFrom,
+  BASIS_WORDS, REASONS, angleFor, ease, formatInUnit, lerp, ringsFor, scaleFor, shapePoints, spokesFrom, spokesFromProgress, toPath, unboundFrom,
 } from './envelope.js'
+import { phaseOf } from '../hooks/calibrationSession.js'
 import './EnvelopePanel.css'
 
 const RADIUS = 100
@@ -15,16 +16,20 @@ const ROLE_LABEL = {
 
 const prefersReducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
-// The rescale: when the profile changes, the scale slides from the old maximum to the new one
-// while the old shape fades out and the new one fades in. Instant with reduced motion.
-function useRescale(profile) {
-  const spokes = spokesFrom(profile)
+// The rescale: when `key` changes, the scale slides from the old maximum to the new one while the
+// old shape fades out and the new one fades in. Instant with reduced motion. The key is the
+// profile when one is shown; while calibration runs it is the scale itself, so the spokes grow in
+// place and only a change of scale animates. `spokes` must keep its identity between renders
+// unless it changed (the caller memoises it).
+function useRescale(spokes, key) {
   const target = { spokes, scale: scaleFor(spokes) }
-  const [anim, setAnim] = useState({ profile, from: null, progress: 1 })
+  const [anim, setAnim] = useState({ key, spokes, from: null, progress: 1 })
 
-  if (anim.profile !== profile) {
-    const shownScale = anim.from ? lerp(anim.from.scale, scaleFor(spokesFrom(anim.profile)), ease(anim.progress)) : scaleFor(spokesFrom(anim.profile))
-    setAnim({ profile, from: { spokes: spokesFrom(anim.profile), scale: shownScale }, progress: 0 })
+  if (anim.key !== key) {
+    const shownScale = anim.from ? lerp(anim.from.scale, scaleFor(anim.spokes), ease(anim.progress)) : scaleFor(anim.spokes)
+    setAnim({ key, spokes, from: { spokes: anim.spokes, scale: shownScale }, progress: 0 })
+  } else if (anim.spokes !== spokes) {
+    setAnim({ ...anim, spokes })
   }
 
   useEffect(() => {
@@ -43,7 +48,7 @@ function useRescale(profile) {
     return () => cancelAnimationFrame(id)
     // Restart only when a new transition begins.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [anim.profile])
+  }, [anim.key])
 
   const t = ease(anim.progress)
   const scale = anim.from ? lerp(anim.from.scale, target.scale, t) : target.scale
@@ -60,8 +65,10 @@ function Field({ spokes, scale, opacity, idPrefix }) {
         const a = angleFor(i, n)
         return <line key={`${idPrefix}-axis-${s.channel}`} className="envelope__axis" x1="0" y1="0" x2={RADIUS * Math.cos(a)} y2={RADIUS * Math.sin(a)} />
       })}
-      <path className="envelope__shape" d={toPath(shapePoints(values, scale, RADIUS))} />
-      <path className="envelope__threshold" d={toPath(shapePoints(spokes.map((s) => s.thresholdSnr), scale, RADIUS, RADIUS * 0.02))} />
+      <path className={`envelope__shape${spokes.some((s) => s.provisional) ? ' envelope__shape--provisional' : ''}`} d={toPath(shapePoints(values, scale, RADIUS))} />
+      {spokes.every((s) => s.thresholdSnr !== null) && (
+        <path className="envelope__threshold" d={toPath(shapePoints(spokes.map((s) => s.thresholdSnr), scale, RADIUS, RADIUS * 0.02))} />
+      )}
       {spokes.map((s, i) => {
         const a = angleFor(i, n)
         const r = (Math.min(s.snr, scale) / scale) * RADIUS
@@ -70,7 +77,7 @@ function Field({ spokes, scale, opacity, idPrefix }) {
         const anchor = Math.abs(Math.cos(a)) < 0.3 ? 'middle' : Math.cos(a) > 0 ? 'start' : 'end'
         return (
           <g key={`${idPrefix}-label-${s.channel}`}>
-            <circle className="envelope__tip" cx={r * Math.cos(a)} cy={r * Math.sin(a)} r="2.2" />
+            <circle className={`envelope__tip${s.provisional ? ' envelope__tip--provisional' : ''}`} cx={r * Math.cos(a)} cy={r * Math.sin(a)} r="2.2" />
             <text className="envelope__label" x={lx} y={ly} textAnchor={anchor} dominantBaseline="middle">
               <tspan x={lx}>{s.channel}</tspan>
               <tspan x={lx} dy="11" className="envelope__label-value">{formatInUnit(s.range, s.unit)} · {Math.round(s.snr)}×</tspan>
@@ -82,28 +89,41 @@ function Field({ spokes, scale, opacity, idPrefix }) {
   )
 }
 
-export default function EnvelopePanel({ latest, sourceKind, source }) {
+const PHASE_TEXT = {
+  waiting: null,
+  provisional: 'Calibrating. Values are provisional: each movement is measured against an estimate of its resting jitter, and the rest measurement comes last.',
+  final: 'Rest measured. Values are final; waiting for the profile.',
+  profile: null,
+}
+
+function badgeFor(sourceKind, session) {
+  if (sourceKind === 'recorded') return { text: session.profile?.measured === false ? 'SYNTHETIC PROFILE' : 'RECORDED PROFILE', title: 'A saved calibration profile, not a live calibration' }
+  if (sourceKind === 'mock') return { text: 'SYNTHETIC CALIBRATION STREAM', title: 'Generated in the browser from a saved practice profile. No person was measured.' }
+  if (session.header?.measured === false || session.profile?.measured === false) return { text: 'SYNTHETIC SESSION', title: 'The calibration stream is running its fake source' }
+  return { text: 'LIVE CALIBRATION', title: 'The calibration stream on this machine' }
+}
+
+export default function EnvelopePanel({ session, sourceKind, source }) {
   const headingId = useId()
   const tableId = useId()
-  const valid = latest?.validation.valid
-  const profile = valid ? latest.message : null
-  const { target, from, t, scale } = useRescale(profile)
+  const { profile, progress, profileErrors, problems } = session
+  const phase = phaseOf(session)
+  const spokes = useMemo(() => (profile ? spokesFrom(profile) : spokesFromProgress(progress)), [profile, progress])
+  const live = !profile
+  const { target, from, t, scale } = useRescale(spokes, profile ?? `live:${scaleFor(spokes)}`)
   const unbound = unboundFrom(profile)
   const tier = profile?.proposed_tier
-  const synthetic = profile && profile.measured === false
+  const badge = badgeFor(sourceKind, session)
+  const anyProvisional = spokes.some((s) => s.provisional)
 
   return (
     <section className="panel panel--wide" aria-labelledby={headingId}>
       <header className="panel__header">
         <h2 id={headingId}>Control envelope</h2>
-        {sourceKind === 'recorded' && (
-          <span className="source-badge" title="A saved calibration profile, not a live calibration">
-            {synthetic ? 'SYNTHETIC PROFILE' : 'RECORDED PROFILE'}
-          </span>
-        )}
+        <span className="source-badge" title={badge.title}>{badge.text}</span>
       </header>
       <p className="hint">
-        Each spoke is one movement this person can use. Its length is how far the movement reaches above its own resting jitter, which has no unit, so every spoke shares one scale. The scale rescales to fit the strongest movement found. Profile format: provisional, profile schema 1.
+        Each spoke is one movement this person can use. Its length is how far the movement reaches above its own resting jitter, which has no unit, so every spoke shares one scale. The scale rescales to fit the strongest movement found. Formats: provisional (profile schema 1; calibration progress events).
       </p>
 
       {source?.profiles && (
@@ -118,11 +138,20 @@ export default function EnvelopePanel({ latest, sourceKind, source }) {
         </fieldset>
       )}
 
-      {!latest && <p className="unavailable">Waiting for a calibration profile.</p>}
-      {latest && !valid && (
+      {phase === 'waiting' && profileErrors.length === 0 && (
+        <p className="unavailable">{sourceKind === 'live' ? 'Waiting for the calibration stream. Start a calibration on this machine.' : 'Waiting for a calibration profile.'}</p>
+      )}
+      {PHASE_TEXT[phase] && <p className="status" role="status">{PHASE_TEXT[phase]}</p>}
+      {profileErrors.length > 0 && (
         <div className="rejected">
           <p>This calibration profile failed validation and is not drawn:</p>
-          <ul>{latest.validation.errors.map((e) => <li key={e}>{e}</li>)}</ul>
+          <ul>{profileErrors.map((e) => <li key={e}>{e}</li>)}</ul>
+        </div>
+      )}
+      {problems.length > 0 && (
+        <div className="rejected">
+          <p>The calibration stream sent {problems.length === 1 ? 'a message' : 'messages'} that failed a check. They are not drawn, so the envelope may not match the stored profile:</p>
+          <ul>{problems.map((p, i) => <li key={`${i}-${p.where}-${p.error}`}><code>{p.where}</code> {p.error}</li>)}</ul>
         </div>
       )}
       {profile?.session_quality === 'suspect' && (
@@ -131,7 +160,7 @@ export default function EnvelopePanel({ latest, sourceKind, source }) {
         </p>
       )}
 
-      {profile && (
+      {spokes.length > 0 || profile ? (
         <div className="envelope">
           <div className="envelope__figure">
             <svg viewBox="-170 -140 340 280" role="img" aria-labelledby={tableId} aria-describedby={tableId}>
@@ -147,7 +176,8 @@ export default function EnvelopePanel({ latest, sourceKind, source }) {
             </svg>
             <p className="envelope__legend">
               <span><span className="swatch swatch--shape" aria-hidden="true" /> Reach: how far each movement goes</span>
-              <span><span className="swatch swatch--threshold" aria-hidden="true" /> Dashed: activation threshold</span>
+              {anyProvisional && <span><span className="swatch swatch--provisional" aria-hidden="true" /> Dotted: provisional, against estimated jitter</span>}
+              {!live && <span><span className="swatch swatch--threshold" aria-hidden="true" /> Dashed: activation threshold</span>}
               <span>Rings: multiples of resting jitter (×), rim {Math.round(target.scale)}×</span>
             </p>
           </div>
@@ -159,24 +189,43 @@ export default function EnvelopePanel({ latest, sourceKind, source }) {
                 <span>{tier.reason}</span>
               </p>
             )}
-            <table id={tableId} className="envelope__table">
-              <caption>Bound movements ({target.spokes.length})</caption>
-              <thead>
-                <tr><th scope="col">Movement</th><th scope="col">Role</th><th scope="col">Reach</th><th scope="col">× resting jitter</th><th scope="col">Threshold</th></tr>
-              </thead>
-              <tbody>
-                {target.spokes.length === 0 && <tr><td colSpan="5">None</td></tr>}
-                {target.spokes.map((s) => (
-                  <tr key={s.channel}>
-                    <th scope="row">{s.channel}</th>
-                    <td>{ROLE_LABEL[s.role]}</td>
-                    <td>{formatInUnit(s.range, s.unit)}</td>
-                    <td>{Math.round(s.snr)}×</td>
-                    <td>{s.thresholdSnr.toFixed(1)}×</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            {live ? (
+              <table id={tableId} className="envelope__table">
+                <caption>Measured so far ({target.spokes.length})</caption>
+                <thead>
+                  <tr><th scope="col">Movement</th><th scope="col">Peak so far</th><th scope="col">× resting jitter</th><th scope="col">Status</th></tr>
+                </thead>
+                <tbody>
+                  {target.spokes.map((s) => (
+                    <tr key={s.channel}>
+                      <th scope="row">{s.channel}</th>
+                      <td>{formatInUnit(s.range, s.unit)}</td>
+                      <td>{Math.round(s.snr)}×</td>
+                      <td>{BASIS_WORDS[s.basis]}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <table id={tableId} className="envelope__table">
+                <caption>Bound movements ({target.spokes.length})</caption>
+                <thead>
+                  <tr><th scope="col">Movement</th><th scope="col">Role</th><th scope="col">Reach</th><th scope="col">× resting jitter</th><th scope="col">Threshold</th></tr>
+                </thead>
+                <tbody>
+                  {target.spokes.length === 0 && <tr><td colSpan="5">None</td></tr>}
+                  {target.spokes.map((s) => (
+                    <tr key={s.channel}>
+                      <th scope="row">{s.channel}</th>
+                      <td>{ROLE_LABEL[s.role]}</td>
+                      <td>{formatInUnit(s.range, s.unit)}</td>
+                      <td>{Math.round(s.snr)}×</td>
+                      <td>{s.thresholdSnr.toFixed(1)}×</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
 
             {unbound.length > 0 && (
               <details className="envelope__unbound">
@@ -195,7 +244,7 @@ export default function EnvelopePanel({ latest, sourceKind, source }) {
             )}
           </div>
         </div>
-      )}
+      ) : null}
     </section>
   )
 }
