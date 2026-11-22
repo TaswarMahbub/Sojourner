@@ -1,5 +1,9 @@
 /* Theme colours, radius, border width and shadow live in themes.css.
-   Spacing and fonts are shared by every theme and live here. */
+   Spacing, type and motion are shared by every theme and live here.
+
+   Calm first: generous space, one quiet typeface, soft paper panels over a slow background orb,
+   few borders, and motion that only follows data. Class names are unchanged, so every panel keeps
+   its markup. */
 @import './themes.css';
 
 :root {
@@ -8,32 +12,47 @@
   --space-3: 0.75rem;
   --space-4: 1rem;
   --space-6: 1.5rem;
+  --space-8: 2rem;
 
-  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* The platform's own UI face: SF Pro on Apple devices, Segoe UI on Windows. No web fonts are
+     downloaded, so the dashboard works offline and reveals nothing to a font host. */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
-  font: 16px/1.5 var(--font-sans);
+  /* One easing curve for everything that moves. */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  font: 16px/1.55 var(--font-sans);
   color: var(--color-text);
   background: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
 
-body { margin: 0; }
+body { margin: 0; min-height: 100vh; }
 
-h1, h2, h3 { margin: 0; line-height: 1.2; }
+h1, h2, h3 { margin: 0; line-height: 1.2; letter-spacing: -0.01em; }
+h1 { font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.1rem); font-weight: 650; }
+h2 { font-size: 1.15rem; font-weight: 650; }
+h3 { font-size: 1rem; font-weight: 600; }
 
 :focus-visible {
   outline: 3px solid var(--color-focus);
-  outline-offset: 2px;
+  outline-offset: 3px;
+  border-radius: var(--radius-small);
 }
 
+/* The content sits above the background orb (BackgroundOrb.jsx). */
 .app {
+  position: relative;
+  z-index: 1;
   max-width: 1200px;
   margin: 0 auto;
-  padding: var(--space-4);
+  padding: var(--space-8) var(--space-6) var(--space-8);
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-6);
 }
 
 .app__header {
@@ -42,24 +61,30 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-3);
+  padding: var(--space-2) var(--space-1) var(--space-4);
 }
 
-.app__header p { margin: var(--space-1) 0 0; color: var(--color-text-muted); }
+.app__header p { margin: var(--space-2) 0 0; color: var(--color-text-muted); max-width: 46rem; }
 
 .app__grid {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-6);
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
 }
 
+/* Panels are soft paper: slightly translucent so the orb glows faintly through, with a gentle
+   blur so nothing behind them competes with the text. Text contrast is measured against the
+   opaque surface colour, which the glass never drops below in practice (86% opacity). */
 .panel {
-  background: var(--color-surface);
+  background: var(--color-surface-glass);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+  backdrop-filter: blur(14px) saturate(1.1);
   border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: var(--space-4);
+  padding: var(--space-6);
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-4);
   align-content: start;
 }
 
@@ -71,14 +96,17 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
   flex-wrap: wrap;
 }
 
+/* Source badges stay visible (synthetic data must never read as measured) but speak quietly. */
 .source-badge {
   background: var(--color-mock-bg);
   color: var(--color-mock-text);
-  border: 1px solid currentColor;
-  border-radius: var(--radius);
-  padding: 0 var(--space-2);
-  font: 700 0.8rem/1.6 var(--font-mono);
-  letter-spacing: 0.05em;
+  border: 0;
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font: 650 0.72rem/1.5 var(--font-sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .source-badge--live {
@@ -87,26 +115,30 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 }
 
 .button {
-  font: inherit;
+  font: 500 0.95rem/1.2 var(--font-sans);
   justify-self: start;
-  padding: var(--space-1) var(--space-3);
+  min-height: 44px; /* comfortable tap target */
+  padding: var(--space-2) var(--space-4);
   border: var(--border-width) solid var(--color-control-border);
-  border-radius: var(--radius);
-  background: var(--color-surface-raised);
+  border-radius: var(--radius-small);
+  background: var(--color-surface);
   color: var(--color-text);
   cursor: pointer;
+  transition: background-color 200ms var(--ease), border-color 200ms var(--ease), transform 200ms var(--ease);
 }
+.button:hover:not(:disabled) { background: var(--color-surface-raised); }
+.button:active:not(:disabled) { transform: translateY(1px); }
 
 /* Shared by every panel with buttons (head pose mirror toggle, the 3D simulator's controls). */
 .button:disabled { opacity: 0.5; cursor: not-allowed; }
-.button[aria-pressed='true'] { background: var(--color-meter-fill); color: var(--color-surface); }
+.button[aria-pressed='true'] { background: var(--color-meter-fill); border-color: var(--color-meter-fill); color: var(--color-surface); }
 .button--danger { border-color: var(--color-bad); color: var(--color-bad); }
 .button-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 
 /* A panel that spans the whole grid row. */
 .panel--wide { grid-column: 1 / -1; }
 
-.hint { margin: 0; font-size: 0.85rem; color: var(--color-text-muted); }
+.hint { margin: 0; font-size: 0.88rem; line-height: 1.55; color: var(--color-text-muted); }
 
 /* Read by screen readers, not shown on screen. */
 .visually-hidden {
@@ -116,6 +148,12 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+
+@media (max-width: 30rem) {
+  .app { padding: var(--space-6) var(--space-4); gap: var(--space-4); }
+  .app__grid { gap: var(--space-4); }
+  .panel { padding: var(--space-4); }
 }
 
 @media (prefers-reduced-motion: reduce) {

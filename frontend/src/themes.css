@@ -1,58 +1,86 @@
-/* Dashboard theme: "soft neutral". Every colour, radius, border width and shadow lives here.
+/* Dashboard theme: "creme and navy". Every colour, radius, border width and shadow lives here.
    Components reference these variable names only, so a restyle edits this file.
    Light by default; the dark set follows the operating system's dark mode setting.
-   Status colours are never the only signal: each status also has a word and a symbol. */
+   Status colours are never the only signal: each status also has a word and a symbol.
+
+   Calm and welcoming first: warm creme surfaces, navy ink, tan as the quiet warm accent.
+   Every text pair below passes WCAG AA (4.5:1) on surface, background and raised surface; the
+   weakest is muted text on the raised surface at 6.28:1 (light) and 6.35:1 (dark). Button borders
+   (--color-control-border) reach 3:1 against both surfaces.
+
+   The background orb floats behind the panels, never behind the page header (BackgroundOrb.css
+   keeps it below the header and its drift only moves it further down). Panel text sits on the
+   glass surface (--color-surface-glass) over the orb. At the orb's most opaque and most brightly
+   or dimly lit point, every panel text colour still passes AA: worst case 5.29:1 (warning text,
+   light) and 6.27:1 (muted text, dark). */
 
 :root {
   color-scheme: light;
-  --color-bg: #f3f4f7;
-  --color-surface: #ffffff;
-  --color-surface-raised: #eef0f5;
-  --color-text: #1c2330;
-  --color-text-muted: #4f5869;
-  --color-border: #d8dce4;
-  --color-control-border: #767f90; /* buttons: at least 3:1 against surface and raised surface */
-  --color-focus: #3a5ccc;
-  --color-accent: #3a5ccc;
-  --color-good: #1d6b3f;
-  --color-warn: #845300;
-  --color-bad: #b02a22;
-  --color-neutral: #4f5869;
-  --color-mock-bg: #fde7a6;
-  --color-mock-text: #4a3500;
-  --color-live-bg: #dbe4ff;
-  --color-live-text: #1f3a8a;
-  --color-meter-track: #e2e5ec;
-  --color-meter-fill: #3a5ccc;
-  --radius: 12px;
+  --color-bg: #f5efe4;               /* creme */
+  --color-surface: #fffcf6;          /* warm paper */
+  --color-surface-raised: #efe6d6;
+  --color-surface-glass: rgb(255 252 246 / 0.86); /* panels over the background orb */
+  --color-text: #16243a;             /* navy ink, 15.2:1 on surface */
+  --color-text-muted: #4a5361;
+  --color-border: #e2d6c2;
+  --color-control-border: #8c7e69;   /* buttons: at least 3:1 against surface and raised surface */
+  --color-focus: #1f3a5f;
+  --color-accent: #1f3a5f;           /* navy, 11.2:1 on surface */
+  --color-tan: #c9a97e;              /* decorative warm accent, never used for text */
+  --color-good: #2e6b4a;
+  --color-warn: #8a5a12;
+  --color-bad: #a5352b;
+  --color-neutral: #4a5361;
+  --color-mock-bg: #efe2cb;
+  --color-mock-text: #4a3816;
+  --color-live-bg: #dde4ee;
+  --color-live-text: #1f3a5f;
+  --color-meter-track: #ebe1cf;
+  --color-meter-fill: #1f3a5f;
+  /* The background orb: three tones its shader blends, and its shadow. */
+  --color-orb-a: #d4b285;            /* tan */
+  --color-orb-b: #9fb6cf;            /* soft sky */
+  --color-orb-c: #f3e6d0;            /* light creme */
+  --orb-max-alpha: 0.75;
+  --color-orb-shadow: rgb(22 36 58 / 0.10);
+  --radius: 16px;
+  --radius-small: 10px;
   --border-width: 1px;
-  --shadow: 0 1px 2px rgb(20 30 50 / 0.06), 0 4px 12px rgb(20 30 50 / 0.06);
+  --shadow: 0 1px 2px rgb(22 36 58 / 0.04), 0 8px 24px rgb(22 36 58 / 0.06);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --color-bg: #161a21;
-    --color-surface: #1e232c;
-    --color-surface-raised: #272d38;
-    --color-text: #e4e7ec;
-    --color-text-muted: #a6aebb;
-    --color-border: #313846;
-    --color-control-border: #7c8597;
-    --color-focus: #8aa4ff;
-    --color-accent: #8aa4ff;
-    --color-good: #6fcf97;
-    --color-warn: #e9b949;
-    --color-bad: #f28b82;
-    --color-neutral: #a6aebb;
-    --color-mock-bg: #e9b949;
-    --color-mock-text: #161a21;
-    --color-live-bg: #8aa4ff;
-    --color-live-text: #161a21;
-    --color-meter-track: #313846;
-    --color-meter-fill: #8aa4ff;
-    --radius: 12px;
+    --color-bg: #0e1726;             /* deep navy */
+    --color-surface: #152238;
+    --color-surface-raised: #1c2c46;
+    --color-surface-glass: rgb(21 34 56 / 0.84);
+    --color-text: #efe7d8;           /* creme, 13.0:1 on surface */
+    --color-text-muted: #b5ae9f;
+    --color-border: #2a3b57;
+    --color-control-border: #7e8ba0;
+    --color-focus: #d8b98c;
+    --color-accent: #d8b98c;         /* tan */
+    --color-tan: #d8b98c;
+    --color-good: #7fcb9b;
+    --color-warn: #e5bf6a;
+    --color-bad: #f09a8e;
+    --color-neutral: #b5ae9f;
+    --color-mock-bg: #d8b98c;
+    --color-mock-text: #0e1726;
+    --color-live-bg: #9fb4cc;
+    --color-live-text: #0e1726;
+    --color-meter-track: #24344f;
+    --color-meter-fill: #d8b98c;
+    --color-orb-a: #9a7548;          /* bronze */
+    --color-orb-b: #3a6496;          /* dusk blue */
+    --color-orb-c: #b08a5c;          /* warm tan */
+    --orb-max-alpha: 0.65;
+    --color-orb-shadow: rgb(0 0 0 / 0.28);
+    --radius: 16px;
+    --radius-small: 10px;
     --border-width: 1px;
-    --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 4px 12px rgb(0 0 0 / 0.25);
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.25), 0 10px 28px rgb(0 0 0 / 0.22);
   }
 }
