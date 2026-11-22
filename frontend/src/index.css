@@ -90,7 +90,7 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
   font: inherit;
   justify-self: start;
   padding: var(--space-1) var(--space-3);
-  border: var(--border-width) solid var(--color-border);
+  border: var(--border-width) solid var(--color-control-border);
   border-radius: var(--radius);
   background: var(--color-surface-raised);
   color: var(--color-text);

@@ -32,6 +32,7 @@
 
 .envelope__facts { display: grid; gap: var(--space-3); align-content: start; }
 .envelope__tier { margin: 0; display: grid; gap: var(--space-1); }
+.envelope__table-wrap { overflow-x: auto; }
 .envelope__table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
 .envelope__table caption { text-align: left; font-weight: 700; padding-bottom: var(--space-1); }
 .envelope__table th, .envelope__table td { text-align: left; padding: var(--space-1) var(--space-2); border-bottom: var(--border-width) solid var(--color-border); }
@@ -43,3 +44,10 @@
 
 /* Spans the whole dashboard row. */
 .panel--wide { grid-column: 1 / -1; }
+
+/* On a phone the chart is about 300 px wide, so its 7-unit labels would render near 6 px.
+   Bigger labels here; the table carries the same values at full size. */
+@media (max-width: 30rem) {
+  .envelope__label { font-size: 10px; }
+  .envelope__ring-label { font-size: 8px; }
+}

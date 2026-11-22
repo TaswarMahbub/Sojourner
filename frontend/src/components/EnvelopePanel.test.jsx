@@ -52,4 +52,11 @@ describe('EnvelopePanel', () => {
     s.receive('{not json')
     expect(render(s.state, 'live')).toContain('failed a check')
   })
+
+  it('gives the chart a short name and puts the table in a focusable scroll region', () => {
+    const html = render(sessionUntil(() => false))
+    expect(html).toContain('aria-label="Control envelope chart: 6 movements. The table lists the same values."')
+    expect(html).not.toMatch(/<svg[^>]*aria-describedby/)
+    expect(html).toMatch(/<div class="envelope__table-wrap" role="region" aria-labelledby="[^"]+" tabindex="0"><table/)
+  })
 })

@@ -11,6 +11,7 @@
   --color-text: #1c2330;
   --color-text-muted: #4f5869;
   --color-border: #d8dce4;
+  --color-control-border: #767f90; /* buttons: at least 3:1 against surface and raised surface */
   --color-focus: #3a5ccc;
   --color-accent: #3a5ccc;
   --color-good: #1d6b3f;
@@ -37,6 +38,7 @@
     --color-text: #e4e7ec;
     --color-text-muted: #a6aebb;
     --color-border: #313846;
+    --color-control-border: #7c8597;
     --color-focus: #8aa4ff;
     --color-accent: #8aa4ff;
     --color-good: #6fcf97;

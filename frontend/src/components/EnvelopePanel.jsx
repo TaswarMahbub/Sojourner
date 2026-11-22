@@ -163,7 +163,7 @@ export default function EnvelopePanel({ session, sourceKind, source }) {
       {spokes.length > 0 || profile ? (
         <div className="envelope">
           <div className="envelope__figure">
-            <svg viewBox="-170 -140 340 280" role="img" aria-labelledby={tableId} aria-describedby={tableId}>
+            <svg viewBox="-170 -140 340 280" role="img" aria-label={`Control envelope chart: ${target.spokes.length} ${target.spokes.length === 1 ? 'movement' : 'movements'}${anyProvisional ? ', provisional' : ''}. The table lists the same values.`}>
               {ringsFor(scale).map((v, i, all) => (
                 <g key={`ring-${i}`}>
                   <circle className="envelope__ring" r={((i + 1) / all.length) * RADIUS} />
@@ -190,8 +190,9 @@ export default function EnvelopePanel({ session, sourceKind, source }) {
               </p>
             )}
             {live ? (
-              <table id={tableId} className="envelope__table">
-                <caption>Measured so far ({target.spokes.length})</caption>
+              <div className="envelope__table-wrap" role="region" aria-labelledby={tableId} tabIndex={0}>
+              <table className="envelope__table">
+                <caption id={tableId}>Measured so far ({target.spokes.length})</caption>
                 <thead>
                   <tr><th scope="col">Movement</th><th scope="col">Peak so far</th><th scope="col">× resting jitter</th><th scope="col">Status</th></tr>
                 </thead>
@@ -206,9 +207,11 @@ export default function EnvelopePanel({ session, sourceKind, source }) {
                   ))}
                 </tbody>
               </table>
+              </div>
             ) : (
-              <table id={tableId} className="envelope__table">
-                <caption>Bound movements ({target.spokes.length})</caption>
+              <div className="envelope__table-wrap" role="region" aria-labelledby={tableId} tabIndex={0}>
+              <table className="envelope__table">
+                <caption id={tableId}>Bound movements ({target.spokes.length})</caption>
                 <thead>
                   <tr><th scope="col">Movement</th><th scope="col">Role</th><th scope="col">Reach</th><th scope="col">× resting jitter</th><th scope="col">Threshold</th></tr>
                 </thead>
@@ -225,6 +228,7 @@ export default function EnvelopePanel({ session, sourceKind, source }) {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
 
             {unbound.length > 0 && (
