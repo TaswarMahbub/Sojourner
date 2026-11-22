@@ -29,3 +29,8 @@
 .face-pip__empty { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 12px; color: #a8adb7; }
 .face-pip__face { padding: 4px 8px 6px; color: #c7ccd4; }
 @media (max-width: 520px) { .face-pip { width: min(220px, calc(100vw - 32px)); } }
+
+/* Reserve the panel's column (300 px + 16 px margin + 16 px gap) so it never covers content. */
+@media (min-width: 960px) {
+  html.has-face-pip body { padding-right: 332px; }
+}

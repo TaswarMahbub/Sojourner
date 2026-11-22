@@ -9,13 +9,24 @@ import './FacePreviewPip.css'
 // (demo/face_preview.py); this component never opens a camera. "Mirror view" flips only the
 // picture on screen: head-pose signs and cues are computed elsewhere and are not affected.
 const TICK_MS = 250
+// Below this width there is no room for a reserved gutter, so the panel starts collapsed.
+const NARROW = '(max-width: 959px)'
+const startsExpanded = () => !globalThis.matchMedia?.(NARROW).matches
 
 export default function FacePreviewPip({ corner = 'bottom-right', url = facePreviewUrl() }) {
   const canvasRef = useRef(null)
   const latest = useRef({ link: 'connecting', frame: null, receivedAt: 0, drawn: null })
   const [status, setStatus] = useState(() => previewStatus({ link: 'connecting', frame: null, receivedAt: 0, now: 0, staleMs: PREVIEW_STALE_MS }))
-  const [expanded, setExpanded] = useState(true)
+  const [expanded, setExpanded] = useState(startsExpanded)
   const [mirrored, setMirrored] = useState(true)
+
+  // While mounted, the page keeps a right-hand gutter for the panel (FacePreviewPip.css), so on a
+  // wide screen it floats beside the content instead of over it.
+  useEffect(() => {
+    const root = document.documentElement
+    root.classList.add('has-face-pip')
+    return () => root.classList.remove('has-face-pip')
+  }, [])
 
   useEffect(() => {
     const state = latest.current
