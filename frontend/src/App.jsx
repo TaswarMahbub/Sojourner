@@ -5,6 +5,7 @@ import { createMockGestureSource } from './sources/mockGestureSource.js'
 import TrackingStatusPanel from './components/TrackingStatusPanel.jsx'
 import HeadPosePanel from './components/HeadPosePanel.jsx'
 import GesturePanel from './components/GesturePanel.jsx'
+import SimulatorSection from './components/SimulatorSection.jsx'
 
 // Created once at module level so React re-renders never create a second source.
 // Add ?source=live to the page address to read the perception publisher instead of the mock.
@@ -34,6 +35,7 @@ export default function App() {
         <HeadPosePanel {...camera} />
         <GesturePanel {...gesture} />
       </div>
+      <SimulatorSection />
     </main>
   )
 }

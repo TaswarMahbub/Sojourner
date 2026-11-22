@@ -49,6 +49,18 @@ No gesture classifier publishes yet, so the Gesture panel always uses a mock sou
 
 Schema 4 allows only `neutral` and `unknown` until a reviewed label list exists for a `model_version`. A reviewed list goes in `REVIEWED_LABELS` in `src/contracts/gesture.js`, with its review, when a model ships. The validator in that file follows `validate_gesture` in `tests/contract_schema.py`.
 
+## 2D simulator
+
+The simulator section shows a rover from above, its motor status, and every datagram with its outcome. Everything in it is labelled "DRILL": the rover, the receiver and the sender are simulated, and nothing talks to the physical rover. The drill status cannot arm the physical rover.
+
+To drive it, follow the "Next" hint: finish startup, release the e-stop, close the cutoff, connect the drill sender, arm, then hold a drive button (or focus the arena and use the arrow keys or W A S D).
+
+- The rover moves only while the simulated receiver has torque, at the velocities it accepted. A datagram that was ignored or rejected never moves it.
+- The drill sender (`src/sim/drillSender.js`) stands in for shared control. Every command copies the boot, freshness id and rearm generation from a status whose MAC verifies and that echoes the sender's outstanding challenge, received within 250 ms. One status authorizes at most one command. It sends `rearm` only after you press Arm. With no input it sends ordinary `idle` stops to keep the session alive. Its high-water marks are in memory only.
+- The rover controls (e-stop, cutoff, motor power, freeze, reboot) model local inputs on the rover, not network traffic.
+- The injection buttons send hostile datagrams (a replay, an old challenge, the wrong generation, a forged MAC, another boot, a truncated datagram) so you can see the receiver refuse them.
+- `src/sim/simulation.test.js` runs these flows without a browser.
+
 ## Simulator receiver
 
 `src/sim/motorReceiver.js` is the simulator's receiver for motor commands (contract section 3) and the status it publishes (section 4). It is a line-for-line port of the Python reference receiver, `tests/motor_receiver.py`, because the contract requires the simulator to use the same receiver procedure as the firmware. Command and status validation and the MAC live in `src/contracts/motor.js`.
@@ -71,7 +83,7 @@ This is a model of the contract. It drives no motors, and a passing test is not 
 src/contracts/   everything the frontend knows about a message: names, ranges, validation
 src/sources/     data sources with one interface: { kind, subscribe(listener) => unsubscribe }
 src/hooks/       subscribe to a source, validate each message, track staleness (useMessageStream is shared)
-src/sim/         the simulator's receiver model (no display code)
+src/sim/         the simulator: receiver model, drill sender, simulation (no display code)
 src/components/  display only
 ```
 
