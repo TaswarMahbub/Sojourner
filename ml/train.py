@@ -11,6 +11,13 @@ Every row that fits the scaler or the model goes through the ML-2A checks:
 ``assert_examples_may_fit``. The hyperparameters are fixed. Nothing is
 selected on any data, so no row is used for selection.
 
+``fit --features baseline-relative`` (ML-4A, experimental) subtracts each
+training session's resting baseline, the mean of its confirmed ``neutral``
+windows, before scaling. Its ``evaluate`` needs one ``calibration`` session
+per held-out participant, and the baseline comes from that session's neutral
+rows only, through ``fitting_scope(plan, "personalization", participant)``.
+The default ``raw`` mode is the unchanged ML-3 model.
+
 The artifact is JSON, not a pickle, so loading it runs no code.
 """
 
@@ -56,6 +63,12 @@ MODEL_FILE = "model.json"
 PARTIAL_FILE = ".model.json.partial"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 DEFAULT_CLASSES = ("neutral", "mouth_open", "brow_raise")
+# ``raw`` is the ML-3 model. ``baseline-relative`` subtracts a per-session
+# resting baseline (the mean of confirmed ``neutral`` windows) before scaling.
+FEATURE_MODES = ("raw", "baseline-relative")
+BASELINE_LABEL = "neutral"
+# A sanity floor fixed before any recording was seen, not a tuned value.
+MIN_BASELINE_WINDOWS = 10
 # Fixed before any data is seen. Nothing here is tuned on a recording.
 # The penalty is L2, scikit-learn's default; it is not passed because 1.8
 # deprecated the ``penalty`` argument.
@@ -114,6 +127,7 @@ class FitSummary:
     converged: bool
     resubstitution_accuracy: float
     review_reasons: tuple[str, ...]
+    feature_mode: str = "raw"
 
 
 @dataclass(frozen=True)
@@ -124,6 +138,8 @@ class EvalSummary:
     accuracy: float
     per_class: tuple[tuple[str, int, int], ...]  # label, support, correct
     confusion: tuple[tuple[str, str, int], ...]  # true, predicted, count
+    feature_mode: str = "raw"
+    calibration_recordings: int = 0
 
 
 def _libraries():
@@ -170,7 +186,7 @@ def _load_sessions(directories: Sequence[Path], allow_constructed: bool) -> list
     extraction = {(e.version, e.length, e.stride) for e in (item.extraction for item in loaded)}
     if len(extraction) != 1:
         raise TrainingError("extraction_mismatch")
-    return sorted(loaded, key=lambda item: item.assignment.recording_id)
+    return loaded
 
 
 def _plan(loaded: Sequence[SessionExamples], examples):
@@ -204,6 +220,18 @@ def _matrix(numpy, rows, classes: tuple[str, ...]):
     return numpy.asarray(vectors, dtype=numpy.float64), labels
 
 
+def _session_key(item) -> tuple[str, str, str]:
+    return (item.example.participant_id, item.example.session_id, item.recording_id)
+
+
+def _mean_baseline(numpy, rows, classes: tuple[str, ...], code: str):
+    """Mean vector of authorized ``neutral`` rows. Too few rows raises ``code``."""
+    own = [item for item in rows if item.example.label == BASELINE_LABEL]
+    if len(own) < MIN_BASELINE_WINDOWS:
+        raise TrainingError(code)
+    return _matrix(numpy, own, classes)[0].mean(axis=0)
+
+
 def _ordered(examples):
     return tuple(
         sorted(
@@ -223,12 +251,22 @@ def fit_population(
     *,
     classes: Sequence[str] = DEFAULT_CLASSES,
     allow_constructed: bool = False,
+    feature_mode: str = "raw",
 ) -> FitSummary:
-    """Fit the scaler and the model on authorized population train rows, then write the artifact."""
+    """Fit the scaler and the model on authorized population train rows, then write the artifact.
+
+    In ``baseline-relative`` mode each training session's baseline is the mean
+    of its own authorized ``neutral`` rows, and it is subtracted from every row
+    of that session before the scaler and the model are fit.
+    """
     classes = _parse_classes(classes)
+    if not isinstance(feature_mode, str) or feature_mode not in FEATURE_MODES:
+        raise TrainingError("invalid_feature_mode")
+    if feature_mode == "baseline-relative" and BASELINE_LABEL not in classes:
+        raise TrainingError("baseline_requires_neutral_class")
     numpy, sklearn, LogisticRegression, StandardScaler = _libraries()
     destination = _new_output(out_dir)
-    loaded = _load_sessions(directories, allow_constructed)
+    loaded = sorted(_load_sessions(directories, allow_constructed), key=lambda item: item.assignment.recording_id)
     for item in loaded:
         if item.role.role != "population_train" or item.session.split != "train":
             raise TrainingError("training_session_not_population_train")
@@ -243,6 +281,17 @@ def fit_population(
     present = set(labels)
     if any(name not in present for name in classes):
         raise TrainingError("missing_class")
+    if feature_mode == "baseline-relative":
+        baselines = {
+            key: _mean_baseline(
+                numpy,
+                [item for item in authorized if _session_key(item) == key],
+                classes,
+                "training_baseline_insufficient",
+            )
+            for key in sorted({_session_key(item) for item in authorized})
+        }
+        features = features - numpy.asarray([baselines[_session_key(item)] for item in authorized])
     scaler = StandardScaler().fit(features)
     model = LogisticRegression(**HYPERPARAMETERS).fit(scaler.transform(features), labels)
     if tuple(model.classes_) != tuple(sorted(classes)):
@@ -298,6 +347,9 @@ def fit_population(
             "held_out": False,
         },
     }
+    if feature_mode != "raw":
+        # Raw artifacts stay byte-identical to ML-3; the key marks the new mode only.
+        artifact["feature_mode"] = feature_mode
     _write_artifact(destination, artifact)
     reviews = sorted({reason for item in loaded for reason in item.report.review_reasons})
     return FitSummary(
@@ -313,6 +365,7 @@ def fit_population(
         converged=converged,
         resubstitution_accuracy=accuracy,
         review_reasons=tuple(reviews),
+        feature_mode=feature_mode,
     )
 
 
@@ -421,7 +474,10 @@ def load_model(model_dir: Path) -> dict:
     except LabelingError as exc:
         code = "model_missing" if exc.code == "model_missing" else "invalid_model"
         raise TrainingError(code) from None
-    if not isinstance(data, dict) or set(data) != _MODEL_KEYS:
+    if not isinstance(data, dict) or set(data) - {"feature_mode"} != _MODEL_KEYS:
+        raise TrainingError("invalid_model")
+    # A model without ``feature_mode`` is an ML-3 raw model.
+    if "feature_mode" in data and data["feature_mode"] != "baseline-relative":
         raise TrainingError("invalid_model")
     if data["format"] != MODEL_FORMAT or data["purpose"] != "population":
         raise TrainingError("invalid_model")
@@ -437,6 +493,8 @@ def load_model(model_dir: Path) -> dict:
         if name == "unknown":
             raise TrainingError("invalid_model")
     if len(set(classes)) != len(classes):
+        raise TrainingError("invalid_model")
+    if "feature_mode" in data and BASELINE_LABEL not in classes:
         raise TrainingError("invalid_model")
     rows = 1 if len(classes) == 2 else len(classes)
     _vector(data["scaler_mean"], FEATURE_DIM, "invalid_model")
@@ -491,8 +549,45 @@ def _predict(numpy, model: dict, features):
     return [classes[index] for index in numpy.argmax(scores, axis=1)]
 
 
+def _calibration_baselines(numpy, plan, evaluated, calibrating, classes):
+    """One baseline per held-out participant, from their calibration session only.
+
+    Each baseline is the mean of that participant's confirmed ``neutral``
+    calibration rows, after ``assert_examples_may_fit`` with a personalization
+    scope for that participant. No eval row is read here.
+    """
+    by_participant: dict[str, SessionExamples] = {}
+    for item in calibrating:
+        participant = item.assignment.participant_id
+        if participant in by_participant:
+            raise TrainingError("conflicting_calibration")
+        by_participant[participant] = item
+    targets = {item.assignment.participant_id for item in evaluated}
+    if set(by_participant) - targets:
+        raise TrainingError("calibration_participant_not_evaluated")
+    if targets - set(by_participant):
+        raise TrainingError("calibration_missing")
+    eval_sessions = {(item.assignment.participant_id, item.assignment.session_id) for item in evaluated}
+    eval_recordings = {item.assignment.recording_id for item in evaluated}
+    baselines = {}
+    for participant, item in sorted(by_participant.items()):
+        if (participant, item.assignment.session_id) in eval_sessions or item.assignment.recording_id in eval_recordings:
+            raise TrainingError("calibration_evaluation_overlap")
+        rows = tuple(row for row in _ordered(item.examples) if row.example.label == BASELINE_LABEL)
+        if len(rows) < MIN_BASELINE_WINDOWS:
+            raise TrainingError("calibration_baseline_insufficient")
+        scope = fitting_scope(plan, "personalization", participant)
+        authorized = assert_examples_may_fit(rows, scope).examples
+        baselines[participant] = _mean_baseline(numpy, authorized, classes, "calibration_baseline_insufficient")
+    return baselines
+
+
 def evaluate_held_out(
-    model_dir: Path, directories: Sequence[Path], *, allow_constructed: bool = False
+    model_dir: Path,
+    directories: Sequence[Path],
+    *,
+    calibration: Sequence[Path] = (),
+    allow_constructed: bool = False,
 ) -> EvalSummary:
     """Score the model on separate held-out eval sessions, or refuse.
 
@@ -500,13 +595,32 @@ def evaluate_held_out(
     did not contribute to training, and no recording may match a training
     recording by id or by SHA-256 and length. Windows from one recording are
     never divided between training and evaluation.
+
+    A ``baseline-relative`` model also needs exactly one ``calibration``
+    session per evaluated participant. Its baseline comes only from that
+    session's neutral rows. The scaler and the classifier are never refit.
     """
     numpy, _sklearn, _lr, _scaler = _libraries()
     model = load_model(model_dir)
-    loaded = _load_sessions(directories, allow_constructed)
-    for item in loaded:
+    mode = model.get("feature_mode", "raw")
+    for value in (directories, calibration):
+        if isinstance(value, (str, bytes, Path)) or not isinstance(value, Sequence):
+            raise TrainingError("invalid_session_list")
+    directories, calibration = list(directories), list(calibration)
+    if not directories:
+        raise TrainingError("no_sessions")
+    if mode == "raw" and calibration:
+        raise TrainingError("calibration_not_used_by_raw_model")
+    if mode != "raw" and not calibration:
+        raise TrainingError("calibration_required")
+    loaded = _load_sessions(directories + calibration, allow_constructed)
+    evaluated, calibrating = loaded[: len(directories)], loaded[len(directories) :]
+    for item in evaluated:
         if item.role.role != "held_out" or item.session.split != "eval":
             raise TrainingError("evaluation_requires_held_out_eval_sessions")
+    for item in calibrating:
+        if item.role.role != "held_out" or item.session.split != "calibration":
+            raise TrainingError("calibration_session_invalid")
     training = model["training"]
     trained_participants = {r["participant_id"] for r in training["recordings"]}
     trained_recordings = {r["recording_id"] for r in training["recordings"]}
@@ -528,12 +642,16 @@ def evaluate_held_out(
         model["extraction"]["stride"],
     ):
         raise TrainingError("extraction_mismatch")
-    examples = _ordered(row for item in loaded for row in item.examples)
+    examples = _ordered(row for item in evaluated for row in item.examples)
     if not examples:
         raise TrainingError("no_evaluation_examples")
-    _plan(loaded, examples)
+    calibration_rows = _ordered(row for item in calibrating for row in item.examples)
+    plan = _plan(loaded, examples + calibration_rows)
     classes = tuple(model["classes"])
     features, labels = _matrix(numpy, examples, classes)
+    if mode == "baseline-relative":
+        baselines = _calibration_baselines(numpy, plan, evaluated, calibrating, classes)
+        features = features - numpy.asarray([baselines[item.example.participant_id] for item in examples])
     predicted = _predict(numpy, model, features)
     correct = sum(p == t for p, t in zip(predicted, labels))
     per_class = tuple(
@@ -551,11 +669,13 @@ def evaluate_held_out(
     )
     return EvalSummary(
         examples=len(examples),
-        recordings=len(loaded),
-        participants=len({item.assignment.participant_id for item in loaded}),
+        recordings=len(evaluated),
+        participants=len({item.assignment.participant_id for item in evaluated}),
         accuracy=correct / len(examples),
         per_class=per_class,
         confusion=confusion,
+        feature_mode=mode,
+        calibration_recordings=len(calibrating),
     )
 
 
@@ -572,9 +692,11 @@ def _build() -> _Parser:
     fit.add_argument("--out", type=Path, required=True)
     fit.add_argument("--classes", default=",".join(DEFAULT_CLASSES))
     fit.add_argument("--allow-constructed", action="store_true")
+    fit.add_argument("--features", choices=FEATURE_MODES, default="raw")
     evaluate = commands.add_parser("evaluate")
     evaluate.add_argument("--model", type=Path, required=True)
     evaluate.add_argument("--session", type=Path, action="append", required=True)
+    evaluate.add_argument("--calibration", type=Path, action="append", default=[])
     evaluate.add_argument("--allow-constructed", action="store_true")
     return parser
 
@@ -588,6 +710,7 @@ def _fit_text(summary: FitSummary) -> str:
         f"recordings={summary.recordings}",
         f"participants={summary.participants}",
         f"timestamp_provenance={summary.timestamp_provenance}",
+        *([f"feature_mode={summary.feature_mode}"] if summary.feature_mode != "raw" else []),
         "algorithm=standard_scaler+logistic_regression",
         *(f"hyperparameter {key}={HYPERPARAMETERS[key]}" for key in sorted(HYPERPARAMETERS)),
         f"n_iter={summary.n_iter}",
@@ -606,6 +729,11 @@ def _eval_text(summary: EvalSummary) -> str:
         "held_out_evaluation=true",
         f"held_out_participants={summary.participants}",
         f"held_out_recordings={summary.recordings}",
+        *(
+            [f"feature_mode={summary.feature_mode}", f"calibration_recordings={summary.calibration_recordings}"]
+            if summary.feature_mode != "raw"
+            else []
+        ),
         f"examples={summary.examples}",
         f"window_accuracy={summary.accuracy:.4f}",
         *(f"per_class {name},support={support},correct={right}" for name, support, right in summary.per_class),
@@ -624,10 +752,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.out,
                 classes=tuple(args.classes.split(",")),
                 allow_constructed=args.allow_constructed,
+                feature_mode=args.features,
             )
             print(_fit_text(summary), end="")
         else:
-            print(_eval_text(evaluate_held_out(args.model, args.session, allow_constructed=args.allow_constructed)), end="")
+            summary = evaluate_held_out(
+                args.model,
+                args.session,
+                calibration=args.calibration,
+                allow_constructed=args.allow_constructed,
+            )
+            print(_eval_text(summary), end="")
         return 0
     except (TrainingError, LabelingError, DatasetError) as exc:
         print(exc.code, file=sys.stderr)
