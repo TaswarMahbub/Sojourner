@@ -1,0 +1,44 @@
+# Vultr instance: API + Caddy (TLS). The database stays on Tiger Cloud.
+# Run by /usr/local/sbin/sojourner-deploy (see cloud-init.yaml), which sets API_IMAGE and
+# reads everything else from /etc/sojourner/cloud.env. To inspect a running server, use
+# sojourner-compose (e.g. `sojourner-compose logs -f api`), not docker compose directly.
+name: sojourner-cloud
+
+services:
+  api:
+    image: ${API_IMAGE:?set by the deploy script}
+    environment:
+      DATABASE_URL_APP: ${DATABASE_URL_APP:?}
+      DATABASE_URL_DASHBOARD: ${DATABASE_URL_DASHBOARD:?}
+      TOKEN_PEPPER: ${TOKEN_PEPPER:?}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?}
+    expose:
+      - "8000"
+    healthcheck:
+      # /healthz doesn't touch the database, so a Tiger Cloud outage doesn't fail a deploy.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  caddy-data:     # TLS certificates; keep it, or Let's Encrypt rate limits can bite
+  caddy-config:

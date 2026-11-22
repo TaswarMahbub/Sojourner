@@ -1,0 +1,169 @@
+#cloud-config
+# Sojourner API server bootstrap for a Vultr Cloud Compute instance (Ubuntu 24.04 LTS x64).
+# Paste this whole file into "Cloud-Init User-Data" when creating the instance. See README.md.
+#
+# Before pasting, replace REPLACE_WITH_CI_PUBLIC_KEY below with the CI deploy key's public half
+# (one line starting with ssh-ed25519). Don't put secrets in here: Vultr stores user data, and
+# any process on the instance can read it from the metadata service. Database URLs and
+# TOKEN_PEPPER go into /etc/sojourner/cloud.env over SSH after the first boot.
+#
+# Changing this file only affects new instances. To update an existing server's deploy
+# script, copy the new version to /usr/local/sbin/sojourner-deploy by hand.
+
+package_update: true
+packages:
+  - docker.io
+  - docker-compose-v2
+
+users:
+  - default
+  # GitHub Actions logs in as `deploy`. Its key can only run the deploy script: the forced
+  # command ignores whatever the client asks to run and passes it as one argument (the image).
+  - name: deploy
+    shell: /bin/bash
+    lock_passwd: true
+    ssh_authorized_keys:
+      - 'restrict,command="sudo -n /usr/local/sbin/sojourner-deploy \"$SSH_ORIGINAL_COMMAND\"" REPLACE_WITH_CI_PUBLIC_KEY'
+
+write_files:
+  # Key-only SSH. Sorts before 50-cloud-init.conf, and sshd keeps the first value it reads.
+  - path: /etc/ssh/sshd_config.d/10-sojourner.conf
+    permissions: '0644'
+    content: |
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin prohibit-password
+
+  - path: /etc/sudoers.d/sojourner-deploy
+    permissions: '0440'
+    content: |
+      deploy ALL=(root) NOPASSWD: /usr/local/sbin/sojourner-deploy *
+
+  # Cap container logs so a chatty container can't fill the disk.
+  - path: /etc/docker/daemon.json
+    permissions: '0644'
+    content: |
+      {"log-driver": "json-file", "log-opts": {"max-size": "10m", "max-file": "5"}}
+
+  # Root-only. Fill in over SSH after first boot; see README.md step 5.
+  - path: /etc/sojourner/cloud.env
+    permissions: '0600'
+    content: |
+      # Sojourner API secrets. Root-only; never commit or paste these anywhere shared.
+      # Tiger Cloud URLs need ?sslmode=require. Generate TOKEN_PEPPER with: openssl rand -hex 24
+      # (and keep a copy in your password manager: create_token.py needs the same value).
+      DATABASE_URL_APP=
+      DATABASE_URL_DASHBOARD=
+      TOKEN_PEPPER=
+      # Comma-separated browser origins for the public dashboard reads.
+      ALLOWED_ORIGINS=
+      # Domain whose DNS A record points at this server; Caddy gets its TLS certificate.
+      API_DOMAIN=
+
+  # Shortcut for inspecting the running stack, e.g. `sojourner-compose ps`, `sojourner-compose logs -f api`.
+  - path: /usr/local/bin/sojourner-compose
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      [[ $EUID -eq 0 ]] || exec sudo "$0" "$@"
+      API_IMAGE="$(cat /opt/sojourner/current-image)" exec docker compose \
+        --project-directory /opt/sojourner -f /opt/sojourner/docker-compose.yml \
+        --env-file /etc/sojourner/cloud.env "$@"
+
+  - path: /usr/local/sbin/sojourner-deploy
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      # Deploy one API image. Runs as root, from the CI key's forced command:
+      #   ssh deploy@<host> '<image>@sha256:<digest>' < bundle.tar
+      # bundle.tar holds docker-compose.yml, Caddyfile, registry-user and registry-token
+      # (the workflow's short-lived GITHUB_TOKEN, used for this pull only).
+      # If the new release fails its health check, the previous release is restored.
+      set -euo pipefail
+      umask 077
+
+      # Only images from this repository are accepted. Change it if the repo moves.
+      ALLOWED_REPO=ghcr.io/taswarmahbub/sojourner-api
+      APP_DIR=/opt/sojourner
+      ENV_FILE=/etc/sojourner/cloud.env
+      BUNDLE_FILES=(docker-compose.yml Caddyfile registry-user registry-token)
+
+      die() { echo "sojourner-deploy: $*" >&2; exit 1; }
+
+      image="${1:-}"
+      repo="${image%@sha256:*}"
+      digest="${image#"$repo"@sha256:}"
+      [[ "$repo" == "$ALLOWED_REPO" && "$digest" =~ ^[0-9a-f]{64}$ ]] ||
+        die "expected $ALLOWED_REPO@sha256:<digest>, got '${image:0:200}'"
+
+      for key in DATABASE_URL_APP DATABASE_URL_DASHBOARD TOKEN_PEPPER ALLOWED_ORIGINS API_DOMAIN; do
+        grep -Eq "^${key}=.+" "$ENV_FILE" || die "$key is empty in $ENV_FILE (README.md step 5)"
+      done
+
+      exec 9>/run/lock/sojourner-deploy
+      flock -n 9 || die "another deploy is running"
+
+      work="$(mktemp -d)"
+      trap 'rm -rf "$work"' EXIT
+      # Registry credentials live in $work only, and are deleted on exit.
+      export DOCKER_CONFIG="$work/docker"
+
+      # Extract only the named files, from at most 1 MB of input.
+      head -c 1048576 | tar -xf - -C "$work" --no-same-owner --no-same-permissions "${BUNDLE_FILES[@]}" ||
+        die "bad bundle on stdin"
+
+      docker login ghcr.io --username "$(cat "$work/registry-user")" --password-stdin \
+        < "$work/registry-token" >/dev/null
+      docker pull --quiet "$image" >/dev/null
+      # A local tag keeps the image from being pruned while it's the current or previous release.
+      docker tag "$image" "sojourner-api:${digest:0:12}"
+
+      compose_up() {
+        API_IMAGE="$1" docker compose --project-directory "$APP_DIR" -f "$APP_DIR/docker-compose.yml" \
+          --env-file "$ENV_FILE" up -d --remove-orphans --wait --wait-timeout 120
+      }
+
+      mkdir -p "$APP_DIR"
+      previous=""
+      if [[ -f "$APP_DIR/current-image" ]]; then
+        previous="$(cat "$APP_DIR/current-image")"
+        rm -rf "$APP_DIR/previous"
+        mkdir "$APP_DIR/previous"
+        cp "$APP_DIR/docker-compose.yml" "$APP_DIR/Caddyfile" "$APP_DIR/current-image" "$APP_DIR/previous/"
+      fi
+
+      install -m 0644 "$work/docker-compose.yml" "$work/Caddyfile" "$APP_DIR/"
+      echo "$image" > "$APP_DIR/current-image"
+      chmod 0644 "$APP_DIR/current-image"
+
+      if ! compose_up "$image"; then
+        echo "sojourner-deploy: new release failed its health check. Last api logs:" >&2
+        API_IMAGE="$image" docker compose --project-directory "$APP_DIR" -f "$APP_DIR/docker-compose.yml" \
+          --env-file "$ENV_FILE" logs --tail 50 api >&2 || true
+        if [[ -n "$previous" ]]; then
+          echo "sojourner-deploy: rolling back to $previous" >&2
+          cp "$APP_DIR/previous/"* "$APP_DIR/"
+          compose_up "$previous" || echo "sojourner-deploy: rollback failed too" >&2
+        fi
+        exit 1
+      fi
+
+      # Keep the current and previous releases; drop older ones and unused images.
+      keep=" ${digest:0:12} "
+      if [[ -n "$previous" ]]; then
+        previous_digest="${previous#*@sha256:}"
+        keep+="${previous_digest:0:12} "
+      fi
+      for tag in $(docker images sojourner-api --format '{{.Tag}}'); do
+        [[ "$keep" == *" $tag "* ]] || docker rmi "sojourner-api:$tag" >/dev/null || true
+      done
+      docker image prune -f >/dev/null
+
+      echo "sojourner-deploy: deployed $image"
+
+runcmd:
+  - visudo -cf /etc/sudoers.d/sojourner-deploy
+  - systemctl restart ssh
+  - systemctl enable --now docker
+  - install -d -m 0755 /opt/sojourner

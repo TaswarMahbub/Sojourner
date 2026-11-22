@@ -1,0 +1,44 @@
+# Local stack: TimescaleDB + API. Secrets come from backend/cloud/.env (git-ignored).
+#   cd backend/cloud && docker compose up --build
+name: sojourner-cloud
+
+services:
+  db:
+    image: timescale/timescaledb:latest-pg17
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set in .env}
+      DASHBOARD_DB_PASSWORD: ${DASHBOARD_DB_PASSWORD:?set in .env}
+      TIMESCALEDB_TELEMETRY: "off"
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      # Run once, in name order, on an empty volume.
+      - ../db/schema.sql:/docker-entrypoint-initdb.d/100_schema.sql:ro
+      - ./sql/cloud_schema.sql:/docker-entrypoint-initdb.d/110_cloud_schema.sql:ro
+      - ./docker/120_local_roles.sh:/docker-entrypoint-initdb.d/120_local_roles.sh:ro
+    healthcheck:
+      # TCP, not the socket: the init-time server listens on the socket only.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  api:
+    build:
+      context: ../..
+      dockerfile: backend/cloud/Dockerfile
+    environment:
+      DATABASE_URL_APP: postgresql://sojourner_app:${APP_DB_PASSWORD}@db:5432/postgres
+      DATABASE_URL_DASHBOARD: postgresql://demo_dashboard:${DASHBOARD_DB_PASSWORD}@db:5432/postgres
+      TOKEN_PEPPER: ${TOKEN_PEPPER:?set in .env}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173}
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db-data:
