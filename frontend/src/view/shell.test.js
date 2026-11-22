@@ -219,8 +219,9 @@ describe('ceiling', () => {
       expect(hit.object.name).toBe(`${h.id}_diffuser`)
       expect(hit.point.y).toBeGreaterThan(CEILING_HEIGHT_M + 0.05)
     }
-    // Centred in the corridor.
-    expect((t[0].cx + t[3].cx) / 2).toBeCloseTo((W.bounds.x0 + W.bounds.x1) / 2, 12)
+    // Phased so one trough is centred on the doorway: the far reveal face is lit head-on.
+    expect(t.map((h) => h.cx)).toEqual([1.5, 4.5, 7.5, 10.5])
+    expect(t.some((h) => Math.abs(h.cx - W.doorway.centreX) < 1e-12)).toBe(true)
   })
 
   it('tee runs never cross a housing opening', () => {

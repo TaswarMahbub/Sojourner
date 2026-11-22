@@ -77,13 +77,17 @@ export function roomRect(world) {
   return { x0: Math.min(...rx), x1: Math.max(...rx), y0: Math.min(...ry), y1: Math.max(...ry) }
 }
 
-/** Trough housings: TROUGH_M.count along the corridor centreline, every TROUGH_M.spacing, centred. */
+/**
+ * Trough housings: TROUGH_M.count along the corridor centreline, every TROUGH_M.spacing, phased so
+ * one trough is centred on the doorway (x = 1.5, 4.5, 7.5, 10.5). That trough sits square in front
+ * of the far jamb's reveal face — the face the camera sees head-on on the approach — so the reveal
+ * reads brighter than the wall beside it, which it lights only at a grazing angle (handoff T5.6).
+ */
 export function troughLayout(world) {
-  const { x0, x1 } = world.bounds
-  const mid = (x0 + x1) / 2
   const n = TROUGH_M.count
+  const k0 = Math.ceil((world.bounds.x0 + TROUGH_M.length / 2 - world.doorway.centreX) / TROUGH_M.spacing)
   return Array.from({ length: n }, (_, i) => {
-    const cx = mid + (i - (n - 1) / 2) * TROUGH_M.spacing
+    const cx = world.doorway.centreX + (k0 + i) * TROUGH_M.spacing
     return { id: `trough_${i}`, cx, cy: 0, x0: cx - TROUGH_M.length / 2, x1: cx + TROUGH_M.length / 2, y0: -TROUGH_M.width / 2, y1: TROUGH_M.width / 2 }
   })
 }
