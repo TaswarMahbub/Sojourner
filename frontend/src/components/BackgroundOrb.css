@@ -1,0 +1,70 @@
+/* The background orb: fixed behind everything, decorative, never interactive. Theme variables only.
+   It sits below the page header, behind the panels, so no text lies directly over it: panel text
+   is on the glass surface, which keeps its contrast (see themes.css). */
+.orb {
+  position: fixed;
+  z-index: 0;
+  top: max(30vh, 220px);
+  right: -12vmin;
+  width: min(62vmin, 560px);
+  aspect-ratio: 1;
+  pointer-events: none;
+}
+.orb__float {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  /* A slow float: 22 s there and back, transform only. Paused with the shader. */
+  animation: orb-float 22s var(--ease) infinite alternate;
+}
+.orb--still .orb__float { animation-play-state: paused; }
+.orb__canvas { position: relative; z-index: 1; width: 100%; height: 100%; display: block; }
+/* A light shadow on the "floor" below the orb. */
+.orb__shadow {
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  bottom: -9%;
+  height: 12%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--color-orb-shadow), transparent);
+  filter: blur(6px);
+}
+/* No WebGL: a still, painted stand-in in the same tones. */
+.orb--fallback .orb__canvas {
+  border-radius: 50%;
+  opacity: var(--orb-max-alpha, 0.45);
+  background:
+    radial-gradient(circle at 34% 30%, var(--color-orb-c), transparent 55%),
+    radial-gradient(circle at 70% 72%, var(--color-orb-b), transparent 60%),
+    var(--color-orb-a);
+}
+
+/* The drift only moves the orb down and left, away from the header above it. */
+@keyframes orb-float {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(-4vmin, 5vmin, 0) scale(1.04); }
+}
+
+/* Background motion lasts longer than five seconds, so it can be paused (WCAG 2.2.2). The control
+   sits in the page flow after the dashboard, so it never covers content. */
+.orb__footer {
+  position: relative;
+  z-index: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 var(--space-6) var(--space-8);
+  display: flex;
+  justify-content: flex-end;
+}
+.orb__toggle {
+  font-size: 0.85rem;
+  background: var(--color-surface-glass);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+/* On a phone the header is taller, so the orb starts lower. */
+@media (max-width: 30rem) {
+  .orb { width: 86vmin; top: max(46vh, 360px); right: -26vmin; }
+}
