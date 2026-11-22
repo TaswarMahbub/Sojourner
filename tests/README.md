@@ -7,7 +7,7 @@ This directory holds the schema 4 checks for `docs/contracts.md`. Application ar
 Run the checks from the repository root:
 
 ```bash
-python3 -m pip install -r tests/requirements.txt
+python3 -m pip install -r requirements.txt
 python3 -m pytest tests
 ```
 

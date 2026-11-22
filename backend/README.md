@@ -1,5 +1,35 @@
 # Backend
 
+## Which variable points where
+
+Two programs talk to the database, and they read different variables. The names differ on purpose: each variable belongs to one program.
+
+| Program | Variable | Connects as | Set in |
+| --- | --- | --- | --- |
+| `db/tiger_store.py`, and `psql` with `schema.sql` / `queries.sql` | `TIMESCALE_SERVICE_URL` | `sojourner_app` (teammates) or `tsdbadmin` (admin setup) | `backend/db/.env` |
+| Cloud API (`cloud/app/main.py`) | `DATABASE_URL_APP` | `sojourner_app` | Local: built by `cloud/docker-compose.yml` from `backend/cloud/.env`. Vultr: `/etc/sojourner/cloud.env` |
+| Cloud API (`cloud/app/main.py`) | `DATABASE_URL_DASHBOARD` | a login role under `demo_reader` (`demo_dashboard` locally) | same as above |
+| `cloud/scripts/create_token.py` | `DATABASE_URL_ADMIN` | `postgres` (local) or `tsdbadmin` (Tiger Cloud) | your shell, for one command |
+
+The API does not read `TIMESCALE_SERVICE_URL`, and the loader does not read `DATABASE_URL_*`.
+
+There are two databases, and they don't share data:
+
+| Database | URL host | Who uses it |
+| --- | --- | --- |
+| Shared Tiger Cloud | `<host>.tsdb.cloud.timescale.com`, database `tsdb` | Teammates' `backend/db/.env`, and the API on Vultr |
+| Local Docker container | `127.0.0.1:5432`, database `postgres` | The API from `cloud/docker-compose.yml`, for testing only |
+
+- **Data loaded into one isn't visible in the other.** To test the local API with fixtures, point the loader at the local container for that terminal only. Run this from `backend/cloud`, after `docker compose up`:
+
+  ```sh
+  set -a; source .env; set +a
+  export TIMESCALE_SERVICE_URL="postgresql://sojourner_app:$APP_DB_PASSWORD@127.0.0.1:5432/postgres"
+  ```
+
+- **Check before you load.** Run `echo "${TIMESCALE_SERVICE_URL#*@}"`. It prints the host and database without the password. If the host ends in `tsdb.cloud.timescale.com`, you are writing to the shared database. To go back to it after local testing, open a new terminal and run step 4 of the quick start again.
+- **The API needs `cloud/sql/cloud_schema.sql`.** The local container applies it automatically. The shared Tiger Cloud database only has it if the admin ran `psql "$TIMESCALE_SERVICE_URL" -f cloud/sql/cloud_schema.sql` after `schema.sql`.
+
 ## db
 The team shares one Tiger Cloud database (managed Postgres with TimescaleDB). It stores derived channel numbers, cues, calibration metrics, simulator metrics and per-user profiles.
 
@@ -59,7 +89,7 @@ New laptop? Repeat the steps, or copy your `.env` file across privately.
 | `python tiger_store.py report` | Show the latest sessions and per-channel summaries |
 | `python tiger_store.py make-fixture` | Generate two synthetic test sessions in `fixtures/` |
 | `python tiger_store.py load-session ...` | Write one session (frames file + events file) to the database |
-| `python tiger_store.py delete-profile --profile-id <uuid>` | Delete a profile and everything about it |
+| `python tiger_store.py delete-profile --profile-id <uuid>` | Delete a profile and everything about it, including its summary rows (admin connection; prints the leftover count, which should be 0) |
 
 The summaries refresh themselves every minute. `python tiger_store.py refresh` forces it now, but needs the admin connection; `sojourner_app` cannot run it.
 
@@ -117,18 +147,6 @@ Optional flags: `--calibration cal.json`, `--sim-metrics '{"cues_per_metre": 3.1
 ### Setting up the service from scratch
 
 _Only needed if someone creates a new Tiger Cloud service. See `db/README.md`._
-
-1. Create a Tiger Cloud service (the free tier is enough). Keep the downloaded `tiger-cloud-db-*-credentials.env` outside the repo, or at least never `git add -f` it. `.gitignore` covers that name, but an ignored file can still be force-added, and once pushed the password has to be reset.
-2. Apply the schema as the admin: `psql "$TIMESCALE_SERVICE_URL" -f schema.sql` (needs psql; do not run it as one transaction, because continuous aggregates can't be created in one). It's safe to re-run, and re-running restores the structure but never restores deleted data.
-3. Enable the app role and set its password interactively, so the password never lands in a file or your shell history:
-
-   ```sh
-   psql "$TIMESCALE_SERVICE_URL" -c 'ALTER ROLE sojourner_app LOGIN'
-   psql "$TIMESCALE_SERVICE_URL" -c '\password sojourner_app'
-   ```
-
-4. Share the `sojourner_app` URL with the team privately. Keep the admin URL to yourself.
-5. Reset the passwords in the Tiger Cloud console after the hackathon, or immediately if a URL ever leaks.
 
 Public demo: point any public dashboard at a login role under `demo_reader`, never at the admin or app URL. `demo_reader` can only read `demo_session_summary` and `demo_channel_trend`, which show hashed aliases and aggregates for profiles with consent granted and `demo_visible` set.
 

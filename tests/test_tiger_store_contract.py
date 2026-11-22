@@ -269,6 +269,39 @@ def test_contract_file_rows_reports_rejections(tmp_path):
     assert "schema_version" in rejections[0][1]
 
 
+def test_large_finite_matrix_entry_is_rejected_without_raising():
+    # float ** 2 raises OverflowError at this size; the decoder must not.
+    frame = tracking_frame()
+    frame["head_pose"]["matrix"][0][0] = 1e200
+    result = convert(frame)
+    assert result.rows == []
+    assert result.rejection
+
+
+def test_published_angle_outside_range_is_rejected_even_within_tolerance():
+    frame = tracking_frame()
+    frame["head_pose"] = {"matrix": pose_matrix(89.95, 0, 0), "yaw_deg": 90.04,
+                          "pitch_deg": 0, "roll_deg": 0}
+    assert "yaw_deg" in convert(frame).rejection
+
+
+def test_duplicate_key_and_invalid_json_are_rejections_with_true_line_numbers(tmp_path):
+    import json
+
+    good = json.dumps(tracking_frame())
+    dup = good.replace('"schema_version": "4"', '"schema_version": "4", "schema_version": "4"')
+    path = tmp_path / "frames.jsonl"
+    path.write_text("\n".join([good, "", dup, "{not json", good]) + "\n")
+
+    rejections = []
+    rows = list(tiger_store.contract_file_rows(path, SESSION, PROFILE, rejections))
+    assert len(rows) == 2 * (52 + 3)
+    assert [line for line, _ in rejections] == [3, 4]
+    assert "duplicate key" in rejections[0][1]
+    assert "invalid JSON" in rejections[1][1]
+    assert len(tiger_store.contract_file_timestamps(path)) == 2
+
+
 def test_consent_defaults_to_pending():
     import inspect
 
@@ -294,3 +327,63 @@ def test_copy_columns_exist_in_schema(copy_spec):
     defined = {line.split()[0] for line in body.splitlines()
                if line.strip() and not line.strip().startswith(("--", "PRIMARY", "CHECK"))}
     assert set(cols) <= defined, set(cols) - defined
+
+
+def test_minute_window_covers_whole_buckets():
+    lo = datetime(2026, 11, 21, 10, 3, 27, 500000, tzinfo=timezone.utc)
+    hi = datetime(2026, 11, 21, 10, 7, 0, tzinfo=timezone.utc)
+    start, end = tiger_store.minute_window(lo, hi)
+    assert start == datetime(2026, 11, 21, 10, 3, tzinfo=timezone.utc)
+    assert end == datetime(2026, 11, 21, 10, 8, tzinfo=timezone.utc)  # exclusive, includes hi
+
+
+class _FakeConn:
+    """Records statements; no database. Answers the range query and the leftover counts."""
+
+    def __init__(self, log, autocommit, leftover):
+        self.log, self.autocommit, self.leftover = log, autocommit, leftover
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.log.append(("close", self.autocommit))
+        return False
+
+    def execute(self, sql, params=None):
+        word = "range" if "min(lo)" in sql else "count" if "count(*)" in sql else sql.split()[0]
+        self.log.append((word, self.autocommit))
+        conn = self
+
+        class _Result:
+            rowcount = 1
+
+            def fetchone(self):
+                if "min(lo)" in sql:
+                    return (datetime(2026, 11, 21, 10, 3, 27, tzinfo=timezone.utc),
+                            datetime(2026, 11, 21, 10, 7, 1, tzinfo=timezone.utc))
+                return (conn.leftover,)
+        return _Result()
+
+
+@pytest.mark.parametrize("leftover", [0, 3])
+def test_delete_profile_reads_range_deletes_refreshes_then_counts(monkeypatch, capsys, leftover):
+    import argparse
+
+    log = []
+    monkeypatch.setattr(tiger_store, "connect",
+                        lambda autocommit=False: _FakeConn(log, autocommit, leftover))
+    args = argparse.Namespace(profile_id=str(PROFILE))
+    if leftover:
+        with pytest.raises(SystemExit):
+            tiger_store.delete_profile(args)
+    else:
+        tiger_store.delete_profile(args)
+
+    assert log == [
+        ("range", False), ("DELETE", False), ("close", False),     # one transaction
+        ("CALL", True), ("CALL", True),                            # refresh, autocommit
+        ("count", True), ("count", True), ("close", True),
+    ]
+    out = capsys.readouterr().out
+    assert f"leftover signal_summary_1min rows for this profile: {leftover}" in out
