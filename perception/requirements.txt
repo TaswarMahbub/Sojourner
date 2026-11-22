@@ -1,0 +1,4 @@
+websockets>=14
+# Camera source only. mediapipe depends on opencv-contrib-python, which
+# provides cv2, and on numpy; do not also install opencv-python.
+mediapipe>=1.2

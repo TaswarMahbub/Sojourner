@@ -1,0 +1,91 @@
+{
+  "schema_version": "4",
+  "timestamp_ms": 1795276800000,
+  "tracking_state": "tracking",
+  "features": {
+    "_neutral": 0.037759,
+    "browDownLeft": 0.053776,
+    "browDownRight": 0.05995,
+    "browInnerUp": 0.044868,
+    "browOuterUpLeft": 0.03671,
+    "browOuterUpRight": 0.049345,
+    "cheekPuff": 0.05478,
+    "cheekSquintLeft": 0.060982,
+    "cheekSquintRight": 0.037841,
+    "eyeBlinkLeft": 0.037071,
+    "eyeBlinkRight": 0.057059,
+    "eyeLookDownLeft": 0.054741,
+    "eyeLookDownRight": 0.065338,
+    "eyeLookInLeft": 0.059825,
+    "eyeLookInRight": 0.048982,
+    "eyeLookOutLeft": 0.047258,
+    "eyeLookOutRight": 0.075705,
+    "eyeLookUpLeft": 0.047112,
+    "eyeLookUpRight": 0.042151,
+    "eyeSquintLeft": 0.038617,
+    "eyeSquintRight": 0.050955,
+    "eyeWideLeft": 0.051453,
+    "eyeWideRight": 0.046551,
+    "jawForward": 0.049378,
+    "jawLeft": 0.052731,
+    "jawOpen": 0.056924,
+    "jawRight": 0.060968,
+    "mouthClose": 0.052098,
+    "mouthDimpleLeft": 0.032102,
+    "mouthDimpleRight": 0.057017,
+    "mouthFrownLeft": 0.035803,
+    "mouthFrownRight": 0.048286,
+    "mouthFunnel": 0.035262,
+    "mouthLeft": 0.050021,
+    "mouthLowerDownLeft": 0.042214,
+    "mouthLowerDownRight": 0.052139,
+    "mouthPressLeft": 0.083003,
+    "mouthPressRight": 0.049514,
+    "mouthPucker": 0.058423,
+    "mouthRight": 0.036767,
+    "mouthRollLower": 0.047119,
+    "mouthRollUpper": 0.056625,
+    "mouthShrugLower": 0.049073,
+    "mouthShrugUpper": 0.053702,
+    "mouthSmileLeft": 0.051033,
+    "mouthSmileRight": 0.039939,
+    "mouthStretchLeft": 0.055637,
+    "mouthStretchRight": 0.04188,
+    "mouthUpperUpLeft": 0.068718,
+    "mouthUpperUpRight": 0.044948,
+    "noseSneerLeft": 0.056861,
+    "noseSneerRight": 0.050023
+  },
+  "head_pose": {
+    "matrix": [
+      [
+        0.987433,
+        -0.158037,
+        0.0,
+        0.0
+      ],
+      [
+        0.154218,
+        0.96357,
+        0.218519,
+        0.958851
+      ],
+      [
+        -0.034534,
+        -0.215773,
+        0.975833,
+        -45.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "yaw_deg": 0.0,
+    "pitch_deg": 12.622059,
+    "roll_deg": 9.09299
+  },
+  "confidence": null
+}
