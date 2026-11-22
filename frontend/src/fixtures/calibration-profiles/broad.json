@@ -1,0 +1,2522 @@
+{
+  "record_type": "calibration_profile",
+  "schema_version": 1,
+  "user_id": "test",
+  "session_id": "synthetic",
+  "source": "synthetic",
+  "measured": false,
+  "created_from_recording_started_ms": 1795276800000,
+  "session_quality": "ok",
+  "rest_quality": "ok",
+  "rest_quality_responsible_channels": {},
+  "lighting_quality": "ok",
+  "lighting_quality_detail": {
+    "status": "ok",
+    "brightness_min": 130.0,
+    "brightness_max": 130.0,
+    "brightness_median": 130.0,
+    "brightness_mean": 130.0,
+    "still_segment_brightness_min": 130.0,
+    "still_segment_brightness_max": 130.0,
+    "still_segment_brightness_ratio": 1.0,
+    "max_ratio": 1.2,
+    "still_segment_frame_rate_min_hz": 30.303030303030305,
+    "still_segment_frame_rate_max_hz": 30.303030303030305,
+    "basis": "median brightness of still segments (warm-up, probe rests, final rest), whole image, BT.601 luma 0-255"
+  },
+  "proposed_tier": {
+    "tier": 1,
+    "mode": "proportional",
+    "reason": "6 independent usable channels, 5 with broad repeatable range (snr >= 50, cv <= 0.25): jawOpen, browInnerUp, yaw_deg, mouthSmileLeft, roll_deg"
+  },
+  "stop_binding": {
+    "min_latency_repetitions": 2,
+    "stop_path": "The hardware cutoff and the signal-loss stop remain the stop path. Neither depends on a calibrated channel, so they stop the rover whether or not a channel is bound to Stop.",
+    "channel": "pitch_deg",
+    "latency_ms_median": 164,
+    "latency_repetitions": 3,
+    "reason": "lowest median latency among usable channels with 2 or more latency repetitions"
+  },
+  "accepted": null,
+  "confirm": null,
+  "bindings": [
+    {
+      "channel": "jawOpen",
+      "role": "proportional_primary",
+      "unit": "score",
+      "probe": "jaw",
+      "direction": 1,
+      "rest_mean": 0.02018352374475136,
+      "rest_std": 0.0042331473742657465,
+      "effective_std": 0.0042331473742657465,
+      "threshold": {
+        "k": 5.0,
+        "offset": 0.025,
+        "lower": -0.004816476255248642,
+        "upper": 0.04518352374475136,
+        "active": 0.04518352374475136,
+        "floor_offset": 0.025,
+        "floored": true
+      },
+      "deadband": {
+        "k": 3.0,
+        "offset": 0.015000000000000003,
+        "lower": 0.005183523744751357,
+        "upper": 0.035183523744751366
+      },
+      "usable_range": 0.5532891909310991,
+      "extreme": 0.5734727146758505
+    },
+    {
+      "channel": "browInnerUp",
+      "role": "proportional_secondary",
+      "unit": "score",
+      "probe": "brows",
+      "direction": 1,
+      "rest_mean": 0.020210413209330605,
+      "rest_std": 0.003775657624323375,
+      "effective_std": 0.003775657624323375,
+      "threshold": {
+        "k": 5.0,
+        "offset": 0.025,
+        "lower": -0.0047895867906693965,
+        "upper": 0.045210413209330606,
+        "active": 0.045210413209330606,
+        "floor_offset": 0.025,
+        "floored": true
+      },
+      "deadband": {
+        "k": 3.0,
+        "offset": 0.015000000000000003,
+        "lower": 0.005210413209330602,
+        "upper": 0.035210413209330604
+      },
+      "usable_range": 0.4536988312946714,
+      "extreme": 0.473909244504002
+    },
+    {
+      "channel": "yaw_deg",
+      "role": "discrete",
+      "unit": "deg",
+      "probe": "turn",
+      "direction": 1,
+      "rest_mean": -0.024817322118759325,
+      "rest_std": 0.2933473588652154,
+      "effective_std": 0.2933473588652154,
+      "threshold": {
+        "k": 5.0,
+        "offset": 2.0,
+        "lower": -2.0248173221187593,
+        "upper": 1.9751826778812407,
+        "active": 1.9751826778812407,
+        "floor_offset": 2.0,
+        "floored": true
+      },
+      "deadband": {
+        "k": 3.0,
+        "offset": 1.2,
+        "lower": -1.2248173221187593,
+        "upper": 1.1751826778812406
+      },
+      "usable_range": 29.247416761012598,
+      "extreme": 29.222599438893837
+    },
+    {
+      "channel": "mouthSmileLeft",
+      "role": "discrete",
+      "unit": "score",
+      "probe": "smile",
+      "direction": 1,
+      "rest_mean": 0.020093087873858422,
+      "rest_std": 0.004018496014369523,
+      "effective_std": 0.004018496014369523,
+      "threshold": {
+        "k": 5.0,
+        "offset": 0.025,
+        "lower": -0.004906912126141579,
+        "upper": 0.04509308787385842,
+        "active": 0.04509308787385842,
+        "floor_offset": 0.025,
+        "floored": true
+      },
+      "deadband": {
+        "k": 3.0,
+        "offset": 0.015000000000000003,
+        "lower": 0.005093087873858419,
+        "upper": 0.035093087873858425
+      },
+      "usable_range": 0.4030121899813835,
+      "extreme": 0.42310527785524193
+    },
+    {
+      "channel": "roll_deg",
+      "role": "discrete",
+      "unit": "deg",
+      "probe": "tilt",
+      "direction": 1,
+      "rest_mean": 0.026979880053246804,
+      "rest_std": 0.30918983642319425,
+      "effective_std": 0.30918983642319425,
+      "threshold": {
+        "k": 5.0,
+        "offset": 2.0,
+        "lower": -1.9730201199467532,
+        "upper": 2.0269798800532466,
+        "active": 2.0269798800532466,
+        "floor_offset": 2.0,
+        "floored": true
+      },
+      "deadband": {
+        "k": 3.0,
+        "offset": 1.2,
+        "lower": -1.1730201199467531,
+        "upper": 1.2269798800532468
+      },
+      "usable_range": 16.499051351903546,
+      "extreme": 16.526031231956793
+    },
+    {
+      "channel": "pitch_deg",
+      "role": "discrete",
+      "unit": "deg",
+      "probe": "nod",
+      "direction": 1,
+      "rest_mean": 9.801862112602226,
+      "rest_std": 0.3128463150503964,
+      "effective_std": 0.3128463150503964,
+      "threshold": {
+        "k": 5.0,
+        "offset": 2.0,
+        "lower": 7.801862112602226,
+        "upper": 11.801862112602226,
+        "active": 11.801862112602226,
+        "floor_offset": 2.0,
+        "floored": true
+      },
+      "deadband": {
+        "k": 3.0,
+        "offset": 1.2,
+        "lower": 8.601862112602227,
+        "upper": 11.001862112602225
+      },
+      "usable_range": 14.875451610710723,
+      "extreme": 24.67731372331295
+    }
+  ],
+  "thresholds": {
+    "browInnerUp": {
+      "threshold": {
+        "k": 5.0,
+        "offset": 0.025,
+        "lower": -0.0047895867906693965,
+        "upper": 0.045210413209330606,
+        "active": 0.045210413209330606,
+        "floor_offset": 0.025,
+        "floored": true
+      },
+      "deadband": {
+        "k": 3.0,
+        "offset": 0.015000000000000003,
+        "lower": 0.005210413209330602,
+        "upper": 0.035210413209330604
+      },
+      "rest_mean": 0.020210413209330605
+    },
+    "browOuterUpLeft": {
+      "threshold": {
+        "k": 5.0,
+        "offset": 0.025,
+        "lower": -0.005045329437533632,
+        "upper": 0.04495467056246637,
+        "active": 0.04495467056246637,
+        "floor_offset": 0.025,
+        "floored": true
+      },
+      "deadband": {
+        "k": 3.0,
+        "offset": 0.015000000000000003,
+        "lower": 0.0049546705624663664,
+        "upper": 0.03495467056246637
+      },
+      "rest_mean": 0.01995467056246637
+    },
+    "browOuterUpRight": {
+      "threshold": {
+        "k": 5.0,
+        "offset": 0.025,
+        "lower": -0.005110045373422339,
+        "upper": 0.04488995462657766,
+        "active": -0.005110045373422339,
+        "floor_offset": 0.025,
+        "floored": true
+      },
+      "deadband": {
+        "k": 3.0,
+        "offset": 0.015000000000000003,
+        "lower": 0.00488995462657766,
+        "upper": 0.034889954626577666
+      },
+      "rest_mean": 0.019889954626577663
+    },
+    "jawOpen": {
+      "threshold": {
+        "k": 5.0,
+        "offset": 0.025,
+        "lower": -0.004816476255248642,
+        "upper": 0.04518352374475136,
+        "active": 0.04518352374475136,
+        "floor_offset": 0.025,
+        "floored": true
+      },
+      "deadband": {
+        "k": 3.0,
+        "offset": 0.015000000000000003,
+        "lower": 0.005183523744751357,
+        "upper": 0.035183523744751366
+      },
+      "rest_mean": 0.02018352374475136
+    },
+    "mouthSmileLeft": {
+      "threshold": {
+        "k": 5.0,
+        "offset": 0.025,
+        "lower": -0.004906912126141579,
+        "upper": 0.04509308787385842,
+        "active": 0.04509308787385842,
+        "floor_offset": 0.025,
+        "floored": true
+      },
+      "deadband": {
+        "k": 3.0,
+        "offset": 0.015000000000000003,
+        "lower": 0.005093087873858419,
+        "upper": 0.035093087873858425
+      },
+      "rest_mean": 0.020093087873858422
+    },
+    "mouthSmileRight": {
+      "threshold": {
+        "k": 5.0,
+        "offset": 0.025,
+        "lower": -0.004710638508720166,
+        "upper": 0.045289361491279836,
+        "active": -0.004710638508720166,
+        "floor_offset": 0.025,
+        "floored": true
+      },
+      "deadband": {
+        "k": 3.0,
+        "offset": 0.015000000000000003,
+        "lower": 0.005289361491279832,
+        "upper": 0.03528936149127984
+      },
+      "rest_mean": 0.020289361491279835
+    },
+    "yaw_deg": {
+      "threshold": {
+        "k": 5.0,
+        "offset": 2.0,
+        "lower": -2.0248173221187593,
+        "upper": 1.9751826778812407,
+        "active": 1.9751826778812407,
+        "floor_offset": 2.0,
+        "floored": true
+      },
+      "deadband": {
+        "k": 3.0,
+        "offset": 1.2,
+        "lower": -1.2248173221187593,
+        "upper": 1.1751826778812406
+      },
+      "rest_mean": -0.024817322118759325
+    },
+    "pitch_deg": {
+      "threshold": {
+        "k": 5.0,
+        "offset": 2.0,
+        "lower": 7.801862112602226,
+        "upper": 11.801862112602226,
+        "active": 11.801862112602226,
+        "floor_offset": 2.0,
+        "floored": true
+      },
+      "deadband": {
+        "k": 3.0,
+        "offset": 1.2,
+        "lower": 8.601862112602227,
+        "upper": 11.001862112602225
+      },
+      "rest_mean": 9.801862112602226
+    },
+    "roll_deg": {
+      "threshold": {
+        "k": 5.0,
+        "offset": 2.0,
+        "lower": -1.9730201199467532,
+        "upper": 2.0269798800532466,
+        "active": 2.0269798800532466,
+        "floor_offset": 2.0,
+        "floored": true
+      },
+      "deadband": {
+        "k": 3.0,
+        "offset": 1.2,
+        "lower": -1.1730201199467531,
+        "upper": 1.2269798800532468
+      },
+      "rest_mean": 0.026979880053246804
+    }
+  },
+  "lighting": {
+    "warmup_brightness": {
+      "mean": 130.0,
+      "min": 129.0,
+      "max": 131.0
+    },
+    "warmup_frame_rate_hz": 30.3,
+    "session_brightness_mean": 130.0,
+    "session_brightness_min": 130.0,
+    "session_brightness_max": 130.0,
+    "session_brightness_median": 130.0,
+    "session_frame_rate_hz": 30.303030303030305,
+    "valid_only_for_measured_lighting": true
+  },
+  "enrolment_metrics": {
+    "channels": {
+      "browInnerUp": {
+        "channel": "browInnerUp",
+        "unit": "score",
+        "probe": "brows",
+        "rest": {
+          "mean": 0.020210413209330605,
+          "std": 0.003775657624323375,
+          "noise_floor": 5e-07,
+          "effective_std": 0.003775657624323375,
+          "frames": 273,
+          "window_ms": [
+            1795276846000,
+            1795276855000
+          ],
+          "segment": "rest_baseline"
+        },
+        "session_frames": 1667,
+        "session_zero_variance": false,
+        "threshold": {
+          "k": 5.0,
+          "offset": 0.025,
+          "lower": -0.0047895867906693965,
+          "upper": 0.045210413209330606,
+          "active": 0.045210413209330606,
+          "floor_offset": 0.025,
+          "floored": true
+        },
+        "deadband": {
+          "k": 3.0,
+          "offset": 0.015000000000000003,
+          "lower": 0.005210413209330602,
+          "upper": 0.035210413209330604
+        },
+        "direction": 1,
+        "usable_range": 0.4536988312946714,
+        "extreme": 0.473909244504002,
+        "snr": 120.16418765617752,
+        "repetitions": [
+          {
+            "repetition": 1,
+            "prompt_issued_ms": 1795276815000,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 0.4536988312946714,
+            "sign": 1,
+            "observed_peak": 0.4536988312946714,
+            "latency_ms": 180,
+            "latency_excluded": null
+          },
+          {
+            "repetition": 2,
+            "prompt_issued_ms": 1795276816400,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 0.47350689866279544,
+            "sign": 1,
+            "observed_peak": 0.47350689866279544,
+            "latency_ms": 166,
+            "latency_excluded": null
+          },
+          {
+            "repetition": 3,
+            "prompt_issued_ms": 1795276817800,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 0.4401349207421633,
+            "sign": 1,
+            "observed_peak": 0.4401349207421633,
+            "latency_ms": 152,
+            "latency_excluded": null
+          }
+        ],
+        "repetition_counts": {
+          "counted": 3,
+          "latency": 3,
+          "missed": 0,
+          "latency_excluded": {
+            "not_below_threshold_at_prompt": 0,
+            "anticipatory": 0
+          }
+        },
+        "repeatability_cv": 0.036822720250491464,
+        "latency_ms_median": 166,
+        "fatigue_drift": {
+          "first_repetition": 1,
+          "last_repetition": 3,
+          "first_repetition_peak": 0.4536988312946714,
+          "last_repetition_peak": 0.4401349207421633,
+          "absolute": -0.013563910552508107,
+          "relative": -0.02989628717755838
+        },
+        "false_positives": {
+          "crossings": 0,
+          "held_out_periods": 5,
+          "held_out_frames": 122,
+          "held_out_seconds": 4.0,
+          "per_minute": 0.0,
+          "threshold_source": "rest_baseline",
+          "evaluated_on": "probe_rest",
+          "qualifying_windows": [
+            [
+              1795276823700,
+              1795276825000,
+              "jaw"
+            ],
+            [
+              1795276828700,
+              1795276830000,
+              "smile"
+            ],
+            [
+              1795276833700,
+              1795276835000,
+              "turn"
+            ],
+            [
+              1795276838700,
+              1795276840000,
+              "nod"
+            ],
+            [
+              1795276843700,
+              1795276845000,
+              "tilt"
+            ]
+          ],
+          "excluded_windows": [
+            {
+              "probe": "brows",
+              "start_ms": 1795276818700,
+              "reason": "own_probe"
+            }
+          ]
+        },
+        "free_exploration_peak": {
+          "peak": 0.009822711064696536,
+          "sign": -1,
+          "snr": 2.6015894559446013
+        },
+        "independence": {
+          "correlations": {
+            "browOuterUpLeft": 0.015189379513119817,
+            "browOuterUpRight": -0.0074533860902696175,
+            "jawOpen": -0.041485614257058955,
+            "mouthSmileLeft": -0.04336349331461436,
+            "mouthSmileRight": 0.01759251464362061,
+            "yaw_deg": -0.04412610399903357,
+            "pitch_deg": -0.040286337558661595,
+            "roll_deg": -0.04337287753839394
+          },
+          "max_abs_r": 0.04412610399903357,
+          "max_with": "yaw_deg",
+          "outside_cluster_max_abs_r": 0.04412610399903357,
+          "cluster": [
+            "browInnerUp"
+          ]
+        },
+        "rest_quality": {
+          "reasons": [],
+          "halves": {
+            "first_mean": 0.020224291703367273,
+            "second_mean": 0.02019643266754367,
+            "first_std": 0.0035141367469295657,
+            "second_std": 0.004035015519461154,
+            "shift": 2.7859035823602635e-05,
+            "shift_over_quiet_std": 0.007927703965403205,
+            "std_ratio": 1.1482238199713486
+          },
+          "probe_rests": {
+            "median_std": 0.0033766218906281734,
+            "final_rest_median_window_std": 0.0037517464790278185,
+            "window_ms": 800,
+            "probe_segments": 5,
+            "final_rest_windows": 11,
+            "std_ratio": 1.1110946385323168
+          }
+        }
+      },
+      "browOuterUpLeft": {
+        "channel": "browOuterUpLeft",
+        "unit": "score",
+        "probe": "brows",
+        "rest": {
+          "mean": 0.01995467056246637,
+          "std": 0.003975474308106748,
+          "noise_floor": 5e-07,
+          "effective_std": 0.003975474308106748,
+          "frames": 273,
+          "window_ms": [
+            1795276846000,
+            1795276855000
+          ],
+          "segment": "rest_baseline"
+        },
+        "session_frames": 1667,
+        "session_zero_variance": false,
+        "threshold": {
+          "k": 5.0,
+          "offset": 0.025,
+          "lower": -0.005045329437533632,
+          "upper": 0.04495467056246637,
+          "active": 0.04495467056246637,
+          "floor_offset": 0.025,
+          "floored": true
+        },
+        "deadband": {
+          "k": 3.0,
+          "offset": 0.015000000000000003,
+          "lower": 0.0049546705624663664,
+          "upper": 0.03495467056246637
+        },
+        "direction": 1,
+        "usable_range": 0.004357571432309162,
+        "extreme": 0.02431224199477553,
+        "snr": 1.0961135941498212,
+        "repetitions": [
+          {
+            "repetition": 1,
+            "prompt_issued_ms": 1795276815000,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 0.004357571432309162,
+            "sign": 1,
+            "observed_peak": 0.004357571432309162,
+            "latency_ms": null,
+            "latency_excluded": null
+          },
+          {
+            "repetition": 2,
+            "prompt_issued_ms": 1795276816400,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 0.00541816599916357,
+            "sign": 1,
+            "observed_peak": 0.00541816599916357,
+            "latency_ms": null,
+            "latency_excluded": null
+          },
+          {
+            "repetition": 3,
+            "prompt_issued_ms": 1795276817800,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 0.003993647884638685,
+            "sign": -1,
+            "observed_peak": 0.003993647884638685,
+            "latency_ms": null,
+            "latency_excluded": null
+          }
+        ],
+        "repetition_counts": {
+          "counted": 3,
+          "latency": 0,
+          "missed": 0,
+          "latency_excluded": {
+            "not_below_threshold_at_prompt": 0,
+            "anticipatory": 0
+          }
+        },
+        "repeatability_cv": 0.1612506222656606,
+        "latency_ms_median": null,
+        "fatigue_drift": {
+          "first_repetition": 1,
+          "last_repetition": 3,
+          "first_repetition_peak": 0.004357571432309162,
+          "last_repetition_peak": 0.003993647884638685,
+          "absolute": -0.00036392354767047705,
+          "relative": -0.08351522248658283
+        },
+        "false_positives": {
+          "crossings": 0,
+          "held_out_periods": 5,
+          "held_out_frames": 122,
+          "held_out_seconds": 4.0,
+          "per_minute": 0.0,
+          "threshold_source": "rest_baseline",
+          "evaluated_on": "probe_rest",
+          "qualifying_windows": [
+            [
+              1795276823700,
+              1795276825000,
+              "jaw"
+            ],
+            [
+              1795276828700,
+              1795276830000,
+              "smile"
+            ],
+            [
+              1795276833700,
+              1795276835000,
+              "turn"
+            ],
+            [
+              1795276838700,
+              1795276840000,
+              "nod"
+            ],
+            [
+              1795276843700,
+              1795276845000,
+              "tilt"
+            ]
+          ],
+          "excluded_windows": [
+            {
+              "probe": "brows",
+              "start_ms": 1795276818700,
+              "reason": "own_probe"
+            }
+          ]
+        },
+        "free_exploration_peak": {
+          "peak": 0.008074078781876926,
+          "sign": -1,
+          "snr": 2.030972446586397
+        },
+        "independence": {
+          "correlations": {
+            "browInnerUp": 0.015189379513119817,
+            "browOuterUpRight": 0.015110054642771424,
+            "jawOpen": 0.0017098643657667242,
+            "mouthSmileLeft": 0.03594872798205208,
+            "mouthSmileRight": -0.004216176267360362,
+            "yaw_deg": 0.005981082992990687,
+            "pitch_deg": 0.012019025282055312,
+            "roll_deg": -0.00026872873773813066
+          },
+          "max_abs_r": 0.03594872798205208,
+          "max_with": "mouthSmileLeft",
+          "outside_cluster_max_abs_r": 0.03594872798205208,
+          "cluster": [
+            "browOuterUpLeft"
+          ]
+        },
+        "rest_quality": {
+          "reasons": [],
+          "halves": {
+            "first_mean": 0.019933017662681986,
+            "second_mean": 0.019976482674749163,
+            "first_std": 0.003994982594634617,
+            "second_std": 0.003970373880799313,
+            "shift": 4.3465012067176595e-05,
+            "shift_over_quiet_std": 0.010947334778060308,
+            "std_ratio": 1.0061980847582923
+          },
+          "probe_rests": {
+            "median_std": 0.0040746094697167445,
+            "final_rest_median_window_std": 0.00399199221077761,
+            "window_ms": 800,
+            "probe_segments": 5,
+            "final_rest_windows": 11,
+            "std_ratio": 1.0206957465287843
+          }
+        }
+      },
+      "browOuterUpRight": {
+        "channel": "browOuterUpRight",
+        "unit": "score",
+        "probe": "brows",
+        "rest": {
+          "mean": 0.019889954626577663,
+          "std": 0.003862330785629576,
+          "noise_floor": 5e-07,
+          "effective_std": 0.003862330785629576,
+          "frames": 273,
+          "window_ms": [
+            1795276846000,
+            1795276855000
+          ],
+          "segment": "rest_baseline"
+        },
+        "session_frames": 1667,
+        "session_zero_variance": false,
+        "threshold": {
+          "k": 5.0,
+          "offset": 0.025,
+          "lower": -0.005110045373422339,
+          "upper": 0.04488995462657766,
+          "active": -0.005110045373422339,
+          "floor_offset": 0.025,
+          "floored": true
+        },
+        "deadband": {
+          "k": 3.0,
+          "offset": 0.015000000000000003,
+          "lower": 0.00488995462657766,
+          "upper": 0.034889954626577666
+        },
+        "direction": -1,
+        "usable_range": 0.006179694188489512,
+        "extreme": 0.013710260438088151,
+        "snr": 1.599990920374314,
+        "repetitions": [
+          {
+            "repetition": 1,
+            "prompt_issued_ms": 1795276815000,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 0.006179694188489512,
+            "sign": -1,
+            "observed_peak": 0.006179694188489512,
+            "latency_ms": null,
+            "latency_excluded": null
+          },
+          {
+            "repetition": 2,
+            "prompt_issued_ms": 1795276816400,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 0.006658234180954287,
+            "sign": -1,
+            "observed_peak": 0.006658234180954287,
+            "latency_ms": null,
+            "latency_excluded": null
+          },
+          {
+            "repetition": 3,
+            "prompt_issued_ms": 1795276817800,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 0.004851829347064629,
+            "sign": -1,
+            "observed_peak": 0.004851829347064629,
+            "latency_ms": null,
+            "latency_excluded": null
+          }
+        ],
+        "repetition_counts": {
+          "counted": 3,
+          "latency": 0,
+          "missed": 0,
+          "latency_excluded": {
+            "not_below_threshold_at_prompt": 0,
+            "anticipatory": 0
+          }
+        },
+        "repeatability_cv": 0.15871701690131262,
+        "latency_ms_median": null,
+        "fatigue_drift": {
+          "first_repetition": 1,
+          "last_repetition": 3,
+          "first_repetition_peak": 0.006179694188489512,
+          "last_repetition_peak": 0.004851829347064629,
+          "absolute": -0.0013278648414248827,
+          "relative": -0.2148754939845089
+        },
+        "false_positives": {
+          "crossings": 0,
+          "held_out_periods": 5,
+          "held_out_frames": 122,
+          "held_out_seconds": 4.0,
+          "per_minute": 0.0,
+          "threshold_source": "rest_baseline",
+          "evaluated_on": "probe_rest",
+          "qualifying_windows": [
+            [
+              1795276823700,
+              1795276825000,
+              "jaw"
+            ],
+            [
+              1795276828700,
+              1795276830000,
+              "smile"
+            ],
+            [
+              1795276833700,
+              1795276835000,
+              "turn"
+            ],
+            [
+              1795276838700,
+              1795276840000,
+              "nod"
+            ],
+            [
+              1795276843700,
+              1795276845000,
+              "tilt"
+            ]
+          ],
+          "excluded_windows": [
+            {
+              "probe": "brows",
+              "start_ms": 1795276818700,
+              "reason": "own_probe"
+            }
+          ]
+        },
+        "free_exploration_peak": {
+          "peak": 0.006679220161771051,
+          "sign": -1,
+          "snr": 1.7293236992083034
+        },
+        "independence": {
+          "correlations": {
+            "browInnerUp": -0.0074533860902696175,
+            "browOuterUpLeft": 0.015110054642771424,
+            "jawOpen": -0.006927667624396822,
+            "mouthSmileLeft": -0.009605635193134471,
+            "mouthSmileRight": 0.023160498245903736,
+            "yaw_deg": -0.01239753311915567,
+            "pitch_deg": -0.04353652623848317,
+            "roll_deg": -0.005707599669544408
+          },
+          "max_abs_r": 0.04353652623848317,
+          "max_with": "pitch_deg",
+          "outside_cluster_max_abs_r": 0.04353652623848317,
+          "cluster": [
+            "browOuterUpRight"
+          ]
+        },
+        "rest_quality": {
+          "reasons": [],
+          "halves": {
+            "first_mean": 0.019828360974085947,
+            "second_mean": 0.019952001173573,
+            "first_std": 0.0038709233256197084,
+            "second_std": 0.003866966647631567,
+            "shift": 0.00012364019948705313,
+            "shift_over_quiet_std": 0.03197343312044857,
+            "std_ratio": 1.0010231994089125
+          },
+          "probe_rests": {
+            "median_std": 0.003565484562190656,
+            "final_rest_median_window_std": 0.0037421919541343394,
+            "window_ms": 800,
+            "probe_segments": 5,
+            "final_rest_windows": 11,
+            "std_ratio": 1.0495605544944817
+          }
+        }
+      },
+      "jawOpen": {
+        "channel": "jawOpen",
+        "unit": "score",
+        "probe": "jaw",
+        "rest": {
+          "mean": 0.02018352374475136,
+          "std": 0.0042331473742657465,
+          "noise_floor": 5e-07,
+          "effective_std": 0.0042331473742657465,
+          "frames": 273,
+          "window_ms": [
+            1795276846000,
+            1795276855000
+          ],
+          "segment": "rest_baseline"
+        },
+        "session_frames": 1667,
+        "session_zero_variance": false,
+        "threshold": {
+          "k": 5.0,
+          "offset": 0.025,
+          "lower": -0.004816476255248642,
+          "upper": 0.04518352374475136,
+          "active": 0.04518352374475136,
+          "floor_offset": 0.025,
+          "floored": true
+        },
+        "deadband": {
+          "k": 3.0,
+          "offset": 0.015000000000000003,
+          "lower": 0.005183523744751357,
+          "upper": 0.035183523744751366
+        },
+        "direction": 1,
+        "usable_range": 0.5532891909310991,
+        "extreme": 0.5734727146758505,
+        "snr": 130.70397555602915,
+        "repetitions": [
+          {
+            "repetition": 1,
+            "prompt_issued_ms": 1795276820000,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 0.5532891909310991,
+            "sign": 1,
+            "observed_peak": 0.5532891909310991,
+            "latency_ms": 163,
+            "latency_excluded": null
+          },
+          {
+            "repetition": 2,
+            "prompt_issued_ms": 1795276821400,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 0.5762940953638158,
+            "sign": 1,
+            "observed_peak": 0.5762940953638158,
+            "latency_ms": 182,
+            "latency_excluded": null
+          },
+          {
+            "repetition": 3,
+            "prompt_issued_ms": 1795276822800,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 0.544499638389069,
+            "sign": 1,
+            "observed_peak": 0.544499638389069,
+            "latency_ms": 168,
+            "latency_excluded": null
+          }
+        ],
+        "repetition_counts": {
+          "counted": 3,
+          "latency": 3,
+          "missed": 0,
+          "latency_excluded": {
+            "not_below_threshold_at_prompt": 0,
+            "anticipatory": 0
+          }
+        },
+        "repeatability_cv": 0.02942207295492287,
+        "latency_ms_median": 168,
+        "fatigue_drift": {
+          "first_repetition": 1,
+          "last_repetition": 3,
+          "first_repetition_peak": 0.5532891909310991,
+          "last_repetition_peak": 0.544499638389069,
+          "absolute": -0.008789552542030066,
+          "relative": -0.01588600082217154
+        },
+        "false_positives": {
+          "crossings": 0,
+          "held_out_periods": 5,
+          "held_out_frames": 123,
+          "held_out_seconds": 4.0,
+          "per_minute": 0.0,
+          "threshold_source": "rest_baseline",
+          "evaluated_on": "probe_rest",
+          "qualifying_windows": [
+            [
+              1795276818700,
+              1795276820000,
+              "brows"
+            ],
+            [
+              1795276828700,
+              1795276830000,
+              "smile"
+            ],
+            [
+              1795276833700,
+              1795276835000,
+              "turn"
+            ],
+            [
+              1795276838700,
+              1795276840000,
+              "nod"
+            ],
+            [
+              1795276843700,
+              1795276845000,
+              "tilt"
+            ]
+          ],
+          "excluded_windows": [
+            {
+              "probe": "jaw",
+              "start_ms": 1795276823700,
+              "reason": "own_probe"
+            }
+          ]
+        },
+        "free_exploration_peak": {
+          "peak": 0.007598360106013641,
+          "sign": 1,
+          "snr": 1.794967062145244
+        },
+        "independence": {
+          "correlations": {
+            "browInnerUp": -0.041485614257058955,
+            "browOuterUpLeft": 0.0017098643657667242,
+            "browOuterUpRight": -0.006927667624396822,
+            "mouthSmileLeft": -0.04185834778750977,
+            "mouthSmileRight": -0.0087856690640004,
+            "yaw_deg": -0.04033466763646396,
+            "pitch_deg": -0.04071209646407893,
+            "roll_deg": -0.04238822202297443
+          },
+          "max_abs_r": 0.04238822202297443,
+          "max_with": "roll_deg",
+          "outside_cluster_max_abs_r": 0.04238822202297443,
+          "cluster": [
+            "jawOpen"
+          ]
+        },
+        "rest_quality": {
+          "reasons": [],
+          "halves": {
+            "first_mean": 0.020472348017924944,
+            "second_mean": 0.01989257576368679,
+            "first_std": 0.004390717777449204,
+            "second_std": 0.0040636694432469415,
+            "shift": 0.0005797722542381541,
+            "shift_over_quiet_std": 0.14267210026190175,
+            "std_ratio": 1.0804810378328766
+          },
+          "probe_rests": {
+            "median_std": 0.0037576935503525343,
+            "final_rest_median_window_std": 0.004168429082092256,
+            "window_ms": 800,
+            "probe_segments": 5,
+            "final_rest_windows": 11,
+            "std_ratio": 1.109305223067269
+          }
+        }
+      },
+      "mouthSmileLeft": {
+        "channel": "mouthSmileLeft",
+        "unit": "score",
+        "probe": "smile",
+        "rest": {
+          "mean": 0.020093087873858422,
+          "std": 0.004018496014369523,
+          "noise_floor": 5e-07,
+          "effective_std": 0.004018496014369523,
+          "frames": 273,
+          "window_ms": [
+            1795276846000,
+            1795276855000
+          ],
+          "segment": "rest_baseline"
+        },
+        "session_frames": 1667,
+        "session_zero_variance": false,
+        "threshold": {
+          "k": 5.0,
+          "offset": 0.025,
+          "lower": -0.004906912126141579,
+          "upper": 0.04509308787385842,
+          "active": 0.04509308787385842,
+          "floor_offset": 0.025,
+          "floored": true
+        },
+        "deadband": {
+          "k": 3.0,
+          "offset": 0.015000000000000003,
+          "lower": 0.005093087873858419,
+          "upper": 0.035093087873858425
+        },
+        "direction": 1,
+        "usable_range": 0.4030121899813835,
+        "extreme": 0.42310527785524193,
+        "snr": 100.28930936854833,
+        "repetitions": [
+          {
+            "repetition": 1,
+            "prompt_issued_ms": 1795276825000,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 0.4030121899813835,
+            "sign": 1,
+            "observed_peak": 0.4030121899813835,
+            "latency_ms": 179,
+            "latency_excluded": null
+          },
+          {
+            "repetition": 2,
+            "prompt_issued_ms": 1795276826400,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 0.4114883387440829,
+            "sign": 1,
+            "observed_peak": 0.4114883387440829,
+            "latency_ms": 165,
+            "latency_excluded": null
+          },
+          {
+            "repetition": 3,
+            "prompt_issued_ms": 1795276827800,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 0.3929243483322414,
+            "sign": 1,
+            "observed_peak": 0.3929243483322414,
+            "latency_ms": 151,
+            "latency_excluded": null
+          }
+        ],
+        "repetition_counts": {
+          "counted": 3,
+          "latency": 3,
+          "missed": 0,
+          "latency_excluded": {
+            "not_below_threshold_at_prompt": 0,
+            "anticipatory": 0
+          }
+        },
+        "repeatability_cv": 0.02309124591177758,
+        "latency_ms_median": 165,
+        "fatigue_drift": {
+          "first_repetition": 1,
+          "last_repetition": 3,
+          "first_repetition_peak": 0.4030121899813835,
+          "last_repetition_peak": 0.3929243483322414,
+          "absolute": -0.010087841649142115,
+          "relative": -0.025031107991071205
+        },
+        "false_positives": {
+          "crossings": 0,
+          "held_out_periods": 5,
+          "held_out_frames": 122,
+          "held_out_seconds": 4.0,
+          "per_minute": 0.0,
+          "threshold_source": "rest_baseline",
+          "evaluated_on": "probe_rest",
+          "qualifying_windows": [
+            [
+              1795276818700,
+              1795276820000,
+              "brows"
+            ],
+            [
+              1795276823700,
+              1795276825000,
+              "jaw"
+            ],
+            [
+              1795276833700,
+              1795276835000,
+              "turn"
+            ],
+            [
+              1795276838700,
+              1795276840000,
+              "nod"
+            ],
+            [
+              1795276843700,
+              1795276845000,
+              "tilt"
+            ]
+          ],
+          "excluded_windows": [
+            {
+              "probe": "smile",
+              "start_ms": 1795276828700,
+              "reason": "own_probe"
+            }
+          ]
+        },
+        "free_exploration_peak": {
+          "peak": 0.006249027368781326,
+          "sign": 1,
+          "snr": 1.5550662104518125
+        },
+        "independence": {
+          "correlations": {
+            "browInnerUp": -0.04336349331461436,
+            "browOuterUpLeft": 0.03594872798205208,
+            "browOuterUpRight": -0.009605635193134471,
+            "jawOpen": -0.04185834778750977,
+            "mouthSmileRight": -0.022434799011375486,
+            "yaw_deg": -0.04021169873245232,
+            "pitch_deg": -0.03985675629755895,
+            "roll_deg": -0.045164346676990264
+          },
+          "max_abs_r": 0.045164346676990264,
+          "max_with": "roll_deg",
+          "outside_cluster_max_abs_r": 0.045164346676990264,
+          "cluster": [
+            "mouthSmileLeft"
+          ]
+        },
+        "rest_quality": {
+          "reasons": [],
+          "halves": {
+            "first_mean": 0.020301401132333665,
+            "second_mean": 0.019883242900247334,
+            "first_std": 0.004162535333601803,
+            "second_std": 0.0038720033492631077,
+            "shift": 0.00041815823208633113,
+            "shift_over_quiet_std": 0.10799531776384234,
+            "std_ratio": 1.0750340219602308
+          },
+          "probe_rests": {
+            "median_std": 0.004100173452435585,
+            "final_rest_median_window_std": 0.0038048607090972043,
+            "window_ms": 800,
+            "probe_segments": 5,
+            "final_rest_windows": 11,
+            "std_ratio": 1.0776146003537803
+          }
+        }
+      },
+      "mouthSmileRight": {
+        "channel": "mouthSmileRight",
+        "unit": "score",
+        "probe": "smile",
+        "rest": {
+          "mean": 0.020289361491279835,
+          "std": 0.004225005205726007,
+          "noise_floor": 5e-07,
+          "effective_std": 0.004225005205726007,
+          "frames": 273,
+          "window_ms": [
+            1795276846000,
+            1795276855000
+          ],
+          "segment": "rest_baseline"
+        },
+        "session_frames": 1667,
+        "session_zero_variance": false,
+        "threshold": {
+          "k": 5.0,
+          "offset": 0.025,
+          "lower": -0.004710638508720166,
+          "upper": 0.045289361491279836,
+          "active": -0.004710638508720166,
+          "floor_offset": 0.025,
+          "floored": true
+        },
+        "deadband": {
+          "k": 3.0,
+          "offset": 0.015000000000000003,
+          "lower": 0.005289361491279832,
+          "upper": 0.03528936149127984
+        },
+        "direction": -1,
+        "usable_range": 0.005493861906098286,
+        "extreme": 0.01479549958518155,
+        "snr": 1.3003207424816046,
+        "repetitions": [
+          {
+            "repetition": 1,
+            "prompt_issued_ms": 1795276825000,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 0.004322907522965158,
+            "sign": -1,
+            "observed_peak": 0.004322907522965158,
+            "latency_ms": null,
+            "latency_excluded": null
+          },
+          {
+            "repetition": 2,
+            "prompt_issued_ms": 1795276826400,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 0.005855742149180308,
+            "sign": 1,
+            "observed_peak": 0.005855742149180308,
+            "latency_ms": null,
+            "latency_excluded": null
+          },
+          {
+            "repetition": 3,
+            "prompt_issued_ms": 1795276827800,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 0.005493861906098286,
+            "sign": -1,
+            "observed_peak": 0.005493861906098286,
+            "latency_ms": null,
+            "latency_excluded": null
+          }
+        ],
+        "repetition_counts": {
+          "counted": 3,
+          "latency": 0,
+          "missed": 0,
+          "latency_excluded": {
+            "not_below_threshold_at_prompt": 0,
+            "anticipatory": 0
+          }
+        },
+        "repeatability_cv": 0.15336694306218673,
+        "latency_ms_median": null,
+        "fatigue_drift": {
+          "first_repetition": 1,
+          "last_repetition": 3,
+          "first_repetition_peak": 0.004322907522965158,
+          "last_repetition_peak": 0.005493861906098286,
+          "absolute": 0.0011709543831331277,
+          "relative": 0.27087194831545913
+        },
+        "false_positives": {
+          "crossings": 0,
+          "held_out_periods": 5,
+          "held_out_frames": 122,
+          "held_out_seconds": 4.0,
+          "per_minute": 0.0,
+          "threshold_source": "rest_baseline",
+          "evaluated_on": "probe_rest",
+          "qualifying_windows": [
+            [
+              1795276818700,
+              1795276820000,
+              "brows"
+            ],
+            [
+              1795276823700,
+              1795276825000,
+              "jaw"
+            ],
+            [
+              1795276833700,
+              1795276835000,
+              "turn"
+            ],
+            [
+              1795276838700,
+              1795276840000,
+              "nod"
+            ],
+            [
+              1795276843700,
+              1795276845000,
+              "tilt"
+            ]
+          ],
+          "excluded_windows": [
+            {
+              "probe": "smile",
+              "start_ms": 1795276828700,
+              "reason": "own_probe"
+            }
+          ]
+        },
+        "free_exploration_peak": {
+          "peak": 0.006393953595894009,
+          "sign": 1,
+          "snr": 1.5133599331968868
+        },
+        "independence": {
+          "correlations": {
+            "browInnerUp": 0.01759251464362061,
+            "browOuterUpLeft": -0.004216176267360362,
+            "browOuterUpRight": 0.023160498245903736,
+            "jawOpen": -0.0087856690640004,
+            "mouthSmileLeft": -0.022434799011375486,
+            "yaw_deg": -0.024134075929799378,
+            "pitch_deg": -0.014652733089900232,
+            "roll_deg": 0.029446408500688304
+          },
+          "max_abs_r": 0.029446408500688304,
+          "max_with": "roll_deg",
+          "outside_cluster_max_abs_r": 0.029446408500688304,
+          "cluster": [
+            "mouthSmileRight"
+          ]
+        },
+        "rest_quality": {
+          "reasons": [],
+          "halves": {
+            "first_mean": 0.020623371553046575,
+            "second_mean": 0.019952895473176576,
+            "first_std": 0.00438713831536998,
+            "second_std": 0.00404338670186088,
+            "shift": 0.0006704760798699992,
+            "shift_over_quiet_std": 0.16582041968961994,
+            "std_ratio": 1.0850157649652694
+          },
+          "probe_rests": {
+            "median_std": 0.0043086682982543,
+            "final_rest_median_window_std": 0.004245783941750705,
+            "window_ms": 800,
+            "probe_segments": 5,
+            "final_rest_windows": 11,
+            "std_ratio": 1.014811011904121
+          }
+        }
+      },
+      "yaw_deg": {
+        "channel": "yaw_deg",
+        "unit": "deg",
+        "probe": "turn",
+        "rest": {
+          "mean": -0.024817322118759325,
+          "std": 0.2933473588652154,
+          "noise_floor": 0.01,
+          "effective_std": 0.2933473588652154,
+          "frames": 273,
+          "window_ms": [
+            1795276846000,
+            1795276855000
+          ],
+          "segment": "rest_baseline"
+        },
+        "session_frames": 1667,
+        "session_zero_variance": false,
+        "threshold": {
+          "k": 5.0,
+          "offset": 2.0,
+          "lower": -2.0248173221187593,
+          "upper": 1.9751826778812407,
+          "active": 1.9751826778812407,
+          "floor_offset": 2.0,
+          "floored": true
+        },
+        "deadband": {
+          "k": 3.0,
+          "offset": 1.2,
+          "lower": -1.2248173221187593,
+          "upper": 1.1751826778812406
+        },
+        "direction": 1,
+        "usable_range": 29.247416761012598,
+        "extreme": 29.222599438893837,
+        "snr": 99.70233539566632,
+        "repetitions": [
+          {
+            "repetition": 1,
+            "prompt_issued_ms": 1795276830000,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 28.277751969886516,
+            "sign": 1,
+            "observed_peak": 28.277751969886516,
+            "latency_ms": 162,
+            "latency_excluded": null
+          },
+          {
+            "repetition": 2,
+            "prompt_issued_ms": 1795276831400,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 30.190844187487976,
+            "sign": 1,
+            "observed_peak": 30.190844187487976,
+            "latency_ms": 181,
+            "latency_excluded": null
+          },
+          {
+            "repetition": 3,
+            "prompt_issued_ms": 1795276832800,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 29.247416761012598,
+            "sign": 1,
+            "observed_peak": 29.247416761012598,
+            "latency_ms": 167,
+            "latency_excluded": null
+          }
+        ],
+        "repetition_counts": {
+          "counted": 3,
+          "latency": 3,
+          "missed": 0,
+          "latency_excluded": {
+            "not_below_threshold_at_prompt": 0,
+            "anticipatory": 0
+          }
+        },
+        "repeatability_cv": 0.03271612774560317,
+        "latency_ms_median": 167,
+        "fatigue_drift": {
+          "first_repetition": 1,
+          "last_repetition": 3,
+          "first_repetition_peak": 28.277751969886516,
+          "last_repetition_peak": 29.247416761012598,
+          "absolute": 0.9696647911260818,
+          "relative": 0.03429073117830212
+        },
+        "false_positives": {
+          "crossings": 0,
+          "held_out_periods": 5,
+          "held_out_frames": 123,
+          "held_out_seconds": 4.0,
+          "per_minute": 0.0,
+          "threshold_source": "rest_baseline",
+          "evaluated_on": "probe_rest",
+          "qualifying_windows": [
+            [
+              1795276818700,
+              1795276820000,
+              "brows"
+            ],
+            [
+              1795276823700,
+              1795276825000,
+              "jaw"
+            ],
+            [
+              1795276828700,
+              1795276830000,
+              "smile"
+            ],
+            [
+              1795276838700,
+              1795276840000,
+              "nod"
+            ],
+            [
+              1795276843700,
+              1795276845000,
+              "tilt"
+            ]
+          ],
+          "excluded_windows": [
+            {
+              "probe": "turn",
+              "start_ms": 1795276833700,
+              "reason": "own_probe"
+            }
+          ]
+        },
+        "free_exploration_peak": {
+          "peak": 0.7510510249917819,
+          "sign": -1,
+          "snr": 2.5602788035902107
+        },
+        "independence": {
+          "correlations": {
+            "browInnerUp": -0.04412610399903357,
+            "browOuterUpLeft": 0.005981082992990687,
+            "browOuterUpRight": -0.01239753311915567,
+            "jawOpen": -0.04033466763646396,
+            "mouthSmileLeft": -0.04021169873245232,
+            "mouthSmileRight": -0.024134075929799378,
+            "pitch_deg": -0.0421329839533302,
+            "roll_deg": -0.04260088316626376
+          },
+          "max_abs_r": 0.04412610399903357,
+          "max_with": "browInnerUp",
+          "outside_cluster_max_abs_r": 0.04412610399903357,
+          "cluster": [
+            "yaw_deg"
+          ]
+        },
+        "rest_quality": {
+          "reasons": [],
+          "halves": {
+            "first_mean": -0.033104861106404856,
+            "second_mean": -0.016468845344439934,
+            "first_std": 0.30872121743978165,
+            "second_std": 0.2778947732746599,
+            "shift": 0.016636015761964922,
+            "shift_over_quiet_std": 0.059864442810237964,
+            "std_ratio": 1.11092847771791
+          },
+          "probe_rests": {
+            "median_std": 0.2985716505734744,
+            "final_rest_median_window_std": 0.3077738080244875,
+            "window_ms": 800,
+            "probe_segments": 5,
+            "final_rest_windows": 11,
+            "std_ratio": 1.03082060012509
+          }
+        }
+      },
+      "pitch_deg": {
+        "channel": "pitch_deg",
+        "unit": "deg",
+        "probe": "nod",
+        "rest": {
+          "mean": 9.801862112602226,
+          "std": 0.3128463150503964,
+          "noise_floor": 0.01,
+          "effective_std": 0.3128463150503964,
+          "frames": 273,
+          "window_ms": [
+            1795276846000,
+            1795276855000
+          ],
+          "segment": "rest_baseline"
+        },
+        "session_frames": 1667,
+        "session_zero_variance": false,
+        "threshold": {
+          "k": 5.0,
+          "offset": 2.0,
+          "lower": 7.801862112602226,
+          "upper": 11.801862112602226,
+          "active": 11.801862112602226,
+          "floor_offset": 2.0,
+          "floored": true
+        },
+        "deadband": {
+          "k": 3.0,
+          "offset": 1.2,
+          "lower": 8.601862112602227,
+          "upper": 11.001862112602225
+        },
+        "direction": 1,
+        "usable_range": 14.875451610710723,
+        "extreme": 24.67731372331295,
+        "snr": 47.54875124009192,
+        "repetitions": [
+          {
+            "repetition": 1,
+            "prompt_issued_ms": 1795276835000,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 14.115165299761255,
+            "sign": 1,
+            "observed_peak": 14.115165299761255,
+            "latency_ms": 178,
+            "latency_excluded": null
+          },
+          {
+            "repetition": 2,
+            "prompt_issued_ms": 1795276836400,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 15.407132260259726,
+            "sign": 1,
+            "observed_peak": 15.407132260259726,
+            "latency_ms": 164,
+            "latency_excluded": null
+          },
+          {
+            "repetition": 3,
+            "prompt_issued_ms": 1795276837800,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 14.875451610710723,
+            "sign": 1,
+            "observed_peak": 14.875451610710723,
+            "latency_ms": 150,
+            "latency_excluded": null
+          }
+        ],
+        "repetition_counts": {
+          "counted": 3,
+          "latency": 3,
+          "missed": 0,
+          "latency_excluded": {
+            "not_below_threshold_at_prompt": 0,
+            "anticipatory": 0
+          }
+        },
+        "repeatability_cv": 0.04387692671426495,
+        "latency_ms_median": 164,
+        "fatigue_drift": {
+          "first_repetition": 1,
+          "last_repetition": 3,
+          "first_repetition_peak": 14.115165299761255,
+          "last_repetition_peak": 14.875451610710723,
+          "absolute": 0.7602863109494677,
+          "relative": 0.05386308235174032
+        },
+        "false_positives": {
+          "crossings": 0,
+          "held_out_periods": 5,
+          "held_out_frames": 122,
+          "held_out_seconds": 4.0,
+          "per_minute": 0.0,
+          "threshold_source": "rest_baseline",
+          "evaluated_on": "probe_rest",
+          "qualifying_windows": [
+            [
+              1795276818700,
+              1795276820000,
+              "brows"
+            ],
+            [
+              1795276823700,
+              1795276825000,
+              "jaw"
+            ],
+            [
+              1795276828700,
+              1795276830000,
+              "smile"
+            ],
+            [
+              1795276833700,
+              1795276835000,
+              "turn"
+            ],
+            [
+              1795276843700,
+              1795276845000,
+              "tilt"
+            ]
+          ],
+          "excluded_windows": [
+            {
+              "probe": "nod",
+              "start_ms": 1795276838700,
+              "reason": "own_probe"
+            }
+          ]
+        },
+        "free_exploration_peak": {
+          "peak": 0.7012189749902387,
+          "sign": -1,
+          "snr": 2.241416763618518
+        },
+        "independence": {
+          "correlations": {
+            "browInnerUp": -0.040286337558661595,
+            "browOuterUpLeft": 0.012019025282055312,
+            "browOuterUpRight": -0.04353652623848317,
+            "jawOpen": -0.04071209646407893,
+            "mouthSmileLeft": -0.03985675629755895,
+            "mouthSmileRight": -0.014652733089900232,
+            "yaw_deg": -0.0421329839533302,
+            "roll_deg": -0.044805464316079284
+          },
+          "max_abs_r": 0.044805464316079284,
+          "max_with": "roll_deg",
+          "outside_cluster_max_abs_r": 0.044805464316079284,
+          "cluster": [
+            "pitch_deg"
+          ]
+        },
+        "rest_quality": {
+          "reasons": [],
+          "halves": {
+            "first_mean": 9.764668744786052,
+            "second_mean": 9.83932896106411,
+            "first_std": 0.3438766206611923,
+            "second_std": 0.2743183063129393,
+            "shift": 0.0746602162780583,
+            "shift_over_quiet_std": 0.2721663649850869,
+            "std_ratio": 1.2535678908315424
+          },
+          "probe_rests": {
+            "median_std": 0.2672379067659251,
+            "final_rest_median_window_std": 0.31800852750971104,
+            "window_ms": 800,
+            "probe_segments": 5,
+            "final_rest_windows": 11,
+            "std_ratio": 1.1899828559436223
+          }
+        }
+      },
+      "roll_deg": {
+        "channel": "roll_deg",
+        "unit": "deg",
+        "probe": "tilt",
+        "rest": {
+          "mean": 0.026979880053246804,
+          "std": 0.30918983642319425,
+          "noise_floor": 0.01,
+          "effective_std": 0.30918983642319425,
+          "frames": 273,
+          "window_ms": [
+            1795276846000,
+            1795276855000
+          ],
+          "segment": "rest_baseline"
+        },
+        "session_frames": 1667,
+        "session_zero_variance": false,
+        "threshold": {
+          "k": 5.0,
+          "offset": 2.0,
+          "lower": -1.9730201199467532,
+          "upper": 2.0269798800532466,
+          "active": 2.0269798800532466,
+          "floor_offset": 2.0,
+          "floored": true
+        },
+        "deadband": {
+          "k": 3.0,
+          "offset": 1.2,
+          "lower": -1.1730201199467531,
+          "upper": 1.2269798800532468
+        },
+        "direction": 1,
+        "usable_range": 16.499051351903546,
+        "extreme": 16.526031231956793,
+        "snr": 53.362204730821,
+        "repetitions": [
+          {
+            "repetition": 1,
+            "prompt_issued_ms": 1795276840000,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 16.07972059451697,
+            "sign": 1,
+            "observed_peak": 16.07972059451697,
+            "latency_ms": 161,
+            "latency_excluded": null
+          },
+          {
+            "repetition": 2,
+            "prompt_issued_ms": 1795276841400,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 17.354360055961997,
+            "sign": 1,
+            "observed_peak": 17.354360055961997,
+            "latency_ms": 180,
+            "latency_excluded": null
+          },
+          {
+            "repetition": 3,
+            "prompt_issued_ms": 1795276842800,
+            "below_threshold_at_prompt": true,
+            "counted": true,
+            "excluded": null,
+            "peak": 16.499051351903546,
+            "sign": 1,
+            "observed_peak": 16.499051351903546,
+            "latency_ms": 166,
+            "latency_excluded": null
+          }
+        ],
+        "repetition_counts": {
+          "counted": 3,
+          "latency": 3,
+          "missed": 0,
+          "latency_excluded": {
+            "not_below_threshold_at_prompt": 0,
+            "anticipatory": 0
+          }
+        },
+        "repeatability_cv": 0.03902985995958834,
+        "latency_ms_median": 166,
+        "fatigue_drift": {
+          "first_repetition": 1,
+          "last_repetition": 3,
+          "first_repetition_peak": 16.07972059451697,
+          "last_repetition_peak": 16.499051351903546,
+          "absolute": 0.4193307573865752,
+          "relative": 0.02607823655403334
+        },
+        "false_positives": {
+          "crossings": 0,
+          "held_out_periods": 5,
+          "held_out_frames": 123,
+          "held_out_seconds": 4.0,
+          "per_minute": 0.0,
+          "threshold_source": "rest_baseline",
+          "evaluated_on": "probe_rest",
+          "qualifying_windows": [
+            [
+              1795276818700,
+              1795276820000,
+              "brows"
+            ],
+            [
+              1795276823700,
+              1795276825000,
+              "jaw"
+            ],
+            [
+              1795276828700,
+              1795276830000,
+              "smile"
+            ],
+            [
+              1795276833700,
+              1795276835000,
+              "turn"
+            ],
+            [
+              1795276838700,
+              1795276840000,
+              "nod"
+            ]
+          ],
+          "excluded_windows": [
+            {
+              "probe": "tilt",
+              "start_ms": 1795276843700,
+              "reason": "own_probe"
+            }
+          ]
+        },
+        "free_exploration_peak": {
+          "peak": 0.4751977973379301,
+          "sign": 1,
+          "snr": 1.5369127356680556
+        },
+        "independence": {
+          "correlations": {
+            "browInnerUp": -0.04337287753839394,
+            "browOuterUpLeft": -0.00026872873773813066,
+            "browOuterUpRight": -0.005707599669544408,
+            "jawOpen": -0.04238822202297443,
+            "mouthSmileLeft": -0.045164346676990264,
+            "mouthSmileRight": 0.029446408500688304,
+            "yaw_deg": -0.04260088316626376,
+            "pitch_deg": -0.044805464316079284
+          },
+          "max_abs_r": 0.045164346676990264,
+          "max_with": "mouthSmileLeft",
+          "outside_cluster_max_abs_r": 0.045164346676990264,
+          "cluster": [
+            "roll_deg"
+          ]
+        },
+        "rest_quality": {
+          "reasons": [],
+          "halves": {
+            "first_mean": 0.05182633323286468,
+            "second_mean": 0.0019507323649552682,
+            "first_std": 0.29732302625454315,
+            "second_std": 0.3198430662359398,
+            "shift": 0.04987560086790941,
+            "shift_over_quiet_std": 0.16774886727141705,
+            "std_ratio": 1.0757426704049382
+          },
+          "probe_rests": {
+            "median_std": 0.30591696447586125,
+            "final_rest_median_window_std": 0.3088305293372068,
+            "window_ms": 800,
+            "probe_segments": 5,
+            "final_rest_windows": 11,
+            "std_ratio": 1.0095240382184671
+          }
+        }
+      }
+    },
+    "ranking": [
+      {
+        "channel": "jawOpen",
+        "reasons": [],
+        "scores": {
+          "snr": 0.5581443987473789,
+          "repeatability": 0.9411558540901542,
+          "independence": 0.9576117779770256,
+          "latency": 0.88,
+          "fatigue": 0.9682279983556569
+        },
+        "score": 0.783953496849102,
+        "status": "usable",
+        "rank": 1
+      },
+      {
+        "channel": "browInnerUp",
+        "reasons": [],
+        "scores": {
+          "snr": 0.5398875274244195,
+          "repeatability": 0.926354559499017,
+          "independence": 0.9558738960009664,
+          "latency": 0.8814285714285715,
+          "fatigue": 0.9402074256448832
+        },
+        "score": 0.7708420355484902,
+        "status": "usable",
+        "rank": 2
+      },
+      {
+        "channel": "yaw_deg",
+        "reasons": [],
+        "scores": {
+          "snr": 0.4993526656030301,
+          "repeatability": 0.9345677445087937,
+          "independence": 0.9558738960009664,
+          "latency": 0.8807142857142857,
+          "fatigue": 1.0
+        },
+        "score": 0.7621428424002585,
+        "status": "usable",
+        "rank": 3
+      },
+      {
+        "channel": "mouthSmileLeft",
+        "reasons": [],
+        "scores": {
+          "snr": 0.5006273203003411,
+          "repeatability": 0.9538175081764448,
+          "independence": 0.9548356533230098,
+          "latency": 0.8821428571428571,
+          "fatigue": 0.9499377840178576
+        },
+        "score": 0.7615549847270913,
+        "status": "usable",
+        "rank": 4
+      },
+      {
+        "channel": "roll_deg",
+        "reasons": [],
+        "scores": {
+          "snr": 0.3636168823681248,
+          "repeatability": 0.9219402800808233,
+          "independence": 0.9548356533230098,
+          "latency": 0.8814285714285715,
+          "fatigue": 1.0
+        },
+        "score": 0.7052744426761518,
+        "status": "usable",
+        "rank": 5
+      },
+      {
+        "channel": "pitch_deg",
+        "reasons": [],
+        "scores": {
+          "snr": 0.3385695578327335,
+          "repeatability": 0.9122461465714701,
+          "independence": 0.9551945356839208,
+          "latency": 0.8828571428571429,
+          "fatigue": 1.0
+        },
+        "score": 0.693584804228547,
+        "status": "usable",
+        "rank": 6
+      },
+      {
+        "channel": "browOuterUpLeft",
+        "reasons": [
+          "snr_below_floor",
+          "excursion_below_floor"
+        ],
+        "scores": {
+          "snr": 0.0,
+          "repeatability": 0.6774987554686789,
+          "independence": 0.9640512720179479,
+          "latency": 0.0,
+          "fatigue": 0.8329695550268343
+        },
+        "score": null,
+        "status": "disqualified",
+        "rank": null
+      },
+      {
+        "channel": "browOuterUpRight",
+        "reasons": [
+          "snr_below_floor",
+          "excursion_below_floor"
+        ],
+        "scores": {
+          "snr": 0.0,
+          "repeatability": 0.6825659661973748,
+          "independence": 0.9564634737615169,
+          "latency": 0.0,
+          "fatigue": 0.5702490120309822
+        },
+        "score": null,
+        "status": "disqualified",
+        "rank": null
+      },
+      {
+        "channel": "mouthSmileRight",
+        "reasons": [
+          "snr_below_floor",
+          "excursion_below_floor"
+        ],
+        "scores": {
+          "snr": 0.0,
+          "repeatability": 0.6932661138756265,
+          "independence": 0.9705535914993118,
+          "latency": 0.0,
+          "fatigue": 1.0
+        },
+        "score": null,
+        "status": "disqualified",
+        "rank": null
+      }
+    ],
+    "clusters": [
+      {
+        "channels": [
+          "browInnerUp"
+        ],
+        "max_abs_r": null
+      },
+      {
+        "channels": [
+          "browOuterUpLeft"
+        ],
+        "max_abs_r": null
+      },
+      {
+        "channels": [
+          "browOuterUpRight"
+        ],
+        "max_abs_r": null
+      },
+      {
+        "channels": [
+          "jawOpen"
+        ],
+        "max_abs_r": null
+      },
+      {
+        "channels": [
+          "mouthSmileLeft"
+        ],
+        "max_abs_r": null
+      },
+      {
+        "channels": [
+          "mouthSmileRight"
+        ],
+        "max_abs_r": null
+      },
+      {
+        "channels": [
+          "yaw_deg"
+        ],
+        "max_abs_r": null
+      },
+      {
+        "channels": [
+          "pitch_deg"
+        ],
+        "max_abs_r": null
+      },
+      {
+        "channels": [
+          "roll_deg"
+        ],
+        "max_abs_r": null
+      }
+    ],
+    "discovered": [],
+    "tier": {
+      "usable_channels": [
+        "jawOpen",
+        "browInnerUp",
+        "yaw_deg",
+        "mouthSmileLeft",
+        "roll_deg",
+        "pitch_deg"
+      ],
+      "broad_channels": [
+        "jawOpen",
+        "browInnerUp",
+        "yaw_deg",
+        "mouthSmileLeft",
+        "roll_deg"
+      ],
+      "tier": 1,
+      "mode": "proportional",
+      "reason": "6 independent usable channels, 5 with broad repeatable range (snr >= 50, cv <= 0.25): jawOpen, browInnerUp, yaw_deg, mouthSmileLeft, roll_deg"
+    },
+    "rest_quality": {
+      "status": "ok",
+      "responsible_channels": {},
+      "channels": {
+        "browInnerUp": {
+          "reasons": [],
+          "halves": {
+            "first_mean": 0.020224291703367273,
+            "second_mean": 0.02019643266754367,
+            "first_std": 0.0035141367469295657,
+            "second_std": 0.004035015519461154,
+            "shift": 2.7859035823602635e-05,
+            "shift_over_quiet_std": 0.007927703965403205,
+            "std_ratio": 1.1482238199713486
+          },
+          "probe_rests": {
+            "median_std": 0.0033766218906281734,
+            "final_rest_median_window_std": 0.0037517464790278185,
+            "window_ms": 800,
+            "probe_segments": 5,
+            "final_rest_windows": 11,
+            "std_ratio": 1.1110946385323168
+          }
+        },
+        "browOuterUpLeft": {
+          "reasons": [],
+          "halves": {
+            "first_mean": 0.019933017662681986,
+            "second_mean": 0.019976482674749163,
+            "first_std": 0.003994982594634617,
+            "second_std": 0.003970373880799313,
+            "shift": 4.3465012067176595e-05,
+            "shift_over_quiet_std": 0.010947334778060308,
+            "std_ratio": 1.0061980847582923
+          },
+          "probe_rests": {
+            "median_std": 0.0040746094697167445,
+            "final_rest_median_window_std": 0.00399199221077761,
+            "window_ms": 800,
+            "probe_segments": 5,
+            "final_rest_windows": 11,
+            "std_ratio": 1.0206957465287843
+          }
+        },
+        "browOuterUpRight": {
+          "reasons": [],
+          "halves": {
+            "first_mean": 0.019828360974085947,
+            "second_mean": 0.019952001173573,
+            "first_std": 0.0038709233256197084,
+            "second_std": 0.003866966647631567,
+            "shift": 0.00012364019948705313,
+            "shift_over_quiet_std": 0.03197343312044857,
+            "std_ratio": 1.0010231994089125
+          },
+          "probe_rests": {
+            "median_std": 0.003565484562190656,
+            "final_rest_median_window_std": 0.0037421919541343394,
+            "window_ms": 800,
+            "probe_segments": 5,
+            "final_rest_windows": 11,
+            "std_ratio": 1.0495605544944817
+          }
+        },
+        "jawOpen": {
+          "reasons": [],
+          "halves": {
+            "first_mean": 0.020472348017924944,
+            "second_mean": 0.01989257576368679,
+            "first_std": 0.004390717777449204,
+            "second_std": 0.0040636694432469415,
+            "shift": 0.0005797722542381541,
+            "shift_over_quiet_std": 0.14267210026190175,
+            "std_ratio": 1.0804810378328766
+          },
+          "probe_rests": {
+            "median_std": 0.0037576935503525343,
+            "final_rest_median_window_std": 0.004168429082092256,
+            "window_ms": 800,
+            "probe_segments": 5,
+            "final_rest_windows": 11,
+            "std_ratio": 1.109305223067269
+          }
+        },
+        "mouthSmileLeft": {
+          "reasons": [],
+          "halves": {
+            "first_mean": 0.020301401132333665,
+            "second_mean": 0.019883242900247334,
+            "first_std": 0.004162535333601803,
+            "second_std": 0.0038720033492631077,
+            "shift": 0.00041815823208633113,
+            "shift_over_quiet_std": 0.10799531776384234,
+            "std_ratio": 1.0750340219602308
+          },
+          "probe_rests": {
+            "median_std": 0.004100173452435585,
+            "final_rest_median_window_std": 0.0038048607090972043,
+            "window_ms": 800,
+            "probe_segments": 5,
+            "final_rest_windows": 11,
+            "std_ratio": 1.0776146003537803
+          }
+        },
+        "mouthSmileRight": {
+          "reasons": [],
+          "halves": {
+            "first_mean": 0.020623371553046575,
+            "second_mean": 0.019952895473176576,
+            "first_std": 0.00438713831536998,
+            "second_std": 0.00404338670186088,
+            "shift": 0.0006704760798699992,
+            "shift_over_quiet_std": 0.16582041968961994,
+            "std_ratio": 1.0850157649652694
+          },
+          "probe_rests": {
+            "median_std": 0.0043086682982543,
+            "final_rest_median_window_std": 0.004245783941750705,
+            "window_ms": 800,
+            "probe_segments": 5,
+            "final_rest_windows": 11,
+            "std_ratio": 1.014811011904121
+          }
+        },
+        "yaw_deg": {
+          "reasons": [],
+          "halves": {
+            "first_mean": -0.033104861106404856,
+            "second_mean": -0.016468845344439934,
+            "first_std": 0.30872121743978165,
+            "second_std": 0.2778947732746599,
+            "shift": 0.016636015761964922,
+            "shift_over_quiet_std": 0.059864442810237964,
+            "std_ratio": 1.11092847771791
+          },
+          "probe_rests": {
+            "median_std": 0.2985716505734744,
+            "final_rest_median_window_std": 0.3077738080244875,
+            "window_ms": 800,
+            "probe_segments": 5,
+            "final_rest_windows": 11,
+            "std_ratio": 1.03082060012509
+          }
+        },
+        "pitch_deg": {
+          "reasons": [],
+          "halves": {
+            "first_mean": 9.764668744786052,
+            "second_mean": 9.83932896106411,
+            "first_std": 0.3438766206611923,
+            "second_std": 0.2743183063129393,
+            "shift": 0.0746602162780583,
+            "shift_over_quiet_std": 0.2721663649850869,
+            "std_ratio": 1.2535678908315424
+          },
+          "probe_rests": {
+            "median_std": 0.2672379067659251,
+            "final_rest_median_window_std": 0.31800852750971104,
+            "window_ms": 800,
+            "probe_segments": 5,
+            "final_rest_windows": 11,
+            "std_ratio": 1.1899828559436223
+          }
+        },
+        "roll_deg": {
+          "reasons": [],
+          "halves": {
+            "first_mean": 0.05182633323286468,
+            "second_mean": 0.0019507323649552682,
+            "first_std": 0.29732302625454315,
+            "second_std": 0.3198430662359398,
+            "shift": 0.04987560086790941,
+            "shift_over_quiet_std": 0.16774886727141705,
+            "std_ratio": 1.0757426704049382
+          },
+          "probe_rests": {
+            "median_std": 0.30591696447586125,
+            "final_rest_median_window_std": 0.3088305293372068,
+            "window_ms": 800,
+            "probe_segments": 5,
+            "final_rest_windows": 11,
+            "std_ratio": 1.0095240382184671
+          }
+        }
+      },
+      "basis": "internal consistency of this session's rest periods; no stored baseline is used"
+    },
+    "lighting_quality": {
+      "status": "ok",
+      "brightness_min": 130.0,
+      "brightness_max": 130.0,
+      "brightness_median": 130.0,
+      "brightness_mean": 130.0,
+      "still_segment_brightness_min": 130.0,
+      "still_segment_brightness_max": 130.0,
+      "still_segment_brightness_ratio": 1.0,
+      "max_ratio": 1.2,
+      "still_segment_frame_rate_min_hz": 30.303030303030305,
+      "still_segment_frame_rate_max_hz": 30.303030303030305,
+      "segments": [
+        {
+          "segment": "probe_rest",
+          "probe": "brows",
+          "start_ms": 1795276818700,
+          "brightness_median": 130.0,
+          "frame_rate_hz": 30.303030303030305
+        },
+        {
+          "segment": "probe_rest",
+          "probe": "jaw",
+          "start_ms": 1795276823700,
+          "brightness_median": 130.0,
+          "frame_rate_hz": 30.303030303030305
+        },
+        {
+          "segment": "probe_rest",
+          "probe": "smile",
+          "start_ms": 1795276828700,
+          "brightness_median": 130.0,
+          "frame_rate_hz": 30.303030303030305
+        },
+        {
+          "segment": "probe_rest",
+          "probe": "turn",
+          "start_ms": 1795276833700,
+          "brightness_median": 130.0,
+          "frame_rate_hz": 30.303030303030305
+        },
+        {
+          "segment": "probe_rest",
+          "probe": "nod",
+          "start_ms": 1795276838700,
+          "brightness_median": 130.0,
+          "frame_rate_hz": 30.303030303030305
+        },
+        {
+          "segment": "probe_rest",
+          "probe": "tilt",
+          "start_ms": 1795276843700,
+          "brightness_median": 130.0,
+          "frame_rate_hz": 30.303030303030305
+        },
+        {
+          "segment": "rest_baseline",
+          "probe": null,
+          "start_ms": 1795276845000,
+          "brightness_median": 130.0,
+          "frame_rate_hz": 30.303030303030305
+        }
+      ],
+      "basis": "median brightness of still segments (warm-up, probe rests, final rest), whole image, BT.601 luma 0-255"
+    }
+  },
+  "scoring_constants": {
+    "threshold_k": 5.0,
+    "deadband_k": 3.0,
+    "min_sustained_frames": 2,
+    "rest_baseline_settle_ms": 1000,
+    "held_out_settle_ms": 500,
+    "rep_grace_ms": 500,
+    "min_rest_frames": 20,
+    "snr_floor": 10.0,
+    "snr_saturation": 1000.0,
+    "cv_worst": 0.5,
+    "latency_worst_ms": 1400.0,
+    "drift_worst": 0.5,
+    "cluster_min_abs_r": 0.8,
+    "broad_min_snr": 50.0,
+    "broad_max_cv": 0.25,
+    "min_excursion": {
+      "score": 0.05,
+      "deg": 4.0,
+      "cm": 1.7
+    },
+    "missed_fraction": 0.25,
+    "min_plausible_latency_ms": 100.0,
+    "rest_std_ratio_max": 3.0,
+    "rest_shift_k": 5.0,
+    "threshold_floor_fraction": 0.5,
+    "lighting_max_ratio": 1.2,
+    "min_stop_latency_reps": 2,
+    "weights": {
+      "snr": 0.4,
+      "repeatability": 0.2,
+      "independence": 0.15,
+      "latency": 0.15,
+      "fatigue": 0.1
+    },
+    "provisional": true
+  },
+  "note": "Not part of docs/contracts.md yet. schema_version is this profile's own version, independent of the contract's schema.",
+  "practice_note": "SYNTHETIC practice profile 'broad'. Broad mobility: brows, jaw, smile and all three head angles move well. Generated by frontend/scripts/practice_profiles.py."
+}

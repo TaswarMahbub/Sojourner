@@ -68,6 +68,10 @@ export function validateGesture(msg) {
     if (msg.timestamp_ms < msg.window_end_timestamp_ms) {
       errors.push('timestamp_ms: classification time is before the window end')
     }
+    // Contract: for a one-frame model the start, the end, and source_timestamp_ms are the same number.
+    if (isIntegerField(msg, 'window_frame_count') && msg.window_frame_count === 1 && msg.window_start_timestamp_ms !== msg.window_end_timestamp_ms) {
+      errors.push('window_start_timestamp_ms: a one-frame window must start and end on the same frame')
+    }
   }
 
   const modelVersionValid = typeof msg.model_version === 'string' && MODEL_VERSION_PATTERN.test(msg.model_version)

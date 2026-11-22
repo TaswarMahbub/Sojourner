@@ -128,6 +128,25 @@ describe('camera frame contract', () => {
     expect(validateCameraFrame(mismatch).valid).toBe(false)
   })
 
+  it('rejects a sheared matrix whose columns are equal length but not at right angles', () => {
+    const f = trackingFrame({ yaw_deg: 0, pitch_deg: 0, roll_deg: 0 })
+    // Tilt column 1 toward column 0 by 0.01 rad: same length, dot product about 0.01 > 1e-3.
+    f.head_pose.matrix[0][1] = Math.sin(0.01)
+    f.head_pose.matrix[1][1] = Math.cos(0.01)
+    expect(validateCameraFrame(f).errors).toContain('head_pose.matrix: columns are not orthogonal')
+  })
+
+  it('rejects a mirrored matrix (a reflection is not a rotation)', () => {
+    const f = trackingFrame()
+    for (let r = 0; r < 3; r += 1) f.head_pose.matrix[r][0] *= -1
+    expect(validateCameraFrame(f).errors).toContain('head_pose.matrix: not a proper rotation (it is a reflection)')
+  })
+
+  it('checks the angle the matrix gives is in range, not only the published one', () => {
+    const f = trackingFrame({ yaw_deg: 120, pitch_deg: 0, roll_deg: 0 })
+    expect(validateCameraFrame(f).errors).toContain('head_pose.yaw_deg: matrix gives 120.00, outside [-90, 90]')
+  })
+
   it('anglesFromMatrix inverts the contract composition, independent of scale', () => {
     const angles = { yaw_deg: -35, pitch_deg: 22, roll_deg: -12 }
     const derived = anglesFromMatrix(poseMatrixFromAngles(angles, [5, -3, -60], 1.7))
