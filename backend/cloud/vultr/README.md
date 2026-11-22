@@ -98,7 +98,7 @@ If your Tiger Cloud plan supports IP allow-lists, allow the instance's IP (and y
 
 ### 7. Add the GitHub settings
 
-The SSH key and known-hosts entry are **environment secrets**, not repository secrets. A repository secret can be read by a workflow on any branch, so anyone with write access could push a branch whose workflow prints it. An environment secret is only released to a job that names the environment and passes its rules.
+The CI SSH key is an **environment secret**, not a repository secret. A repository secret can be read by a workflow on any branch, so anyone with write access could push a branch whose workflow prints it. An environment secret is only released to a job that names the environment and passes its rules.
 
 **Create the environment.** Repo → Settings → Environments → New environment, named `production`:
 
@@ -110,9 +110,15 @@ The SSH key and known-hosts entry are **environment secrets**, not repository se
 | Name | Value |
 | --- | --- |
 | `VULTR_SSH_KEY` | The whole contents of the private key file `sojourner-ci`, including the `BEGIN` and `END` lines |
-| `VULTR_KNOWN_HOSTS` | The output of `ssh-keyscan -t ed25519 <instance IP>`, run from your laptop |
 
-Check `VULTR_KNOWN_HOSTS` before saving: `ssh-keyscan -t ed25519 <IP> | ssh-keygen -lf -` must print the same fingerprint you noted in step 5. This is what stops CI from deploying to an impostor.
+**Pin the server's host key in the repo.** The host key is public, not a credential, so it's committed as `backend/cloud/vultr/known_hosts` where anyone can read exactly what CI trusts. Changing it goes through PR review like any other file. From the repo root:
+
+```sh
+ssh-keyscan -t ed25519 <instance IP> 2>/dev/null | grep '^<instance IP> ' > backend/cloud/vultr/known_hosts
+ssh-keygen -lf backend/cloud/vultr/known_hosts
+```
+
+The fingerprint printed must match the one you noted in step 5. This is what stops CI from deploying to an impostor, so compare it character by character. Commit the file on a branch and merge it by PR.
 
 **Repository variables** (Repo → Settings → Secrets and variables → Actions → Variables tab). These are not secret and must stay at repository level: the workflow's job-level check for `VULTR_HOST` runs before the job enters the environment, so it can't see environment variables.
 
@@ -121,7 +127,7 @@ Check `VULTR_KNOWN_HOSTS` before saving: `ssh-keyscan -t ed25519 <IP> | ssh-keyg
 | `VULTR_HOST` | The instance IP. The deploy job is skipped while this is unset |
 | `VULTR_API_DOMAIN` | The domain from step 4. Optional: enables a public `/healthz` check after each deploy |
 
-If `VULTR_SSH_KEY` or `VULTR_KNOWN_HOSTS` were already added as repository secrets, delete them from the Secrets tab after adding them to the environment.
+If `VULTR_SSH_KEY` was already added as a repository secret, delete it from the Secrets tab after adding it to the environment. A `VULTR_KNOWN_HOSTS` secret from an earlier setup is no longer read; delete it.
 
 **Protect `main`** (repo owner only): Settings → Branches → add a rule for `main` requiring a pull request with one approval. The environment trusts whatever is on `main`, including `deploy-cloud.yml` itself, so this is what stops one person from changing the workflow and deploying it alone. Keep write access to people you trust.
 
@@ -166,12 +172,13 @@ DATABASE_URL_ADMIN="$TIMESCALE_SERVICE_URL" TOKEN_PEPPER=<the server's value> \
 - **The CI key can only deploy.** Its `authorized_keys` entry forces `sojourner-deploy`, which accepts one argument: an image from `ghcr.io/taswarmahbub/sojourner-api` pinned by digest. It can't open a shell, forward ports or run other commands. `sudo` is allowed for that one script only.
 - **Registry access is short-lived.** The server pulls with the workflow's `GITHUB_TOKEN`, which expires when the job ends. The credentials are stored in a temporary directory for the pull and deleted afterwards. The image can stay private.
 - **Secrets stay on the server.** They aren't in the repo, GitHub, the image, or the cloud-init user data.
+- **The host key pin is reviewed, not hidden.** `known_hosts` is a committed file, so a change to it needs an approved PR into `main`, and anyone can read it.
 - **Deploys only come from `main`, with a reviewer's approval.** The CI key lives in the `production` environment, which only releases it to runs from `main` after a required reviewer approves. Workflows on other branches and pull requests, including from forks, can't read it.
 - **The database admin URL is not in GitHub at all.** Only the server's env file holds app credentials, and the admin URL stays on admins' laptops.
 
 ## Updating the server setup
 
-`cloud-init.yaml` only runs when an instance is created. Changes to the deploy script or SSH settings don't reach an existing server. To apply them, either create a new instance (steps 3 to 8 again; update `VULTR_HOST` and `VULTR_KNOWN_HOSTS`), or copy the changed file onto the server by hand as root.
+`cloud-init.yaml` only runs when an instance is created. Changes to the deploy script or SSH settings don't reach an existing server. To apply them, either create a new instance (steps 3 to 8 again; update `VULTR_HOST` and `known_hosts`), or copy the changed file onto the server by hand as root.
 
 If the repository moves to another owner, update `ALLOWED_REPO` in the deploy script, on the server as well as in `cloud-init.yaml`.
 

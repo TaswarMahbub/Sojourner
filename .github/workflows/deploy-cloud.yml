@@ -66,8 +66,9 @@ jobs:
     # VULTR_HOST must stay a repository variable: a job-level `if` is evaluated before the job
     # enters its environment, so an environment variable here would always read as empty.
     if: vars.VULTR_HOST != ''
-    # VULTR_SSH_KEY and VULTR_KNOWN_HOSTS are secrets of this environment, not repository
-    # secrets. Its rules (deployment branch main only, required reviewer) gate access to them.
+    # VULTR_SSH_KEY is a secret of this environment, not a repository secret. Its rules
+    # (deployment branch main only, required reviewer) gate access to it. The server's host key
+    # is public, so it is committed in backend/cloud/vultr/known_hosts and changed by PR.
     environment: production
     runs-on: ubuntu-latest
     permissions:
@@ -80,7 +81,6 @@ jobs:
           HOST: ${{ vars.VULTR_HOST }}
           IMAGE: ${{ needs.build.outputs.image }}
           SSH_KEY: ${{ secrets.VULTR_SSH_KEY }}
-          KNOWN_HOSTS: ${{ secrets.VULTR_KNOWN_HOSTS }}
           REGISTRY_USER: ${{ github.actor }}
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -89,7 +89,7 @@ jobs:
           trap 'rm -rf "$dir"' EXIT
           mkdir -p "$dir/bundle"
           printf '%s\n' "$SSH_KEY" > "$dir/key"
-          printf '%s\n' "$KNOWN_HOSTS" > "$dir/known_hosts"
+          cp backend/cloud/vultr/known_hosts "$dir/known_hosts"
           cp backend/cloud/vultr/docker-compose.yml backend/cloud/vultr/Caddyfile "$dir/bundle/"
           printf '%s' "$REGISTRY_USER" > "$dir/bundle/registry-user"
           printf '%s' "$REGISTRY_TOKEN" > "$dir/bundle/registry-token"
