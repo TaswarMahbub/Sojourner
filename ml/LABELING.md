@@ -132,10 +132,13 @@ Discard deletes the marker, `session.json`, `annotations.json`, and `quality-rep
 Every target is checked before anything is deleted. A generated name that is a symlink or not a regular file stops the discard. With `--include-recording`, the recording is deleted only if all of these hold:
 
 - `session.json.recording_path` names a file directly inside the session directory.
+- The session has a `recording_identity`, written at `init` from the same open file that was fingerprinted: the file name, the device, and the inode.
+- The path's file name equals the bound name.
 - That file is a regular file, not a symlink, has one hard link, and is not named like a generated file.
+- Its device and inode equal the bound ones, checked on the path and again on the opened descriptor.
 - Its SHA-256 and byte length equal the values stored at `init`.
 
-Otherwise discard stops with a code (`recording_identity_mismatch`, `symlink_not_allowed`, `recording_has_other_links`, or `recording_unreadable`) and deletes nothing. A missing recording is treated as already deleted. A byte-identical copy at another path inside the directory would pass the fingerprint check, because the fingerprint is the only identity stored.
+Otherwise discard stops with a code (`recording_identity_mismatch`, `recording_identity_unavailable`, `symlink_not_allowed`, `recording_has_other_links`, or `recording_unreadable`) and deletes nothing. A missing recording at the bound name is treated as already deleted. A byte-identical copy, under another name or put in place of the original, has a different inode and is refused. So is the original file after it was moved to another volume or restored from a backup, because its inode changed. Pointing a session at another recording is not supported in this phase. Run `init --replace` to bind the current file, which starts a new set of annotations. A session written before `recording_identity` existed can still be prepared and discarded, but its recording is never deleted by `--include-recording`.
 
 The recording is deleted first. If that fails, the session is left as it was (`recording_delete_failed`) and the same command can be retried. The generated files go in the order `quality-report.json`, `annotations.json`, `session.json`, marker. If one of those fails (`discard_incomplete`), a retry accepts the partial session and finishes. A marker left without `session.json` can be removed with plain `discard`. With `--include-recording` it fails with `recording_identity_unavailable`, because the recording can no longer be identified.
 
@@ -158,8 +161,20 @@ Do not commit the recording, the session directory, or the quality report.
 **Replacing a session.** `init --replace` writes the new marker, `session.json`, and `annotations.json` into a private `.label-stage-*` directory inside the session directory, reads them back, and validates them. Only then are the existing files moved into a `.label-backup-*` directory and the new ones moved in, with the marker last. If any step fails, the files moved in are moved back out, the previous files are moved back, and both private directories are removed. The old `quality-report.json` is kept on failure and dropped on success. Codes:
 
 - `output_write_failed`: the replacement failed and the previous session is back.
-- `replacement_cleanup_incomplete`: the outcome is complete (the previous session after a failure, or the new one after success), and a private directory is left over. Remove it by hand. Until then `init` reports `directory_not_empty`.
-- `replacement_rollback_incomplete`: a rename back failed. The previous files are still in the `.label-backup-*` directory. Move them back by hand. Nothing was deleted.
+- `replacement_cleanup_incomplete`: the outcome is complete (the previous session after a failure, or the new one after success), and a private directory is left over. Remove it by hand. Until then `init` reports `directory_not_empty`, and if the leftover is a `.label-backup-*` directory that still holds the old files, every command reports `replacement_recovery_pending`. After a successful replacement those files are the old generation and can be deleted.
+- `replacement_rollback_incomplete`: a rename back failed. Every previous file that could not be moved back is still in the `.label-backup-*` directory. Nothing was deleted.
+
+After `replacement_rollback_incomplete` the session is never usable as it stands:
+
+- The previous marker is moved back only when no file of the new generation is left in the session directory. If a new file could not be moved out, the marker stays in the backup and the directory does not load (`not_a_label_session`). Old confirmed annotations can therefore never be read beside new metadata.
+- Separately, every command refuses a session directory whose `.label-backup-*` directory still holds anything, with `replacement_recovery_pending`. This holds even if a marker is present. An empty backup directory is only a cleanup leftover and does not block.
+
+To recover the previous session by hand:
+
+1. Do not delete the `.label-backup-*` directory or anything in it.
+2. Move each file in it back into the session directory, replacing a file of the same name. Every name in the backup belongs to the previous session, so this also removes any new file left behind.
+3. Remove the now empty backup directory, and any `.label-stage-*` directory (it holds only new files).
+4. Run `overview` and `prepare` to check the restored session.
 
 These are process-level guarantees. A power loss or a killed process during the swap can leave a mix of files or a private directory behind. Each rename is atomic on a local file system and the marker goes in last, so an interrupted first `init` does not load as a session. The tool does not claim full crash durability.
 
@@ -171,4 +186,8 @@ Kept as before: a split or role that the ML-2A plan rejects still produces a blo
 
 These checks are internal consistency, not proof. A person who can rewrite every local file, including the stored SHA-256, can make a consistent false session. Split history is a local record that can be edited, not a tamper-evident log. Parent directories that are symlinks are still followed.
 
-**CLI errors.** Rejected input prints one code to stderr and exits 2, with nothing on stdout. No traceback, recording content, or private string is printed. A programming error is not caught and still raises.
+**Special files.** Metadata and recordings are opened with `O_NONBLOCK` and `O_NOFOLLOW`, after an `lstat` check, and the descriptor is checked with `fstat` before anything is read. A FIFO or device in place of the marker, `session.json`, or `annotations.json` is refused at once (`not_a_label_session` for the marker, `metadata_unreadable` otherwise) instead of waiting for a writer.
+
+**Snapshots.** If the private snapshot directory cannot be created, the command stops with `snapshot_unavailable` and changes nothing. If deleting the snapshot copy fails after a successful prepare, the report is still returned, and the copy stays in its 0700 directory under the system temporary directory until it is removed by hand.
+
+**CLI errors.** Rejected input prints one code to stderr and exits 2, with nothing on stdout. No traceback, recording content, system path, or private string is printed. A programming error is not caught and still raises.

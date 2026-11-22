@@ -611,7 +611,7 @@ def test_generated_symlink_is_refused_before_anything_is_deleted(tmp_path):
 def test_failure_before_deletion_changes_nothing(tmp_path, monkeypatch):
     recording, directory = _make(tmp_path, inside=True)
     before = _files(directory)
-    monkeypatch.setattr(lab, "_hash_file", lambda _path: (_ for _ in ()).throw(OSError(PLANTED)))
+    monkeypatch.setattr(lab, "_hash_file", lambda *_a, **_k: (_ for _ in ()).throw(OSError(PLANTED)))
     with pytest.raises(LabelingError) as exc:
         discard_session(directory, include_recording=True)
     assert exc.value.code == "recording_unreadable"
