@@ -33,4 +33,15 @@ describe('strict JSON decoding (contract decoding rules)', () => {
     expect(isIntegerField(value, 'x')).toBe(false)
     expect(isIntegerField({ i: 5 }, 'i')).toBe(true)
   })
+
+  it('finds float notation in nested objects and arrays, in every spelling', () => {
+    const { value } = decodeJson('{"o": {"a": [1, 2.0, {"t": 1E3}], "n": -0.0, "p": 5e+0, "k": 7}, "s": "5.0", "z": 3}')
+    expect(isIntegerField(value.o.a, 0)).toBe(true)
+    expect(isIntegerField(value.o.a, 1)).toBe(false)
+    expect(isIntegerField(value.o.a[2], 't')).toBe(false)
+    expect(isIntegerField(value.o, 'n')).toBe(false)
+    expect(isIntegerField(value.o, 'p')).toBe(false)
+    expect(isIntegerField(value.o, 'k')).toBe(true)
+    expect(isIntegerField(value, 'z')).toBe(true)
+  })
 })
