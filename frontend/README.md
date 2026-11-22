@@ -49,12 +49,29 @@ No gesture classifier publishes yet, so the Gesture panel always uses a mock sou
 
 Schema 4 allows only `neutral` and `unknown` until a reviewed label list exists for a `model_version`. A reviewed list goes in `REVIEWED_LABELS` in `src/contracts/gesture.js`, with its review, when a model ships. The validator in that file follows `validate_gesture` in `tests/contract_schema.py`.
 
+## Simulator receiver
+
+`src/sim/motorReceiver.js` is the simulator's receiver for motor commands (contract section 3) and the status it publishes (section 4). It is a line-for-line port of the Python reference receiver, `tests/motor_receiver.py`, because the contract requires the simulator to use the same receiver procedure as the firmware. Command and status validation and the MAC live in `src/contracts/motor.js`.
+
+`src/sim/motorReceiver.parity.test.js` replays steps recorded from the Python receiver and requires identical outcomes, statuses and state after every step. The steps are seeded random scenarios, both protocol-following and hostile. To regenerate the fixture after a change to the Python receiver, run this from the repository root:
+
+```text
+python3 frontend/scripts/receiver_parity.py
+```
+
+The fixture (`src/sim/__fixtures__/receiver-parity.json.gz`) is gzipped JSON. It contains synthetic test traffic signed with the labelled test key from `tests/control_auth.py`, not recordings. That key is a test fixture and must not be installed on a rover.
+
+The browser's HMAC is asynchronous, and the receiver procedure is a strict sequence, so the simulator uses its own synchronous SHA-256 and HMAC (`src/sim/hmac.js`). The tests check it against Node's crypto. It is for the simulator only.
+
+This is a model of the contract. It drives no motors, and a passing test is not a hardware verification.
+
 ## Architecture
 
 ```text
 src/contracts/   everything the frontend knows about a message: names, ranges, validation
 src/sources/     data sources with one interface: { kind, subscribe(listener) => unsubscribe }
 src/hooks/       subscribe to a source, validate each message, track staleness (useMessageStream is shared)
+src/sim/         the simulator's receiver model (no display code)
 src/components/  display only
 ```
 
