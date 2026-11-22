@@ -1,14 +1,20 @@
 import { selectCameraSource } from './sources/selectCameraSource.js'
 import { useCameraStream } from './hooks/useCameraStream.js'
+import { useGestureStream } from './hooks/useGestureStream.js'
+import { createMockGestureSource } from './sources/mockGestureSource.js'
 import TrackingStatusPanel from './components/TrackingStatusPanel.jsx'
 import HeadPosePanel from './components/HeadPosePanel.jsx'
+import GesturePanel from './components/GesturePanel.jsx'
 
 // Created once at module level so React re-renders never create a second source.
 // Add ?source=live to the page address to read the perception publisher instead of the mock.
 const cameraSource = selectCameraSource()
+// No gesture classifier publishes yet (contract section 2), so gestures always come from the mock.
+const gestureSource = createMockGestureSource()
 
 export default function App() {
   const camera = useCameraStream(cameraSource)
+  const gesture = useGestureStream(gestureSource)
 
   return (
     <main className="app">
@@ -26,6 +32,7 @@ export default function App() {
       <div className="app__grid">
         <TrackingStatusPanel {...camera} />
         <HeadPosePanel {...camera} />
+        <GesturePanel {...gesture} />
       </div>
     </main>
   )

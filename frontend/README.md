@@ -43,12 +43,18 @@ python -m perception.publish --source camera
 
 `--source fake` needs no camera. `--source camera` needs Google's Face Landmarker model at `perception/models/face_landmarker.task` and camera permission for the terminal. The two send the same message shape, so the dashboard cannot tell them apart: check which one is running before you treat the data as measured.
 
+## Gesture panel
+
+No gesture classifier publishes yet, so the Gesture panel always uses a mock source, labelled "MOCK DATA", even with `?source=live`. Its 10 second loop shows every case: `neutral`, then `unknown`, then a label with no reviewed list entry (`nod`), which must be rejected and treated as `unknown`, then a second of silence so the panel shows "No recent data". `nod` is not a real gesture.
+
+Schema 4 allows only `neutral` and `unknown` until a reviewed label list exists for a `model_version`. A reviewed list goes in `REVIEWED_LABELS` in `src/contracts/gesture.js`, with its review, when a model ships. The validator in that file follows `validate_gesture` in `tests/contract_schema.py`.
+
 ## Architecture
 
 ```text
 src/contracts/   everything the frontend knows about a message: names, ranges, validation
 src/sources/     data sources with one interface: { kind, subscribe(listener) => unsubscribe }
-src/hooks/       subscribe to a source, validate each message, track staleness
+src/hooks/       subscribe to a source, validate each message, track staleness (useMessageStream is shared)
 src/components/  display only
 ```
 
