@@ -1,39 +1,29 @@
 #!/usr/bin/env python3
-"""Sojourner: write and read sessions in Tiger Cloud (TimescaleDB).
-
-Setup (run from backend/db; requirements.txt is at the repository root):
-    pip install -r ../../requirements.txt
-    export TIMESCALE_SERVICE_URL="postgres://<role>:<password>@<host>:<port>/tsdb?sslmode=require"
-    psql "$TIMESCALE_SERVICE_URL" -f schema.sql      # admin connection, once per service
+"""Sojourner: write and read sessions in Tiger Cloud (TimescaleDB). See README.md for setup.
 
 Commands:
-    make-fixture   Write two SYNTHETIC session files for testing the pipeline (not measured data).
-    load-session   Write one session (frames + events files) to the database.
-    refresh        Refresh the continuous aggregates now (admin connection only; they also
-                   refresh themselves every minute).
-    report         Query the two most recent sessions back and print a comparison.
-    delete-profile Delete a profile and everything that references it (one action).
+    make-fixture    Write two SYNTHETIC sessions (pipeline testing only).
+    load-session    Load one session (frames + events files).
+    refresh         Refresh the summaries now (admin; the policy also runs every minute).
+    report          Compare the most recent sessions.
+    delete-profile  Delete a profile, everything referencing it, and its summary rows (admin).
 
-Frame files (JSONL, one object per line). Only derived numbers are stored, never images.
+Frame files are JSONL. Only derived numbers are stored.
 
-  --frame-format contract  (perception output; docs/contracts.md, camera feature stream, schema "4")
+  --frame-format contract: camera feature messages, docs/contracts.md schema "4".
     {"schema_version": "4", "timestamp_ms": 1795276800000, "tracking_state": "tracking",
-     "features": {"_neutral": 0.0, "browDownLeft": 0.02, ..., "noseSneerRight": 0.01},
+     "features": {"_neutral": 0.0, ..., "noseSneerRight": 0.01},
      "head_pose": {"matrix": [[...], [...], [...], [0, 0, 0, 1]],
                    "yaw_deg": 2.1, "pitch_deg": -0.4, "roll_deg": 0.0},
      "confidence": null}
-    Blendshape names are stored exactly as MediaPipe spells them. Head pose angles are stored as
-    channels "head_pose.yaw_deg", "head_pose.pitch_deg" and "head_pose.roll_deg".
-    tracking_ok is tracking_state == "tracking". confidence null is stored as SQL NULL.
-    A frame that fails the contract is skipped and reported; it is never coerced.
+    Channels: blendshape names as-is, plus head_pose.yaw_deg/pitch_deg/roll_deg.
+    tracking_ok = (tracking_state == "tracking"). Non-conforming frames are skipped and listed.
 
-  --frame-format synthetic  (default; the make-fixture output, for pipeline testing only)
+  --frame-format synthetic (default): make-fixture output.
     {"t": 1763700000.033, "channels": {"brow_raise_left": 0.41, ...},
      "head": {"yaw": 2.1, "pitch": -0.4, "roll": 0.0}, "confidence": 0.93}
-    "t" is epoch seconds or an ISO-8601 string.
 
-Event file (JSONL), one object per line. Interim format: the contract's gesture classification
-message is not supported yet, and cues such as "go" are not contract labels.
+Event files (JSONL, interim format; not the contract's gesture message):
     {"t": 1763700004.5, "cue": "go", "confidence": 0.88, "stop_reason": null}
 """
 from __future__ import annotations
@@ -48,8 +38,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import NamedTuple
 
-# psycopg is imported where a connection is made, so the frame adapters can be imported and
-# tested without a database driver installed.
+# psycopg is imported lazily so the adapters can be tested without it.
 
 CONFIDENCE_FLOOR = 0.5  # synthetic frames below this are stored with tracking_ok = false
 
@@ -124,7 +113,7 @@ def synthetic_frame_rows(frames_path: Path, session_id, profile_id, conf_floor: 
 
 CONTRACT_SCHEMA_VERSION = "4"
 
-# The 52 Face Landmarker blendshape names, in MediaPipe index order. Stored verbatim.
+# The 52 Face Landmarker blendshape names, in MediaPipe order.
 BLENDSHAPE_NAMES = (
     "_neutral",
     "browDownLeft", "browDownRight", "browInnerUp", "browOuterUpLeft", "browOuterUpRight",
@@ -153,12 +142,7 @@ _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
 class ContractFrame(NamedTuple):
-    """Result of converting one camera feature message.
-
-    rows      SIGNAL_SAMPLES_COPY tuples; empty when rejected (and for a valid "lost" frame,
-              which carries no feature values).
-    rejection None when the frame was accepted, otherwise the reason it was rejected.
-    """
+    """rows: SIGNAL_SAMPLES_COPY tuples (empty if rejected or "lost"). rejection: reason or None."""
     rows: list
     rejection: str | None
 
@@ -174,7 +158,7 @@ def _is_number(v) -> bool:
 
 
 def _check_head_pose(pose) -> str | None:
-    """docs/contracts.md section 1, Head pose: matrix layout, scale, angles, translation."""
+    """Contract section 1, Head pose: matrix, scale, angles, translation."""
     if not isinstance(pose, dict):
         return "tracking frame has no head_pose object"
     if pose.keys() != _HEAD_POSE_FIELDS:
@@ -188,7 +172,8 @@ def _check_head_pose(pose) -> str | None:
     if m[3] != [0.0, 0.0, 0.0, 1.0]:
         return "head_pose.matrix last row is not [0, 0, 0, 1]"
 
-    norms = [math.sqrt(sum(m[r][c] ** 2 for r in range(3))) for c in range(3)]
+    # hypot: x ** 2 raises OverflowError on large entries.
+    norms = [math.hypot(m[0][c], m[1][c], m[2][c]) for c in range(3)]
     scale = sum(norms) / 3.0
     if not math.isfinite(scale) or scale <= 0:
         return "head_pose.matrix scale is not positive (a zero matrix is invalid)"
@@ -206,7 +191,8 @@ def _check_head_pose(pose) -> str | None:
             return f"head_pose.{axis} is not a finite number"
         if abs(float(v) - extracted[axis]) > 0.1:
             return f"head_pose.{axis} does not match the matrix within 0.1 degrees"
-        if not -bound <= extracted[axis] <= bound:
+        # Check both, so the 0.1 degree tolerance can't admit e.g. 90.05.
+        if not (-bound <= float(v) <= bound and -bound <= extracted[axis] <= bound):
             return f"head_pose.{axis} is outside [-{bound:g}, {bound:g}]"
     x_cm, y_cm, z_cm = m[0][3], m[1][3], m[2][3]
     if not (-100.0 <= x_cm <= 100.0 and -100.0 <= y_cm <= 100.0):
@@ -276,11 +262,7 @@ def _check_contract_frame(frame) -> str | None:
 
 
 def contract_frame_rows(frame, session_id, profile_id) -> ContractFrame:
-    """Convert one camera feature message into SIGNAL_SAMPLES_COPY rows.
-
-    Never raises on bad input: a non-conforming frame comes back with no rows and a rejection
-    reason. confidence null stays None (SQL NULL). tracking_ok comes from tracking_state only.
-    """
+    """Convert one camera feature message to rows. Never raises; bad frames return a reason."""
     reason = _check_contract_frame(frame)
     if reason is None:
         try:
@@ -312,9 +294,44 @@ def contract_timestamp(frame) -> datetime | None:
         return None
 
 
+def _reject_duplicate_keys(pairs):
+    obj = {}
+    for key, value in pairs:
+        if key in obj:
+            raise ValueError(f"duplicate key {key!r}")
+        obj[key] = value
+    return obj
+
+
+def read_contract_jsonl(path: Path):
+    """Yield (line_no, frame, error). Invalid JSON and duplicate keys become errors, not raises."""
+    with path.open() as f:
+        for line_no, line in enumerate(f, 1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                yield line_no, json.loads(line, object_pairs_hook=_reject_duplicate_keys), None
+            except (ValueError, RecursionError) as e:   # JSONDecodeError is a ValueError
+                yield line_no, None, f"invalid JSON ({e})"
+
+
+def contract_file_timestamps(frames_path: Path) -> list:
+    """Capture times of every conforming frame in a contract file."""
+    stamps = []
+    for _, frame, error in read_contract_jsonl(frames_path):
+        ts = None if error is not None else contract_timestamp(frame)
+        if ts is not None:
+            stamps.append(ts)
+    return stamps
+
+
 def contract_file_rows(frames_path: Path, session_id, profile_id, rejections: list):
     """Yield rows for every conforming frame; append (line number, reason) for each rejection."""
-    for line_no, frame in enumerate(read_jsonl(frames_path), 1):
+    for line_no, frame, error in read_contract_jsonl(frames_path):
+        if error is not None:
+            rejections.append((line_no, error))
+            continue
         result = contract_frame_rows(frame, session_id, profile_id)
         if result.rejection is not None:
             rejections.append((line_no, result.rejection))
@@ -322,7 +339,7 @@ def contract_file_rows(frames_path: Path, session_id, profile_id, rejections: li
 
 
 def event_rows(events_path: Path, session_id, profile_id):
-    """Yield CONTROL_EVENTS_COPY rows. event_sequence is the order of the cue in its session."""
+    """Yield CONTROL_EVENTS_COPY rows; event_sequence is cue order in the session."""
     for event_sequence, ev in enumerate(read_jsonl(events_path), 1):
         yield (parse_ts(ev["t"]), session_id, profile_id, event_sequence, ev["cue"],
                ev.get("confidence"), ev.get("stop_reason"))
@@ -366,7 +383,7 @@ def load_session(args) -> None:
     frames_path, events_path = Path(args.frames), Path(args.events)
     contract = args.frame_format == "contract"
     if contract:
-        stamps = [t for t in map(contract_timestamp, read_jsonl(frames_path)) if t is not None]
+        stamps = contract_file_timestamps(frames_path)
     else:
         stamps = [parse_ts(f["t"]) for f in read_jsonl(frames_path)]
     if not stamps:
@@ -405,17 +422,58 @@ def load_session(args) -> None:
 
 
 def refresh(_args=None) -> None:
-    # Continuous aggregate refresh cannot run inside a transaction block.
+    # Refresh can't run in a transaction.
     with connect(autocommit=True) as conn:
         for view in ("signal_summary_1min", "control_summary_1min"):
             conn.execute(f"CALL refresh_continuous_aggregate('{view}', NULL, NULL)")
             print(f"refreshed {view}")
 
 
+SUMMARY_VIEWS = ("signal_summary_1min", "control_summary_1min")
+
+PROFILE_TIME_RANGE_SQL = """
+SELECT min(lo), max(hi) FROM (
+    SELECT min(ts) AS lo, max(ts) AS hi FROM signal_samples WHERE profile_id = %(p)s
+    UNION ALL
+    SELECT min(ts), max(ts) FROM control_events WHERE profile_id = %(p)s
+) t
+"""
+
+
+def minute_window(lo: datetime, hi: datetime) -> tuple[datetime, datetime]:
+    """Widen [lo, hi] to whole minutes; the end is exclusive."""
+    start = lo.replace(second=0, microsecond=0)
+    end = hi.replace(second=0, microsecond=0) + timedelta(minutes=1)
+    return start, end
+
+
 def delete_profile(args) -> None:
+    # One transaction: read the time range, then delete (cascades).
     with connect() as conn:
+        lo, hi = conn.execute(PROFILE_TIME_RANGE_SQL, {"p": args.profile_id}).fetchone()
         n = conn.execute("DELETE FROM profiles WHERE profile_id = %s", (args.profile_id,)).rowcount
     print(f"deleted {n} profile (sessions, calibrations, samples and events cascade)")
+
+    # Autocommit (refresh can't run in a transaction). Needs the admin login.
+    with connect(autocommit=True) as conn:
+        if lo is not None:
+            start, end = minute_window(lo, hi)
+            for view in SUMMARY_VIEWS:
+                conn.execute("CALL refresh_continuous_aggregate(%s::regclass, %s::timestamptz, "
+                             "%s::timestamptz)", (view, start, end))
+            print(f"refreshed {', '.join(SUMMARY_VIEWS)} over [{start.isoformat()}, "
+                  f"{end.isoformat()})")
+        else:
+            print("profile had no samples or events; no summary refresh needed")
+
+        # Verify: should be 0.
+        leftover = {view: conn.execute(f"SELECT count(*) FROM {view} WHERE profile_id = %s",
+                                       (args.profile_id,)).fetchone()[0]
+                    for view in SUMMARY_VIEWS}
+    for view, count in leftover.items():
+        print(f"leftover {view} rows for this profile: {count}")
+    if any(leftover.values()):
+        sys.exit("summary rows remain for the deleted profile; run `refresh` and check again")
 
 
 # ---------------------------------------------------------------------------
@@ -470,7 +528,7 @@ def report(args) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Synthetic fixtures (pipeline testing only; always load with --origin synthetic_seed)
+# Synthetic fixtures (load with --origin synthetic_seed only)
 # ---------------------------------------------------------------------------
 
 def make_fixture(args) -> None:

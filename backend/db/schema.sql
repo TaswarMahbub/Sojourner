@@ -1,35 +1,27 @@
--- Sojourner: Tiger Cloud (TimescaleDB) schema
+-- Sojourner: Tiger Cloud (TimescaleDB) schema.
+-- Run as admin: psql "$TIMESCALE_SERVICE_URL" -f schema.sql
+-- Re-runnable. Not in one transaction (continuous aggregates can't be created in one).
 --
--- Run with:  psql "$TIMESCALE_SERVICE_URL" -f schema.sql   (as the admin role, e.g. tsdbadmin)
--- Do NOT wrap in a single transaction: continuous aggregates cannot be created inside one.
--- Safe to re-run (idempotent).
+-- Privacy:
+--   * Only derived numbers; no video or images.
+--   * Rows are keyed by a random profile_id; display_name is optional.
+--   * Deleting a profile cascades to all base tables. `tiger_store.py delete-profile` also
+--     refreshes the summaries so the profile's aggregate rows go too.
+--   * demo_reader sees only aggregated, consented, demo_visible data.
+--   * sojourner_app is the least-privilege role for teammates and tiger_store.py.
 --
--- Privacy design:
---   * No raw video or images are stored anywhere. Only derived numeric channel values.
---   * Every record is keyed by a pseudonymous profile_id (random UUID). display_name is optional.
---   * Deleting a profile cascades to every row that references it, including both hypertables.
---   * demo_reader (below) can only see aggregated, consented, demo_visible data.
---   * sojourner_app (below) is the least-privilege role teammates and tiger_store.py connect as.
---
--- Contract coverage (docs/contracts.md, schema "4", as merged to main in #1):
---   Camera feature stream -> signal_samples. Stored: capture time (timestamp_ms), the 52
---     blendshape scores under MediaPipe's names, head_pose yaw/pitch/roll in degrees,
---     tracking_ok (tracking_state = 'tracking'), and confidence (NULL when the producer had none).
---   Gesture classification -> control_events. OPEN: not in contract form yet. cue still holds
---     interim labels and the window and model_version fields are not stored. Waits on a trained
---     model and a reviewed label list.
---   Motor command and motor status -> not stored, by decision. Storage is not part of the
---     real-time stop path. The contract's boot_nonce/session_id are UDP link sessions and are
---     not sessions.session_id; if datagrams are ever logged they get their own table.
---   Persisted status-gate state (challenge and status_sequence high-water marks) -> not stored
---     here. The contract requires a durable local file on the laptop, replaced atomically and
---     written before a challenge is transmitted; a network database cannot be on that path.
---   OPEN, not decided:
---     - tracking_state is reduced to tracking_ok, so partial and lost are not distinguished, and
---       a lost frame (no features, no pose) writes no row. tracking_ok fractions therefore
---       count only frames that carried values.
---     - head_pose.matrix (translation and scale) is validated on load but not stored.
---     - The schema_version of loaded data is not recorded.
+-- Contract coverage (docs/contracts.md, schema "4"):
+--   Camera feature stream -> signal_samples: capture time, 52 blendshapes (MediaPipe names),
+--     head_pose yaw/pitch/roll, tracking_ok, confidence (NULL when absent).
+--   Gesture classification -> control_events. OPEN: interim cue labels; window and
+--     model_version not stored. Waits on a trained model and label list.
+--   Motor command/status: not stored, by decision (not on the stop path). Their
+--     boot_nonce/session_id are UDP sessions, not sessions.session_id.
+--   Status-gate state: not stored; the contract requires a durable local file.
+--   OPEN:
+--     - tracking_state reduced to tracking_ok; lost frames write no row.
+--     - head_pose.matrix validated but not stored.
+--     - schema_version not recorded.
 
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 
@@ -92,9 +84,7 @@ CREATE TABLE IF NOT EXISTS labeled_trials (
 CREATE INDEX IF NOT EXISTS labeled_trials_profile_cue_idx ON labeled_trials (profile_id, cue, started_at DESC);
 
 -- ---------------------------------------------------------------------------
--- Hypertables
--- profile_id is denormalised into both hypertables so that per-profile time queries,
--- per-profile indexes and one-action deletion do not need a join against sessions.
+-- Hypertables (profile_id denormalised: per-profile queries and deletion need no join)
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS signal_samples (
@@ -104,11 +94,10 @@ CREATE TABLE IF NOT EXISTS signal_samples (
     channel_name text NOT NULL,
     value        double precision NOT NULL,
     tracking_ok  boolean NOT NULL,
-    -- Producer's per-frame score when one exists. NULL when the frame carried none
-    -- (stock MediaPipe publishes null). Never replaced with 0, 1 or a threshold.
+    -- NULL when the frame had no score (stock MediaPipe). Never substituted.
     confidence   double precision
 );
--- Brings a database created before the confidence column up to date.
+-- Upgrade for databases created before this column.
 ALTER TABLE signal_samples ADD COLUMN IF NOT EXISTS confidence double precision;
 
 SELECT create_hypertable('signal_samples', 'ts',
@@ -124,12 +113,11 @@ CREATE TABLE IF NOT EXISTS control_events (
     ts          timestamptz NOT NULL,
     session_id  uuid NOT NULL REFERENCES sessions (session_id) ON DELETE CASCADE,
     profile_id  uuid NOT NULL REFERENCES profiles (profile_id) ON DELETE CASCADE,
-    event_sequence integer NOT NULL,          -- order of the cue within its session (1, 2, ...);
-                                              -- not the contract's motor-command sequence
+    event_sequence integer NOT NULL,          -- cue order in session; not the motor-command sequence
     cue         text NOT NULL,
     confidence  double precision,
-    stop_reason text,                         -- NULL for ordinary cues; set when the event halted motion
-    PRIMARY KEY (session_id, event_sequence, ts) -- a hypertable unique key must include the time column
+    stop_reason text,                         -- set when the event halted motion
+    PRIMARY KEY (session_id, event_sequence, ts) -- hypertable keys must include ts
 );
 
 SELECT create_hypertable('control_events', 'ts',
@@ -139,8 +127,7 @@ SELECT create_hypertable('control_events', 'ts',
 CREATE INDEX IF NOT EXISTS control_events_profile_ts_idx
     ON control_events (profile_id, ts DESC);
 
--- Renames the column on a database created when it was called "sequence". The primary key
--- follows the rename. Skipped once the column is event_sequence.
+-- Upgrade: rename the old "sequence" column.
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.columns
@@ -151,7 +138,7 @@ BEGIN
 END
 $$;
 
--- Optional once data volume grows (left off so small demo deletes stay simple):
+-- Optional, for larger data volumes:
 -- ALTER TABLE signal_samples SET (timescaledb.compress,
 --     timescaledb.compress_segmentby = 'session_id, channel_name',
 --     timescaledb.compress_orderby = 'ts DESC');
@@ -159,8 +146,7 @@ $$;
 -- SELECT add_retention_policy('signal_samples', INTERVAL '180 days');
 
 -- ---------------------------------------------------------------------------
--- Time-window summaries (continuous aggregates)
--- Value statistics use tracking_ok samples only, so lost tracking cannot inflate range.
+-- 1-minute summaries (continuous aggregates). Value stats use tracking_ok samples only.
 -- ---------------------------------------------------------------------------
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS signal_summary_1min
@@ -193,15 +179,18 @@ FROM control_events
 GROUP BY bucket, session_id, profile_id
 WITH NO DATA;
 
+-- start_offset NULL: invalidated regions of any age get re-materialised (a fixed 30-day offset
+-- left deleted profiles' older rows behind). Remove-then-add replaces an existing policy.
+SELECT remove_continuous_aggregate_policy('signal_summary_1min', if_exists => TRUE);
 SELECT add_continuous_aggregate_policy('signal_summary_1min',
-    start_offset => INTERVAL '30 days', end_offset => INTERVAL '1 minute',
-    schedule_interval => INTERVAL '1 minute', if_not_exists => TRUE);
+    start_offset => NULL, end_offset => INTERVAL '1 minute',
+    schedule_interval => INTERVAL '1 minute');
+SELECT remove_continuous_aggregate_policy('control_summary_1min', if_exists => TRUE);
 SELECT add_continuous_aggregate_policy('control_summary_1min',
-    start_offset => INTERVAL '30 days', end_offset => INTERVAL '1 minute',
-    schedule_interval => INTERVAL '1 minute', if_not_exists => TRUE);
+    start_offset => NULL, end_offset => INTERVAL '1 minute',
+    schedule_interval => INTERVAL '1 minute');
 
--- Per-session, per-channel statistics. This is the longitudinal trend input:
--- order by started_at for one profile and one channel to see range / tracking drift across sessions.
+-- Per-session, per-channel stats: the cross-session drift trend.
 CREATE OR REPLACE VIEW session_channel_stats AS
 SELECT
     s.profile_id,
@@ -219,10 +208,8 @@ JOIN sessions s ON s.session_id = c.session_id
 GROUP BY s.profile_id, s.session_id, s.started_at, s.tier, s.data_origin, c.channel_name;
 
 -- ---------------------------------------------------------------------------
--- Public-demo safety: a role that can read ONLY these two views.
--- Views run with the owner's rights, so the role needs no access to base tables.
--- Exposed: an alias derived from a hash, aggregated numbers, data_origin. Never display_name,
--- never profile_id, never raw samples, and only profiles with consent granted AND demo_visible.
+-- Public demo: demo_reader reads only these two views (they run with owner rights).
+-- Hashed aliases and aggregates for consented, demo_visible profiles. No names, ids or samples.
 -- ---------------------------------------------------------------------------
 
 CREATE OR REPLACE VIEW demo_session_summary AS
@@ -263,18 +250,13 @@ REVOKE ALL ON ALL TABLES IN SCHEMA public FROM demo_reader;
 GRANT USAGE ON SCHEMA public TO demo_reader;
 GRANT SELECT ON demo_session_summary, demo_channel_trend TO demo_reader;
 
--- To expose it to a public dashboard, create a login role yourself (do not commit the password):
+-- For a dashboard (don't commit the password):
 --   CREATE ROLE demo_dashboard LOGIN PASSWORD '<set-me>' IN ROLE demo_reader;
 
 -- ---------------------------------------------------------------------------
--- Application role: what teammates and tiger_store.py connect as. Not the admin.
--- It can insert and read the app tables, close a session (ended_at, simulator_metrics),
--- and delete a profile (the cascade runs with the table owner's rights). It cannot
--- DROP, TRUNCATE, ALTER, update samples or events, or refresh the continuous aggregates
--- (the 1-minute policies refresh them; a manual refresh needs the admin connection).
---
--- Created NOLOGIN with no password. To let people connect, the admin sets a password
--- interactively so it never lands in a file or shell history:
+-- sojourner_app: insert/read app tables, close sessions, delete profiles. Cannot DROP,
+-- TRUNCATE, ALTER, update samples/events, or refresh aggregates (admin only; the policy
+-- refreshes every minute). Created NOLOGIN; enable it and set the password interactively:
 --   psql "$TIMESCALE_SERVICE_URL" -c 'ALTER ROLE sojourner_app LOGIN'
 --   psql "$TIMESCALE_SERVICE_URL" -c '\password sojourner_app'
 -- ---------------------------------------------------------------------------
