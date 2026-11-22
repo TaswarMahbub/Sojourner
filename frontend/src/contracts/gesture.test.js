@@ -70,11 +70,23 @@ describe('gesture classification, schema 4', () => {
 
   it('checks the window ordering rules', () => {
     // Start after end.
-    expect(errorsFor({ window_start_timestamp_ms: 1795276800001 })).toEqual(['window_start_timestamp_ms: window starts after it ends'])
+    // On this one-frame message, starting after the end also breaks the one-frame rule.
+    expect(errorsFor({ window_start_timestamp_ms: 1795276800001 })).toEqual([
+      'window_start_timestamp_ms: window starts after it ends',
+      'window_start_timestamp_ms: a one-frame window must start and end on the same frame',
+    ])
     // Source is not the window end.
     expect(errorsFor({ source_timestamp_ms: 1795276799999 })).toEqual(['source_timestamp_ms: must equal window_end_timestamp_ms'])
     // Classified before the window ended.
     expect(errorsFor({ timestamp_ms: 1795276799999 })).toEqual(['timestamp_ms: classification time is before the window end'])
+  })
+
+  it('requires a one-frame window to start and end on the same frame (contract section 2)', () => {
+    const ms = 1795276800000
+    expect(errorsFor({ window_start_timestamp_ms: ms - 50 })).toEqual([
+      'window_start_timestamp_ms: a one-frame window must start and end on the same frame',
+    ])
+    expect(errorsFor({ window_start_timestamp_ms: ms - 50, window_frame_count: 2 })).toEqual([])
   })
 
   it('rejects timestamps that are not safe non-negative integers', () => {

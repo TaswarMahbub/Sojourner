@@ -42,6 +42,8 @@ export const TRANSLATION_BOUNDS_CM = {
 }
 
 export const SCALE_TOLERANCE = 0.01
+export const ORTHOGONALITY_TOLERANCE = 1e-3
+export const HANDEDNESS_TOLERANCE = 1e-3
 export const ANGLE_TOLERANCE_DEG = 0.1
 export const MAX_TIMESTAMP_MS = 9007199254740991
 
@@ -76,20 +78,44 @@ export function checkExactKeys(obj, allowed, label, errors) {
   }
 }
 
+// The upper-left 3x3 must be a uniform scale times a proper rotation (contract "Matrix" and
+// "Angles"). A port of _scaled_rotation in tests/contract_schema.py: it works on the Gram matrix
+// B^T B of B = A / max|A|, then checks column norms within 1 percent, normalized off-diagonals at
+// most 1e-3 (orthogonal columns), and the normalized scalar triple product at least 1 - 1e-3
+// (a rotation, not a reflection). Returns { rotation, scale } or { problem }.
+export function scaledRotation(matrix) {
+  let peak = 0
+  for (let r = 0; r < 3; r += 1) for (let c = 0; c < 3; c += 1) peak = Math.max(peak, Math.abs(matrix[r][c]))
+  if (!Number.isFinite(peak) || peak <= 0) return { problem: 'scale must be finite and greater than 0' }
+  const b = [0, 1, 2].map((r) => [0, 1, 2].map((c) => matrix[r][c] / peak))
+  const gram = [0, 1, 2].map((i) => [0, 1, 2].map((j) => b[0][i] * b[0][j] + b[1][i] * b[1][j] + b[2][i] * b[2][j]))
+  const norms = [0, 1, 2].map((i) => Math.sqrt(gram[i][i]))
+  const scale = (norms[0] + norms[1] + norms[2]) / 3
+  if (!Number.isFinite(scale) || scale <= 0) return { problem: 'scale must be finite and greater than 0' }
+  if (Math.max(...norms.map((n) => Math.abs(n - scale))) / scale > SCALE_TOLERANCE) {
+    return { problem: 'column norms differ by more than 1% (scale is not uniform)' }
+  }
+  for (const [i, j] of [[0, 1], [0, 2], [1, 2]]) {
+    if (!(Math.abs(gram[i][j]) / (norms[i] * norms[j]) <= ORTHOGONALITY_TOLERANCE)) return { problem: 'columns are not orthogonal' }
+  }
+  const triple =
+    b[0][0] * (b[1][1] * b[2][2] - b[2][1] * b[1][2]) -
+    b[1][0] * (b[0][1] * b[2][2] - b[2][1] * b[0][2]) +
+    b[2][0] * (b[0][1] * b[1][2] - b[1][1] * b[0][2])
+  if (!(triple / (norms[0] * norms[1] * norms[2]) >= 1 - HANDEDNESS_TOLERANCE)) return { problem: 'not a proper rotation (it is a reflection)' }
+  return { rotation: b.map((row) => row.map((v) => v / scale)), scale: scale * peak }
+}
+
 // Contract "Angles" section: remove the uniform scale, then extract angles.
-// Returns null when the scale is not finite or not positive.
+// Returns null when the 3x3 is not a uniform scale times a proper rotation.
 export function anglesFromMatrix(matrix) {
-  const colNorm = (c) => Math.hypot(matrix[0][c], matrix[1][c], matrix[2][c])
-  const norms = [colNorm(0), colNorm(1), colNorm(2)]
-  const s = (norms[0] + norms[1] + norms[2]) / 3
-  if (!Number.isFinite(s) || s <= 0) return null
-  const R = (r, c) => matrix[r][c] / s
+  const { rotation: R, scale } = scaledRotation(matrix)
+  if (!R) return null
   return {
-    scale: s,
-    scaleSpread: Math.max(...norms.map((n) => Math.abs(n - s))) / s,
-    yaw_deg: toDeg(Math.atan2(R(0, 2), R(2, 2))),
-    pitch_deg: toDeg(Math.asin(clamp(R(1, 2), -1, 1))),
-    roll_deg: toDeg(Math.atan2(R(1, 0), R(1, 1))),
+    scale,
+    yaw_deg: toDeg(Math.atan2(R[0][2], R[2][2])),
+    pitch_deg: toDeg(Math.asin(clamp(R[1][2], -1, 1))),
+    roll_deg: toDeg(Math.atan2(R[1][0], R[1][1])),
   }
 }
 
@@ -142,17 +168,19 @@ function validateHeadPose(pose, errors) {
     }
   }
 
-  const derived = anglesFromMatrix(m)
-  if (derived === null) {
-    errors.push('head_pose.matrix: scale must be finite and greater than 0')
+  const { problem } = scaledRotation(m)
+  if (problem) {
+    errors.push(`head_pose.matrix: ${problem}`)
     return
   }
-  if (derived.scaleSpread > SCALE_TOLERANCE) {
-    errors.push('head_pose.matrix: column norms differ by more than 1% (scale is not uniform)')
-  }
-  for (const field of Object.keys(ANGLE_RANGES_DEG)) {
+  const derived = anglesFromMatrix(m)
+  for (const [field, [lo, hi]] of Object.entries(ANGLE_RANGES_DEG)) {
     if (isFiniteNumber(pose[field]) && Math.abs(pose[field] - derived[field]) > ANGLE_TOLERANCE_DEG) {
       errors.push(`head_pose.${field}: does not match matrix (derived ${derived[field].toFixed(2)})`)
+    }
+    // The angle the matrix itself gives must also be in range, not only the published one.
+    if (derived[field] < lo || derived[field] > hi) {
+      errors.push(`head_pose.${field}: matrix gives ${derived[field].toFixed(2)}, outside [${lo}, ${hi}]`)
     }
   }
 }
