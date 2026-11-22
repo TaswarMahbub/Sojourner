@@ -20,10 +20,21 @@ No weights, checkpoints, datasets, recordings, or participant identifiers belong
 ## Window policy
 
 - `length` is the number of accepted frames in a window. `stride` is how many accepted frames to move forward after one. Both are integers of at least 1. A one-frame window uses `length=1`.
+- Window starts are exactly `stride` accepted frames apart. With `stride < length` windows overlap, with `stride == length` they tile, and with `stride > length` the `stride - length` accepted frames after each window are skipped. For `length=2, stride=3`, frames 0 to 7 give `[0, 1]`, `[3, 4]`, `[6, 7]`. A skipped frame is still validated and still sets the newest accepted timestamp, so a later frame must be newer than it. It is in no window and is not counted.
 - Timestamps must increase. An equal or older timestamp is rejected. The frames already accepted stay in the buffer.
 - A message that fails validation is rejected the same way. It is not dropped silently and it is not turned into a guessed frame.
 - Gaps are kept as gaps. The frame count is the number of accepted messages, not the elapsed time divided by a frame period.
 - A window is actionable only when every frame is a valid `tracking` frame. One `partial` or `lost` frame makes the whole window non-actionable.
+
+## Head-pose geometry
+
+`ml.schema` and the oracle in `tests/contract_schema.py` apply the Schema 4 rule that the upper-left 3×3 is a uniform scale times a rotation:
+
+- The contract's 1 percent column-norm rule is unchanged.
+- After scale is removed, each pair of column directions must have |cos| at most `1e-3` (about 0.057 degrees from a right angle), and their determinant must be at least `1 - 1e-3`. This rejects reflections, singular matrices, and skewed columns whose norms agree. Schema 4 gives no number for these, so they are implementation tolerances. A MediaPipe transform is a scaled orthogonal fit and sits far inside them.
+- The computation divides the 3×3 by its largest absolute entry first, so poses at scales such as `1e200` or `1e-200` do not fail because a square overflowed or underflowed. Subnormal entries (below about `2.2e-308`) lose precision and may be rejected. That fails closed.
+- Both the angle extracted from the matrix and the published angle must lie in the contract range. The `0.1` degree match between them does not widen the range.
+- Exactly at a range boundary, the extracted angle can round a little past the limit, especially at extreme scales, and the pose is then rejected.
 
 ## Feature vector
 
@@ -62,7 +73,7 @@ message = result.product.classification
 
 `LabeledExample` keeps a participant token, a session token, a split, an annotation, and a vector of length 162. Tokens are opaque. They are not names or email addresses.
 
-`NormalizationSpec` can be built from `train` or `calibration` only. `apply_normalization` uses the supplied mean and scale and does not estimate them. `PersonalizedModelRef` can name a future `model_version`, list disabled gesture labels, and store a rejection threshold in `(0, 1]`. `weights_present` cannot be true in this phase.
+`NormalizationSpec` can be built from `train` or `calibration` only. `apply_normalization` uses the supplied mean and scale and does not estimate them. If any result would overflow to infinity or NaN, it raises `ValueError` instead. `LabeledExample` stores its own validated tuple of 162 finite floats, so changing the caller's list afterwards has no effect. `PersonalizedModelRef` can name a future `model_version`, list disabled gesture labels, and store a rejection threshold in `(0, 1]`. `weights_present` cannot be true in this phase.
 
 ## Tests
 

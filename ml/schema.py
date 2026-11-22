@@ -100,6 +100,24 @@ GESTURE_FIELDS = frozenset(
     }
 )
 POSE_FIELDS = frozenset({"matrix", "yaw_deg", "pitch_deg", "roll_deg"})
+
+# Schema 4: each column norm within 1 percent of their mean ``s``.
+SCALE_TOLERANCE = 0.01
+# Implementation tolerances for "a uniform scale and a rotation". Schema 4 does
+# not give numbers for these. After removing scale, each pair of unit column
+# directions must have |cos| <= 1e-3 (within about 0.057 degrees of a right
+# angle), and the determinant of the unit directions must be >= 1 - 1e-3.
+# That rejects reflections (det -1), singular matrices (det 0), and skewed
+# columns whose norms happen to agree. MediaPipe's transform is a scaled
+# orthogonal Procrustes solution, so a real pose sits far inside both bounds.
+ORTHOGONALITY_TOLERANCE = 1e-3
+DETERMINANT_TOLERANCE = 1e-3
+ANGLE_TOLERANCE_DEG = 0.1
+ANGLE_RANGES = (
+    ("yaw_deg", -90.0, 90.0),
+    ("pitch_deg", -60.0, 60.0),
+    ("roll_deg", -45.0, 45.0),
+)
 _BLENDSHAPE_SET = frozenset(BLENDSHAPES)
 
 
@@ -190,37 +208,74 @@ def _validate_pose(pose) -> list[str]:
         rows.append([_unit(value) for value in row])
     if rows[3] != [0.0, 0.0, 0.0, 1.0]:
         errors.append("matrix last row is not [0, 0, 0, 1]")
-    norms = [math.sqrt(sum(rows[r][c] ** 2 for r in range(3))) for c in range(3)]
-    scale = sum(norms) / 3.0
-    if not math.isfinite(scale) or scale <= 0:
-        errors.append("pose scale is not positive")
+    rotation, geometry_error = _rotation_part(rows)
+    if rotation is None:
+        errors.append(geometry_error)
         return errors
-    if any(abs(norm - scale) / scale > 0.01 for norm in norms):
-        errors.append("pose column norms disagree by more than 1 percent")
-        return errors
-    rotation = [[rows[r][c] / scale for c in range(3)] for r in range(3)]
-    yaw = math.degrees(math.atan2(rotation[0][2], rotation[2][2]))
-    pitch = math.degrees(math.asin(max(-1.0, min(1.0, rotation[1][2]))))
-    roll = math.degrees(math.atan2(rotation[1][0], rotation[1][1]))
-    for name, extracted, low, high in (
-        ("yaw_deg", yaw, -90.0, 90.0),
-        ("pitch_deg", pitch, -60.0, 60.0),
-        ("roll_deg", roll, -45.0, 45.0),
-    ):
+    extracted_angles = {
+        "yaw_deg": math.degrees(math.atan2(rotation[0][2], rotation[2][2])),
+        "pitch_deg": math.degrees(math.asin(max(-1.0, min(1.0, rotation[1][2])))),
+        "roll_deg": math.degrees(math.atan2(rotation[1][0], rotation[1][1])),
+    }
+    for name, low, high in ANGLE_RANGES:
+        extracted = extracted_angles[name]
         published = pose[name]
         if not _is_number(published) or not math.isfinite(_unit(published)):
             errors.append(f"{name} is not a finite number")
             continue
-        if abs(_unit(published) - extracted) > 0.1:
+        value = _unit(published)
+        # The 0.1 degree match is a consistency check. It never widens the range.
+        if abs(value - extracted) > ANGLE_TOLERANCE_DEG:
             errors.append(f"{name} does not match the matrix")
         if extracted < low or extracted > high:
-            errors.append(f"{name} is outside [{low}, {high}]")
+            errors.append(f"{name} from the matrix is outside [{low}, {high}]")
+        if value < low or value > high:
+            errors.append(f"published {name} is outside [{low}, {high}]")
     x_cm, y_cm, z_cm = rows[0][3], rows[1][3], rows[2][3]
     if not (-100.0 <= x_cm <= 100.0 and -100.0 <= y_cm <= 100.0):
         errors.append("translation x or y is outside [-100, 100] cm")
     if not (-200.0 <= z_cm <= -5.0):
         errors.append("translation z is outside [-200, -5] cm")
     return errors
+
+
+def _rotation_part(rows):
+    """Return ``(R, None)`` for a uniform scale times a proper rotation.
+
+    Returns ``(None, reason)`` otherwise. ``s`` and ``R = A / s`` follow
+    Schema 4, evaluated on ``A / max|A|`` so that squares of large or small
+    finite entries cannot overflow or underflow. The ratios the contract
+    checks do not change under that positive rescaling. When entries are so
+    small that they are subnormal, precision is lost and the checks below may
+    reject the pose; that fails closed.
+    """
+    a = [[rows[r][c] for c in range(3)] for r in range(3)]
+    peak = max(abs(value) for row in a for value in row)
+    if not math.isfinite(peak) or peak <= 0:
+        return None, "pose scale is not positive"
+    b = [[value / peak for value in row] for row in a]
+    norms = [math.hypot(b[0][c], b[1][c], b[2][c]) for c in range(3)]
+    scale = (norms[0] + norms[1] + norms[2]) / 3.0
+    if not math.isfinite(scale) or scale <= 0:
+        return None, "pose scale is not positive"
+    if any(abs(norm - scale) / scale > SCALE_TOLERANCE for norm in norms):
+        return None, "pose column norms disagree by more than 1 percent"
+    units = [[b[r][c] / norms[c] for r in range(3)] for c in range(3)]
+    for i, j in ((0, 1), (0, 2), (1, 2)):
+        cosine = math.fsum(units[i][k] * units[j][k] for k in range(3))
+        if not abs(cosine) <= ORTHOGONALITY_TOLERANCE:
+            return None, "pose matrix columns are not orthogonal"
+    u0, u1, u2 = units
+    determinant = math.fsum(
+        (
+            u0[0] * (u1[1] * u2[2] - u1[2] * u2[1]),
+            -u0[1] * (u1[0] * u2[2] - u1[2] * u2[0]),
+            u0[2] * (u1[0] * u2[1] - u1[1] * u2[0]),
+        )
+    )
+    if not determinant >= 1.0 - DETERMINANT_TOLERANCE:
+        return None, "pose matrix is not a proper rotation"
+    return [[b[r][c] / scale for c in range(3)] for r in range(3)], None
 
 
 def _features(value, errors: list[str], state: str) -> None:
@@ -299,6 +354,10 @@ def _validate_gesture(message) -> list[str]:
             errors.append("source_timestamp_ms is not the window end")
         if message["timestamp_ms"] < message["window_end_timestamp_ms"]:
             errors.append("classification time is before the window end")
+        if count == 1 and (
+            message["window_start_timestamp_ms"] != message["window_end_timestamp_ms"]
+        ):
+            errors.append("a one-frame window must start and end at the source frame")
     label = message["label"]
     if not isinstance(label, str) or label == "":
         errors.append("label is empty")

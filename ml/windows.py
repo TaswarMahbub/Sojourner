@@ -14,8 +14,12 @@ Policy:
   accepted messages in that window.
 - ``length`` is how many accepted frames form one window. ``stride`` is how
   many accepted frames to advance afterward. Both are integers greater than
-  or equal to 1. A stride shorter than the length overlaps. A stride at least
-  as long as the length does not.
+  or equal to 1. Window starts are exactly ``stride`` accepted frames apart.
+  A stride shorter than the length overlaps. A stride equal to the length
+  tiles. A stride longer than the length skips ``stride - length`` accepted
+  frames after each window. A skipped frame is still validated and still
+  advances the strict timestamp order, so a later frame cannot go back
+  before it, but it belongs to no window and is not counted in one.
 - A window is actionable only when every frame in it is actionable. One
   ``partial`` or ``lost`` frame makes the window non-actionable.
 """
@@ -73,6 +77,8 @@ class WindowAssembler:
         self.stride = _positive_int(stride, "stride")
         self._frames: list[tuple[MappingProxyType, bool]] = []
         self._last_timestamp: int | None = None
+        # Accepted frames still to skip before the next window starts.
+        self._skip = 0
 
     @property
     def pending_count(self) -> int:
@@ -81,6 +87,11 @@ class WindowAssembler:
     @property
     def last_timestamp_ms(self) -> int | None:
         return self._last_timestamp
+
+    @property
+    def skip_remaining(self) -> int:
+        """Accepted frames that will be skipped before the next window starts."""
+        return self._skip
 
     def preview(self, message):
         """Return ``(errors, window, stored)`` without changing the buffer.
@@ -94,10 +105,15 @@ class WindowAssembler:
         if errors:
             return AssemblerPush(False, errors, None)
         assert frozen is not None
-        self._frames.append(frozen)
         self._last_timestamp = frozen[0]["timestamp_ms"]
+        if self._skip:
+            self._skip -= 1
+            return AssemblerPush(True, (), None)
+        self._frames.append(frozen)
         if window is not None:
-            del self._frames[: self.stride]
+            dropped = min(self.stride, len(self._frames))
+            del self._frames[:dropped]
+            self._skip = self.stride - dropped
         return AssemblerPush(True, (), window)
 
     def _plan(self, message):
@@ -109,8 +125,10 @@ class WindowAssembler:
             return ("timestamp is not strictly newer than the last accepted frame",), None, None
         frozen = _freeze(copy.deepcopy(message))
         actionable = is_actionable_feature(message)
-        prospective = (*self._frames, (frozen, actionable))
         window = None
+        if self._skip:
+            return (), None, (frozen, actionable)
+        prospective = (*self._frames, (frozen, actionable))
         if len(prospective) >= self.length:
             chunk = prospective[: self.length]
             messages = tuple(item[0] for item in chunk)

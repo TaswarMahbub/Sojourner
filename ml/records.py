@@ -40,6 +40,13 @@ def _timestamp(value, name: str) -> int:
 
 
 def _vector(values: Sequence[float]) -> tuple[float, ...]:
+    """Copy into a new tuple first, then validate the copy.
+
+    The result shares nothing mutable with the caller's sequence.
+    """
+    if isinstance(values, (str, bytes, bytearray)) or not isinstance(values, Sequence):
+        raise ValueError("feature vector is not a sequence of numbers")
+    values = tuple(values)
     if len(values) != FEATURE_DIM:
         raise ValueError(f"feature vector length is {len(values)}, not {FEATURE_DIM}")
     vector: list[float] = []
@@ -76,11 +83,7 @@ class LabeledExample:
         if self.split not in _SPLITS:
             raise ValueError("split must be train, eval, or calibration")
         _token(self.label, _LABEL, "label")
-        if len(self.features) != FEATURE_DIM:
-            raise ValueError(f"feature vector length is {len(self.features)}, not {FEATURE_DIM}")
-        for value in self.features:
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
-                raise ValueError("feature value is not a finite number")
+        object.__setattr__(self, "features", _vector(self.features))
         start = _timestamp(self.window_start_timestamp_ms, "window_start_timestamp_ms")
         end = _timestamp(self.window_end_timestamp_ms, "window_end_timestamp_ms")
         if start > end:
@@ -145,11 +148,25 @@ class PersonalizedModelRef:
 def apply_normalization(
     vector: Sequence[float], spec: NormalizationSpec
 ) -> tuple[float, ...]:
-    """Return ``(x - mean) / scale`` without changing ``spec``."""
+    """Return ``(x - mean) / scale`` without changing ``spec``.
+
+    Every input is finite, but the difference or the quotient can still
+    overflow. Any non-finite result raises ``ValueError``; nothing infinite or
+    NaN is returned.
+    """
     if not isinstance(spec, NormalizationSpec):
         raise TypeError("spec is not a normalization spec")
     values = _vector(vector)
-    return tuple((value - mean) / scale for value, mean, scale in zip(values, spec.mean, spec.scale))
+    result: list[float] = []
+    for value, mean, scale in zip(values, spec.mean, spec.scale):
+        try:
+            normalized = (value - mean) / scale
+        except (ArithmeticError, ValueError) as exc:
+            raise ValueError("normalization failed numerically") from exc
+        if not math.isfinite(normalized):
+            raise ValueError("normalized value is not finite")
+        result.append(normalized)
+    return tuple(result)
 
 
 def group_by_participant(examples: Sequence[LabeledExample]) -> dict[str, tuple[LabeledExample, ...]]:

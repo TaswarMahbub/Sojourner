@@ -212,18 +212,10 @@ def validate_pose(pose) -> list[str]:
         rows.append([_unit(value) for value in row])
     if rows[3] != [0.0, 0.0, 0.0, 1.0]:
         errors.append("matrix last row is not [0, 0, 0, 1]")
-    norms = [
-        math.sqrt(sum(rows[r][c] ** 2 for r in range(3)))
-        for c in range(3)
-    ]
-    scale = sum(norms) / 3.0
-    if not math.isfinite(scale) or scale <= 0:
-        errors.append("pose scale is not positive")
+    rotation, problem = _scaled_rotation(rows)
+    if rotation is None:
+        errors.append(problem)
         return errors
-    if any(abs(norm - scale) / scale > 0.01 for norm in norms):
-        errors.append("pose column norms disagree by more than 1 percent")
-        return errors
-    rotation = [[rows[r][c] / scale for c in range(3)] for r in range(3)]
     yaw = math.degrees(math.atan2(rotation[0][2], rotation[2][2]))
     pitch = math.degrees(math.asin(max(-1.0, min(1.0, rotation[1][2]))))
     roll = math.degrees(math.atan2(rotation[1][0], rotation[1][1]))
@@ -240,12 +232,51 @@ def validate_pose(pose) -> list[str]:
             errors.append(f"{name} does not match the matrix")
         if extracted < low or extracted > high:
             errors.append(f"{name} is outside [{low}, {high}]")
+        if _unit(published) < low or _unit(published) > high:
+            errors.append(f"published {name} is outside [{low}, {high}]")
     x_cm, y_cm, z_cm = rows[0][3], rows[1][3], rows[2][3]
     if not (-100.0 <= x_cm <= 100.0 and -100.0 <= y_cm <= 100.0):
         errors.append("translation x or y is outside [-100, 100] cm")
     if not (-200.0 <= z_cm <= -5.0):
         errors.append("translation z is outside [-200, -5] cm")
     return errors
+
+
+def _scaled_rotation(rows):
+    """Oracle check that the upper-left 3x3 is a uniform scale times a rotation.
+
+    Written independently of ``ml/schema.py``: it works on the Gram matrix
+    ``B^T B`` of ``B = A / max|A|``. Tolerances: Schema 4's 1 percent on column
+    norms, then normalized Gram off-diagonals at most 1e-3 and the normalized
+    scalar triple product at least 1 - 1e-3.
+    """
+    peak = max(abs(rows[r][c]) for r in range(3) for c in range(3))
+    if not math.isfinite(peak) or peak <= 0:
+        return None, "pose scale is not positive"
+    b = [[rows[r][c] / peak for c in range(3)] for r in range(3)]
+    gram = [
+        [math.fsum(b[k][i] * b[k][j] for k in range(3)) for j in range(3)]
+        for i in range(3)
+    ]
+    norms = [math.sqrt(gram[i][i]) for i in range(3)]
+    scale = math.fsum(norms) / 3.0
+    if not math.isfinite(scale) or scale <= 0:
+        return None, "pose scale is not positive"
+    if max(abs(norm - scale) for norm in norms) / scale > 0.01:
+        return None, "pose column norms disagree by more than 1 percent"
+    for i, j in ((0, 1), (0, 2), (1, 2)):
+        if not abs(gram[i][j]) / (norms[i] * norms[j]) <= 1e-3:
+            return None, "pose columns are not orthogonal"
+    triple = math.fsum(
+        (
+            b[0][0] * (b[1][1] * b[2][2] - b[2][1] * b[1][2]),
+            -b[1][0] * (b[0][1] * b[2][2] - b[2][1] * b[0][2]),
+            b[2][0] * (b[0][1] * b[1][2] - b[1][1] * b[0][2]),
+        )
+    )
+    if not triple / (norms[0] * norms[1] * norms[2]) >= 1.0 - 1e-3:
+        return None, "pose is not a proper rotation"
+    return [[b[r][c] / scale for c in range(3)] for r in range(3)], None
 
 
 def _features(value, errors, state: str) -> None:
@@ -344,6 +375,12 @@ def _validate_gesture(message) -> list[str]:
             errors.append("source_timestamp_ms is not the window end")
         if message["timestamp_ms"] < message["window_end_timestamp_ms"]:
             errors.append("classification time is before the window end")
+        if (
+            is_int(count)
+            and count == 1
+            and message["window_start_timestamp_ms"] != message["window_end_timestamp_ms"]
+        ):
+            errors.append("one-frame window start, end, and source differ")
     label = message["label"]
     if not isinstance(label, str) or label == "":
         errors.append("label is empty")
