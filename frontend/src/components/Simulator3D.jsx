@@ -5,6 +5,10 @@ import { createSceneRoot } from '../view/sceneRoot.js'
 import { createFrameLoop } from '../view/frameLoop.js'
 import TopDownInset from '../ui/TopDownInset.jsx'
 import { KEYS, combine } from '../ui/driveKeys.js'
+import ConfidenceRing from '../ui/ConfidenceRing.jsx'
+import SessionMetricsPanel from '../ui/SessionMetricsPanel.jsx'
+import TaskStateBadge from '../ui/TaskStateBadge.jsx'
+import { coneVisible, createConeScheduler, createIntentCone, predictPath } from '../view/intentCone.js'
 import './Simulator3D.css'
 
 // Phase 2 grey-box 3D simulator. One corridor simulation, driven through the existing drill path
@@ -45,7 +49,9 @@ function readout(view, pose) {
   ].join('\n')
 }
 
-export default function Simulator3D() {
+// Phase 8 overlay mount points (PR #29): camera and profile feed the confidence ring around the
+// task_state badge; the session metrics panel follows the simulator; the intent cone is in the scene.
+export default function Simulator3D({ camera = null, profile = null } = {}) {
   const headingId = useId()
   const canvasRef = useRef(null)
   const stageRef = useRef(null)
@@ -76,6 +82,20 @@ export default function Simulator3D() {
       root.resize(stage.clientWidth, stage.clientHeight)
     }
 
+    // Intent cone (src/view/intentCone.js): the predicted 2 s path of the applied command, from the
+    // simulation's own stepPose, recomputed at the command rate, hidden in hold and every stop.
+    const cone = root ? createIntentCone({ width: CORRIDOR_WORLD.footprint.width }) : null
+    if (cone) root.scene.add(cone.object)
+    const coneScheduler = createConeScheduler()
+    const updateCone = (pose) => {
+      if (!cone) return
+      const applied = { taskState: sim.taskState, output: { linear: sim.receiver.linearMps, angular: sim.receiver.angularRadS } }
+      const visible = coneVisible(applied)
+      cone.setVisible(visible)
+      if (visible) cone.update(coneScheduler.pathAt(sim.timeMs, applied.output, () => predictPath(pose, applied.output, CORRIDOR_WORLD)))
+      else coneScheduler.reset()
+    }
+
     let lastReadout = -Infinity
     const loop = createFrameLoop({
       sim,
@@ -84,12 +104,20 @@ export default function Simulator3D() {
         lastReadout = now
         setSnapshot({ view: sim.view(), pose })
       },
-      render: (pose) => { if (root) root.frame(pose) },
+      render: (pose) => {
+        if (!root) return
+        updateCone(pose)
+        root.frame(pose)
+      },
     })
     loop.start()
     return () => {
       loop.stop()
       observer?.disconnect()
+      if (cone) {
+        root.scene.remove(cone.object)
+        cone.dispose()
+      }
       root?.dispose()
     }
   }, [sim])
@@ -115,10 +143,16 @@ export default function Simulator3D() {
     sim.connect()
   }
 
+  const commandActive = view.output.linear !== 0 || view.output.angular !== 0
+
   return (
+    <>
     <section className="panel panel--wide sim3d" aria-labelledby={headingId}>
       <header className="panel__header">
         <h2 id={headingId}>3D corridor simulator (grey box)</h2>
+        <ConfidenceRing camera={camera} profile={profile} commandActive={commandActive}>
+          <TaskStateBadge view={view} />
+        </ConfidenceRing>
       </header>
       <div
         ref={stageRef}
@@ -155,5 +189,7 @@ export default function Simulator3D() {
         Drop link stops the datagrams: the receiver&apos;s watchdog halts the rover. {webglError ? `WebGL 2 unavailable (${webglError}); showing the 2D plan.` : ''}
       </p>
     </section>
+    <SessionMetricsPanel result={view.attemptResult} />
+    </>
   )
 }
