@@ -1,5 +1,13 @@
 // The 2D simulator: one simulated receiver boot, the drill sender, the rover's position, and the
-// command history. Time is simulated: tick(ms) advances the receiver's monotonic clock.
+// command history. Time is simulated: tick(ms) banks elapsed time in a fixed-timestep accumulator
+// (clock.js) and the physics, receiver clock and status cadence all advance in whole 1/120 s steps,
+// so a dropped or long frame can never change how far the rover moves (invariant I3).
+//
+// World: by default the legacy 3 × 3 m arena (pose clamped to ±ARENA_HALF_M), which the existing
+// 2D panel draws. Pass { world: CORRIDOR_WORLD } to opt into the analytic corridor (worldModel.js):
+// the rover starts at the world's spawn, collides with the walls, handrails and door jambs as an
+// oriented 0.650 × 0.845 m rectangle (collision.js), and an attempt records the five metrics and
+// emits them once on room entry or reset (attempt.js).
 //
 // The rover moves only while the receiver reports torque (motorsHaveTorque), using the velocities
 // the receiver applied. A datagram the receiver ignored or rejected never moves the rover
@@ -12,13 +20,22 @@ import { MotorReceiver } from './motorReceiver.js'
 import { DrillSender } from './drillSender.js'
 import { utf8 } from './hmac.js'
 import { signCommand } from '../contracts/motor.js'
+import { FixedClock, interpolatePose } from './clock.js'
+import { MAX_ANGULAR_RAD_S, MAX_LINEAR_MPS, SIM_STEP_S } from './constants.js'
+import { checkPose, sweep } from './collision.js'
+import { Attempt } from './attempt.js'
 
 // The drill key and controller. They are not rover secrets and must never be provisioned.
 export const DRILL_KEY = utf8('sojourner-simulator-drill-key-not-for-hardware')
 export const DRILL_CONTROLLER = 'sim-drill'
 
 export const STATUS_PERIOD_MS = 100
+// Legacy arena half-width, used only when no world is passed to the constructor.
 export const ARENA_HALF_M = 1.5
+export const STEPS_PER_S = Math.round(1 / SIM_STEP_S) // 120
+// Status cadence is checked against step-multiple times; this absorbs float error in the difference.
+const TIME_EPSILON_MS = 1e-6
+const clamp = (v, lim) => Math.max(-lim, Math.min(lim, v))
 export const HISTORY_LIMIT = 60
 
 // What each receiver outcome means, for the history.
@@ -40,8 +57,28 @@ export const OUTCOMES = {
 let nextEntryId = 1
 
 export class Simulation {
-  constructor({ bootNonce = 1 + Math.floor(Math.random() * 1e6), unixNow = () => Date.now() } = {}) {
+  /**
+   * @param {object} [options]
+   * @param {number} [options.bootNonce]
+   * @param {() => number} [options.unixNow]
+   * @param {object|null} [options.world] a worldModel world (e.g. CORRIDOR_WORLD); null keeps the legacy arena
+   * @param {object|null} [options.provenance] command-source provenance, carried into emitted metrics
+   * @param {(result: object) => void} [options.onAttemptEmit] receives each emitted metrics object
+   * @param {number} [options.maxFrameMs] accumulator ceiling per tick. Infinity by default: tick(ms) is a
+   *   request to advance simulated time by ms, and the real-time caller already bounds ms.
+   */
+  constructor({
+    bootNonce = 1 + Math.floor(Math.random() * 1e6),
+    unixNow = () => Date.now(),
+    world = null,
+    provenance = null,
+    onAttemptEmit = null,
+    maxFrameMs = Infinity,
+  } = {}) {
     this.unixNow = unixNow
+    this.world = world
+    this.clock = new FixedClock({ stepS: SIM_STEP_S, maxAccumulatorS: maxFrameMs / 1000 })
+    this.stepCount = 0
     this.receiver = new MotorReceiver(bootNonce, { key: DRILL_KEY, controllerId: DRILL_CONTROLLER })
     this.sender = new DrillSender({ key: DRILL_KEY, controllerId: DRILL_CONTROLLER, unixNow })
     this.timeMs = 0
@@ -50,9 +87,14 @@ export class Simulation {
     this.drive = null // { linear, angular } while the operator holds a drive control
     this.senderEnabled = false
     this.lastRaw = null
-    this.pose = { x: 0, y: 0, heading: 0 } // meters and radians; heading 0 faces +X
-    this.trail = [{ x: 0, y: 0 }]
+    this.pose = world ? { ...world.spawn } : { x: 0, y: 0, heading: 0 } // meters and radians; heading 0 faces +X
+    this.prevPose = this.pose // pose at the previous step, for render interpolation
+    this.trail = [{ x: this.pose.x, y: this.pose.y }]
     this.history = []
+    this.clearance = world ? checkPose(this.pose, world) : null
+    this.contact = null // id of the segment that blocked the last step, or null
+    this.attempt = world ? new Attempt({ world, provenance, onEmit: onAttemptEmit, stepS: SIM_STEP_S }) : null
+    if (this.attempt) this.attempt.arm()
   }
 
   // ---- Local rover controls. These model physical inputs on the rover, not network traffic. ----
@@ -66,6 +108,7 @@ export class Simulation {
   unfreezeFirmware() { this.receiver.unfreezeFirmware() }
   reboot() {
     this.receiver.brownoutReset(1 + Math.floor(Math.random() * 1e6))
+    this.stepCount = 0
     this.timeMs = 0
     this.lastStatusMs = -STATUS_PERIOD_MS
     this.publishStatus()
@@ -119,19 +162,42 @@ export class Simulation {
     if (kind === 'malformed') return this.deliver(`{"boot_nonce": ${s.boot_nonce}, "session_id": ${s.session_id ?? 1}, "sequence": `, 'injected', 'Truncated datagram naming the active session')
   }
 
-  // ---- Time. ----
+  // ---- Attempts (corridor world only). ----
 
-  tick(ms) {
-    const steps = Math.max(1, Math.round(ms / 10))
-    const dt = ms / steps
-    for (let i = 0; i < steps; i += 1) this.step(dt)
+  // The cue source signals that a cue can now be committed (feeds the hesitation metric).
+  markCueAvailable() { if (this.attempt) this.attempt.cueAvailable(this.timeMs) }
+
+  // Emits the running attempt (if any), returns the rover to spawn, and re-arms. Receiver untouched.
+  resetAttempt() {
+    if (!this.attempt) return null
+    const emitted = this.attempt.reset(this.timeMs)
+    this.pose = { ...this.world.spawn }
+    this.prevPose = this.pose
+    this.trail = [{ x: this.pose.x, y: this.pose.y }]
+    this.clearance = checkPose(this.pose, this.world)
+    this.contact = null
+    this.attempt.arm()
+    return emitted
   }
 
-  step(dtMs) {
-    this.timeMs += dtMs
+  // ---- Time. ----
+
+  // Bank ms of elapsed time and run however many whole fixed steps it covers; the remainder carries.
+  tick(ms) {
+    const steps = this.clock.advance(ms / 1000)
+    for (let i = 0; i < steps; i += 1) this.step()
+  }
+
+  // Pose for the renderer: between the last two steps, by the clock's leftover fraction.
+  interpolatedPose() { return interpolatePose(this.prevPose, this.pose, this.clock.alpha) }
+
+  step() {
+    this.stepCount += 1
+    this.timeMs = (this.stepCount * 1000) / STEPS_PER_S // exact at every 12-step (100 ms) boundary
     this.receiver.setMonotonic(Math.floor(this.timeMs))
-    this.integrate(dtMs / 1000)
-    if (this.timeMs - this.lastStatusMs >= STATUS_PERIOD_MS) {
+    this.prevPose = this.pose
+    this.integrate(SIM_STEP_S)
+    if (this.timeMs - this.lastStatusMs >= STATUS_PERIOD_MS - TIME_EPSILON_MS) {
       this.publishStatus()
       if (this.senderEnabled) {
         const out = this.sender.next(this.receiver.monotonicMs, this.drive)
@@ -150,6 +216,7 @@ export class Simulation {
 
   integrate(dt) {
     if (!this.receiver.motorsHaveTorque()) return
+    if (this.world) return this.integrateInWorld(dt)
     const v = this.receiver.linearMps
     const w = this.receiver.angularRadS
     const p = this.pose
@@ -159,6 +226,32 @@ export class Simulation {
     this.pose = { x, y, heading }
     const last = this.trail[this.trail.length - 1]
     if (Math.hypot(x - last.x, y - last.y) > 0.02) this.trail = [...this.trail.slice(-300), { x, y }]
+  }
+
+  // Skid-steer about the footprint centre, swept against the world. A step that would make contact
+  // stops at the last clear swept sample (within 1 mm of the surface) instead of passing through:
+  // the rover stalls against the obstacle, and the contact is recorded.
+  integrateInWorld(dt) {
+    const v = clamp(this.receiver.linearMps, MAX_LINEAR_MPS)
+    const w = clamp(this.receiver.angularRadS, MAX_ANGULAR_RAD_S)
+    const from = this.pose
+    const heading = from.heading + w * dt
+    const target = { x: from.x + v * Math.cos(heading) * dt, y: from.y + v * Math.sin(heading) * dt, heading }
+    const swept = sweep(from, target, this.world)
+    const to = swept.pose
+    this.pose = to
+    this.contact = swept.hit ? swept.segmentId : null
+    this.clearance = checkPose(to, this.world)
+    this.attempt.step({
+      tMs: this.timeMs,
+      from,
+      to,
+      clearance: this.clearance.clearance,
+      penetration: this.clearance.penetration,
+      blocked: swept.hit,
+    })
+    const last = this.trail[this.trail.length - 1]
+    if (Math.hypot(to.x - last.x, to.y - last.y) > 0.02) this.trail = [...this.trail.slice(-300), { x: to.x, y: to.y }]
   }
 
   // ---- Datagrams and history. ----
@@ -171,11 +264,22 @@ export class Simulation {
     const outcome = this.receiver.handleRaw(raw)
     if (source === 'drill') this.lastRaw = raw
     let label
+    let m = null
     try {
-      const m = JSON.parse(raw)
+      m = JSON.parse(raw)
       label = `${m.task_state} #${m.sequence}${m.stop ? '' : ` ${m.linear_mps} m/s, ${m.angular_rad_s} rad/s`}`
     } catch {
       label = 'Unparseable datagram'
+    }
+    if (this.attempt && m && typeof m === 'object') {
+      this.attempt.command({
+        tMs: this.timeMs,
+        accepted: OUTCOMES[outcome]?.kind === 'accepted',
+        taskState: m.task_state,
+        linear: Number(m.linear_mps) || 0,
+        angular: Number(m.angular_rad_s) || 0,
+        stop: Boolean(m.stop),
+      })
     }
     this.log({ label, source, why, outcome, ...OUTCOMES[outcome] })
     this.publishStatus()
@@ -200,6 +304,13 @@ export class Simulation {
     return {
       timeMs: this.timeMs,
       pose: this.pose,
+      prevPose: this.prevPose,
+      alpha: this.clock.alpha,
+      worldId: this.world ? this.world.id : null,
+      clearance: this.clearance,
+      contact: this.contact,
+      attemptState: this.attempt ? this.attempt.state : null,
+      attemptResult: this.attempt ? this.attempt.result : null,
       trail: this.trail,
       torque: rx.motorsHaveTorque(),
       output: { linear: rx.linearMps, angular: rx.angularRadS },
