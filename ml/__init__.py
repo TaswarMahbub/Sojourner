@@ -1,11 +1,35 @@
 """Feature processing for the Sojourner gesture classifier.
 
 Phase 1 turns Schema 4 camera feature messages into fixed vectors and into
-``unknown`` classifications. It does not train a model and it does not publish
-motor commands.
+``unknown`` classifications. The dataset helpers read local JSONL and check
+split plans. Neither trains a model, and neither publishes motor commands.
 """
 
 from ml.classify import classification_for_window, unknown_classification
+from ml.dataset import (
+    FEATURE_JSONL_FORMAT,
+    SCHEMA_4_VERSION,
+    AuthorizationRecord,
+    DatasetError,
+    DatasetSource,
+    ExtractionConfig,
+    GestureAnnotation,
+    IngestResult,
+    ParticipantRole,
+    PreparedExample,
+    RecordingAssignment,
+    RecordingIdentity,
+    SessionSplit,
+    SplitPlanError,
+    SplitReport,
+    assert_examples_may_fit,
+    ingest_recording,
+    normalization_candidates,
+    parse_dataset_source,
+    parse_gesture_annotation,
+    parse_recording_identity,
+    validate_splits,
+)
 from ml.features import FEATURE_DIM, FEATURE_NAMES, extract_features, named_features
 from ml.pipeline import FeaturePipeline, PushResult, WindowProduct
 from ml.records import (
@@ -30,26 +54,48 @@ from ml.windows import AssembledWindow, WindowAssembler
 __all__ = (
     "BLENDSHAPES",
     "FEATURE_DIM",
+    "FEATURE_JSONL_FORMAT",
     "FEATURE_NAMES",
     "MODEL_BLENDSHAPES",
+    "SCHEMA_4_VERSION",
     "SCHEMA_VERSION",
     "AssembledWindow",
+    "AuthorizationRecord",
+    "DatasetError",
+    "DatasetSource",
+    "ExtractionConfig",
     "FeaturePipeline",
+    "GestureAnnotation",
+    "IngestResult",
     "LabeledExample",
     "NormalizationSpec",
+    "ParticipantRole",
     "PersonalizedModelRef",
+    "PreparedExample",
     "PushResult",
+    "RecordingAssignment",
+    "RecordingIdentity",
+    "SessionSplit",
+    "SplitPlanError",
+    "SplitReport",
     "WindowAssembler",
     "WindowProduct",
     "apply_normalization",
+    "assert_examples_may_fit",
     "classification_for_window",
     "extract_features",
     "group_by_participant",
     "group_by_session",
+    "ingest_recording",
     "is_actionable_feature",
     "named_features",
+    "normalization_candidates",
+    "parse_dataset_source",
+    "parse_gesture_annotation",
+    "parse_recording_identity",
     "partition_splits",
     "unknown_classification",
     "validate_feature",
     "validate_gesture",
+    "validate_splits",
 )

@@ -75,6 +75,18 @@ message = result.product.classification
 
 `NormalizationSpec` can be built from `train` or `calibration` only. `apply_normalization` uses the supplied mean and scale and does not estimate them. If any result would overflow to infinity or NaN, it raises `ValueError` instead. `LabeledExample` stores its own validated tuple of 162 finite floats, so changing the caller's list afterwards has no effect. `PersonalizedModelRef` can name a future `model_version`, list disabled gesture labels, and store a rejection threshold in `(0, 1]`. `weights_present` cannot be true in this phase.
 
+## Dataset foundation
+
+`ml.dataset` prepares metadata and local Schema 4 JSONL for a later trainer. It does not train, and it does not download an external dataset. The input line is the object `perception` already writes: one compact JSON feature message per line.
+
+`DatasetSource` records a dataset id, a category (`consented_local`, `authorized_public`, or `constructed_fixture`), the source format and version, an extraction version, and an `AuthorizationRecord`. The authorization status is a human decision id. `IngestResult.authorization_is_proof` is always false. A constructed fixture must use authorization `constructed` and timestamp provenance `constructed`. Calling those numbers a measured capture is rejected. `reconstructed_offline` keeps the file's numbers as a timeline and sets `timestamps_are_measured_capture` to false.
+
+`GestureAnnotation` is either an explicit half-open interval `[start_ms, end_ms)` or a clip-level label. A clip-level label does not know its onset and offset, so ingestion returns `clip_level_label_without_interval` and creates no example from it. `neutral` is a valid annotation when a person marked that interval. `unknown` is rejected, because it is a classifier outcome rather than an annotation. Frames that fall in no interval stay unlabeled. Overlapping intervals fail. Each interval is windowed by its own `WindowAssembler`, so a window cannot cross participants, sessions, clips, or annotated intervals. Rejected lines are counted by line number and reason code. They are not inserted, not interpolated, and not turned into examples. The reason does not include the JSON line.
+
+`validate_splits` checks the plan described in `SplitReport.enforced`. Population participants stay in `train`. Held-out participants may have `calibration` and `eval` only, and those two splits must come from different sessions. A recording id has one participant, one session, and one split, and every window from that recording inherits it. An invalid plan raises `SplitPlanError` with sorted reason codes. `normalization_candidates` and `assert_examples_may_fit` leave eval examples out of any future fit. Nothing here estimates a mean, chooses a parameter, or runs cross-validation. `SplitReport.not_enforced` lists the decisions a later experiment protocol still has to make.
+
+Public research collections are notes in `ml/sources.md`. Their files are not Schema 4, and this tree has no adapter for them.
+
 ## Tests
 
 From the repository root:
@@ -84,4 +96,4 @@ python3 -m pip install -r tests/requirements.txt
 python3 -m pytest tests
 ```
 
-`tests/test_ml_pipeline.py` builds its own messages. A passing run does not mean a model was trained or that a person was recorded.
+`tests/test_ml_pipeline.py` and `tests/test_ml_dataset.py` build their own messages. A passing run does not mean a model was trained or that a person was recorded.
