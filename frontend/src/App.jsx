@@ -42,7 +42,7 @@ export default function App() {
         <HeadPosePanel {...camera} />
         <GesturePanel {...gesture} />
       </div>
-      <Simulator3D />
+      <Simulator3D camera={camera} profile={envelope.session.profile} />
     </main>
   )
 }

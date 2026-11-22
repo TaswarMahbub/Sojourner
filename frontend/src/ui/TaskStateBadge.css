@@ -1,0 +1,11 @@
+/* The task_state badge, inside the confidence ring. Theme variables only. */
+.task-badge {
+  display: inline-block;
+  padding: 0.15rem 0.7rem;
+  border-radius: var(--radius);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  font: 600 0.85rem/1.5 var(--font-mono);
+  white-space: nowrap;
+}
+.task-badge--halted { color: var(--color-bad); }
